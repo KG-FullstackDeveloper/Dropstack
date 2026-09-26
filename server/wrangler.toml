@@ -1,0 +1,17 @@
+name = "custom-ecommerce-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-22"
+
+[vars]
+CLIENT_URL = "http://localhost:5173"
+
+[dev]
+ip = "127.0.0.1"
+port = 8787
+local_protocol = "http"
+enable_containers = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "custom-ecommerce-db"
+database_id = "local"
