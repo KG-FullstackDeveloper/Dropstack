@@ -23,9 +23,9 @@ const DEFAULT_HOME_SECTIONS: StoreSection[] = [
 {
 id: "announcement",
 type: "announcement",
-enabled: false,
+enabled: true,
 settings: {
-text: "Free shipping on selected orders",
+text: "Free shipping • Secure checkout • Easy support",
 },
 },
 {
@@ -33,10 +33,9 @@ id: "hero",
 type: "hero",
 enabled: true,
 settings: {
-layout: "standard",
-heading: "Discover products you'll love",
-subheading:
-"A modern shopping experience built around your products.",
+layout: "editorial",
+heading: "Designed to make your everyday better",
+subheading: "A conversion-focused storefront with room for your brand, products and story.",
 buttonText: "Shop now",
 },
 },
@@ -50,27 +49,60 @@ limit: 8,
 },
 },
 {
-id: "category-cards",
-type: "category-cards",
-enabled: true,
-settings: {
-title: "Shop by category",
-},
-},
-{
 id: "benefits",
 type: "benefits",
 enabled: true,
 settings: {
-title: "Why shop with us",
+title: "Why customers choose us",
 },
 },
 {
-id: "testimonials",
-type: "testimonials",
+id: "image-text",
+type: "image-text",
 enabled: true,
 settings: {
-title: "What customers say",
+heading: "Built around your brand",
+text: "Tell customers what makes your products worth choosing.",
+},
+},
+{
+id: "how-it-works",
+type: "how-it-works",
+enabled: true,
+settings: {
+title: "How it works",
+},
+},
+{
+id: "guarantee",
+type: "guarantee",
+enabled: true,
+settings: {
+title: "Our guarantee",
+},
+},
+{
+id: "shipping",
+type: "shipping",
+enabled: true,
+settings: {
+title: "Shipping & delivery",
+},
+},
+{
+id: "reviews",
+type: "reviews",
+enabled: true,
+settings: {
+title: "Loved by our customers",
+},
+},
+{
+id: "faq",
+type: "faq",
+enabled: true,
+settings: {
+title: "Frequently asked questions",
 },
 },
 {
@@ -89,6 +121,14 @@ settings: {
 title: "Stay in the loop",
 },
 },
+{
+id: "footer",
+type: "footer",
+enabled: true,
+settings: {
+text: "Important store links and customer information.",
+},
+},
 ];
 
 const DEFAULT_PRODUCT_SECTIONS: StoreSection[] = [
@@ -97,7 +137,7 @@ id: "product-gallery",
 type: "product-gallery",
 enabled: true,
 settings: {
-layout: "standard",
+layout: "large",
 },
 },
 {
@@ -112,10 +152,78 @@ sticky: true,
 id: "benefits",
 type: "benefits",
 enabled: true,
+settings: {
+title: "Why you'll love it",
+},
+},
+{
+id: "how-it-works",
+type: "how-it-works",
+enabled: true,
+settings: {
+title: "How it works",
+},
+},
+{
+id: "guarantee",
+type: "guarantee",
+enabled: true,
+settings: {
+title: "Our guarantee",
+},
+},
+{
+id: "shipping",
+type: "shipping",
+enabled: true,
+settings: {
+title: "Shipping & delivery",
+},
+},
+{
+id: "image-text",
+type: "image-text",
+enabled: true,
+settings: {
+heading: "Designed around your customer",
+text: "Explain the product story, materials, use cases or benefits.",
+},
+},
+{
+id: "reviews",
+type: "reviews",
+enabled: true,
+settings: {
+title: "Loved by our customers",
+},
+},
+{
+id: "faq",
+type: "faq",
+enabled: true,
+settings: {
+title: "Frequently asked questions",
+},
+},
+{
+id: "trust-badges",
+type: "trust-badges",
+enabled: true,
+settings: {
+title: "Shop with confidence",
+},
 },
 {
 id: "related-products",
 type: "related-products",
+enabled: true,
+settings: {
+title: "You may also like",
+},
+},
+{
+id: "footer",
+type: "footer",
 enabled: true,
 },
 ];

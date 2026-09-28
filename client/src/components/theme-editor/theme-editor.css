@@ -1,0 +1,25 @@
+.theme-editor-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.theme-editor-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.theme-editor-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
+}
+
+.theme-editor-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+.theme-editor-no-scrollbar {
+  scrollbar-width: none;
+}
+
+.theme-editor-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
