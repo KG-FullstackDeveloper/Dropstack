@@ -33,11 +33,36 @@ store.navigation.filter(
 (item) => item.enabled
 );
 
-function navigate(
-page: StorePageType
-) {
+function navigate(page: StorePageType) {
 setMenuOpen(false);
 onNavigate(page);
+}
+
+function pageFromHref(href?: string): StorePageType {
+if (!href || href === "/") return "home";
+const value = href.replace(/^\//, "").split("/")[0];
+const pages: StorePageType[] = [
+  "catalog",
+  "product",
+  "collection",
+  "contact",
+  "about",
+  "faq",
+  "shipping",
+  "refund",
+  "privacy",
+  "terms",
+  "cart",
+  "checkout",
+  "order-success",
+];
+return pages.includes(value as StorePageType)
+  ? (value as StorePageType)
+  : "home";
+}
+
+function navigateHref(href?: string) {
+navigate(pageFromHref(href));
 }
 
 return (
@@ -68,14 +93,14 @@ className="min-w-0 text-left"
       {enabledNavigation.map(
         (item) => (
           <button
-            key={`${item.page}-${item.label}`}
+            key={`${item.href}-${item.label}`}
             type="button"
             onClick={() =>
-              navigate(item.page)
+              navigateHref(item.href)
             }
             className={[
               "text-sm font-medium transition-colors",
-              currentPage === item.page
+              currentPage === pageFromHref(item.href)
                 ? "text-gray-950"
                 : "text-gray-500 hover:text-gray-950",
             ].join(" ")}
@@ -159,15 +184,15 @@ className="min-w-0 text-left"
         {enabledNavigation.map(
           (item) => (
             <button
-              key={`${item.page}-${item.label}-mobile`}
+              key={`${item.href}-${item.label}-mobile`}
               type="button"
               onClick={() =>
-                navigate(item.page)
+                navigateHref(item.href)
               }
               className={[
                 "border-b border-gray-100 px-1 py-4 text-left text-sm font-medium last:border-b-0",
                 currentPage ===
-                item.page
+                pageFromHref(item.href)
                   ? "text-gray-950"
                   : "text-gray-500",
               ].join(" ")}

@@ -3,7 +3,7 @@ ChevronLeft,
 ChevronRight,
 Play,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
 StoreBlock,
 StoreConfig,
@@ -200,7 +200,7 @@ return (
 <button
 type="button"
 onClick={onSelect}
-className={`grid min-h-[460px] w-full grid-cols-1 gap-8 bg-[#f5f1ec] p-8 text-left sm lg ${selectClass}`}
+className={`grid min-h-[460px] w-full grid-cols-1 gap-8 bg-[#f5f1ec] p-8 text-left sm:p-12 lg:grid-cols-2 ${selectClass}`}
 style={{ outlineColor: accent }}
 >
 <div className="flex flex-col justify-center">
@@ -356,7 +356,7 @@ return () => window.clearInterval(timer);
 }, [autoplay, interval]);
 
 const carousel =
-getSetting(settings, "layout", "grid") === "carousel";
+getSetting(settings, "layout", "grid") as string === "carousel";
 
 return (
 <section

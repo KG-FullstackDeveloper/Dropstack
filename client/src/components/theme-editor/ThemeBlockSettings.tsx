@@ -348,7 +348,7 @@ return (
 <input
 value={value}
 onChange={(event) => onChange(event.target.value)}
-className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none transition focus ${icon ? "pl-9" : ""}`}
+className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none transition focus:border-slate-950 ${icon ? "pl-9" : ""}`}
 />
 </div>
 </label>

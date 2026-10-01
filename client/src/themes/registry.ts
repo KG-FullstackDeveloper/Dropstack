@@ -225,6 +225,7 @@ title: "You may also like",
 id: "footer",
 type: "footer",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -278,11 +279,13 @@ heading: "Designed around your brand",
 id: "testimonials",
 type: "testimonials",
 enabled: true,
+settings: {},
 },
 {
 id: "newsletter",
 type: "newsletter",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -307,21 +310,25 @@ sticky: true,
 id: "trust-badges",
 type: "trust-badges",
 enabled: true,
+settings: {},
 },
 {
 id: "image-text",
 type: "image-text",
 enabled: true,
+settings: {},
 },
 {
 id: "reviews",
 type: "reviews",
 enabled: true,
+settings: {},
 },
 {
 id: "related-products",
 type: "related-products",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -350,6 +357,7 @@ buttonText: "Shop products",
 id: "category-cards",
 type: "category-cards",
 enabled: true,
+settings: {},
 },
 {
 id: "featured-products",
@@ -364,16 +372,19 @@ limit: 8,
 id: "benefits",
 type: "benefits",
 enabled: true,
+settings: {},
 },
 {
 id: "trust-badges",
 type: "trust-badges",
 enabled: true,
+settings: {},
 },
 {
 id: "newsletter",
 type: "newsletter",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -382,41 +393,49 @@ const COMMERCE_PRODUCT_SECTIONS: StoreSection[] = [
 id: "product-gallery",
 type: "product-gallery",
 enabled: true,
+settings: {},
 },
 {
 id: "product-info",
 type: "product-info",
 enabled: true,
+settings: {},
 },
 {
 id: "benefits",
 type: "benefits",
 enabled: true,
+settings: {},
 },
 {
 id: "shipping",
 type: "shipping",
 enabled: true,
+settings: {},
 },
 {
 id: "guarantee",
 type: "guarantee",
 enabled: true,
+settings: {},
 },
 {
 id: "faq",
 type: "faq",
 enabled: true,
+settings: {},
 },
 {
 id: "reviews",
 type: "reviews",
 enabled: true,
+settings: {},
 },
 {
 id: "related-products",
 type: "related-products",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -446,11 +465,13 @@ limit: 8,
 id: "image-text",
 type: "image-text",
 enabled: true,
+settings: {},
 },
 {
 id: "newsletter",
 type: "newsletter",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -459,16 +480,19 @@ const MINIMAL_PRODUCT_SECTIONS: StoreSection[] = [
 id: "product-gallery",
 type: "product-gallery",
 enabled: true,
+settings: {},
 },
 {
 id: "product-info",
 type: "product-info",
 enabled: true,
+settings: {},
 },
 {
 id: "related-products",
 type: "related-products",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -497,26 +521,31 @@ buttonText: "Explore products",
 id: "featured-products",
 type: "featured-products",
 enabled: true,
+settings: {},
 },
 {
 id: "video",
 type: "video",
 enabled: true,
+settings: {},
 },
 {
 id: "benefits",
 type: "benefits",
 enabled: true,
+settings: {},
 },
 {
 id: "testimonials",
 type: "testimonials",
 enabled: true,
+settings: {},
 },
 {
 id: "newsletter",
 type: "newsletter",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -525,31 +554,37 @@ const MODERN_PRODUCT_SECTIONS: StoreSection[] = [
 id: "product-gallery",
 type: "product-gallery",
 enabled: true,
+settings: {},
 },
 {
 id: "product-info",
 type: "product-info",
 enabled: true,
+settings: {},
 },
 {
 id: "benefits",
 type: "benefits",
 enabled: true,
+settings: {},
 },
 {
 id: "image-text",
 type: "image-text",
 enabled: true,
+settings: {},
 },
 {
 id: "reviews",
 type: "reviews",
 enabled: true,
+settings: {},
 },
 {
 id: "related-products",
 type: "related-products",
 enabled: true,
+settings: {},
 },
 ];
 
@@ -643,23 +678,27 @@ themeId: "meo-default",
 
 navigation: [
 {
+id: "nav-home",
 label: "Home",
-page: "home",
+href: "/",
 enabled: true,
 },
 {
+id: "nav-catalog",
 label: "Catalog",
-page: "catalog",
+href: "/shop",
 enabled: true,
 },
 {
+id: "nav-contact",
 label: "Contact",
-page: "contact",
+href: "/contact",
 enabled: true,
 },
 {
+id: "nav-cart",
 label: "Cart",
-page: "cart",
+href: "/cart",
 enabled: true,
 },
 ],
@@ -675,18 +714,14 @@ fontFamily: "Inter",
 homeSections: DEFAULT_HOME_SECTIONS.map(
 (section) => ({
 ...section,
-settings: section.settings
-? { ...section.settings }
-: undefined,
+settings: { ...section.settings },
 })
 ),
 
 productSections: DEFAULT_PRODUCT_SECTIONS.map(
 (section) => ({
 ...section,
-settings: section.settings
-? { ...section.settings }
-: undefined,
+settings: { ...section.settings },
 })
 ),
 };

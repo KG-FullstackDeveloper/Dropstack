@@ -35,22 +35,10 @@ store.navigation?.filter(
 ) || [];
 
 const fallbackNavigation = [
-{
-label: "Home",
-page: "home" as StorePageType,
-},
-{
-label: "Shop",
-page: "catalog" as StorePageType,
-},
-{
-label: "About",
-page: "about" as StorePageType,
-},
-{
-label: "Contact",
-page: "contact" as StorePageType,
-},
+{ label: "Home", href: "/" },
+{ label: "Shop", href: "/shop" },
+{ label: "About", href: "/about" },
+{ label: "Contact", href: "/contact" },
 ];
 
 const links =
@@ -58,11 +46,22 @@ navigation.length > 0
 ? navigation
 : fallbackNavigation;
 
-function handleNavigate(
-page: StorePageType,
-) {
+function handleNavigate(page: StorePageType) {
 setMobileOpen(false);
 onNavigate(page);
+}
+
+function pageFromHref(href?: string): StorePageType {
+if (!href || href === "/") return "home";
+const value = href.replace(/^\//, "").split("/")[0];
+const pages: StorePageType[] = [
+  "catalog", "product", "collection", "contact", "about",
+  "faq", "shipping", "refund", "privacy", "terms",
+  "cart", "checkout", "order-success",
+];
+return pages.includes(value as StorePageType)
+  ? (value as StorePageType)
+  : "home";
 }
 
 const logo =
@@ -125,16 +124,14 @@ Free shipping on selected orders
       <nav className="hidden items-center gap-7 md:flex">
         {links.map((item) => (
           <button
-            key={`${item.page}-${item.label}`}
+            key={`${item.href}-${item.label}`}
             type="button"
             onClick={() =>
-              handleNavigate(
-                item.page,
-              )
+              handleNavigate(pageFromHref(item.href))
             }
             className={`text-sm font-medium transition ${
               currentPage ===
-              item.page
+              pageFromHref(item.href)
                 ? "text-slate-950"
                 : "text-slate-500 hover:text-slate-950"
             }`}
@@ -221,16 +218,14 @@ Free shipping on selected orders
             {links.map(
               (item) => (
                 <button
-                  key={`mobile-${item.page}-${item.label}`}
+                  key={`mobile-${item.href}-${item.label}`}
                   type="button"
                   onClick={() =>
-                    handleNavigate(
-                      item.page,
-                    )
+                    handleNavigate(pageFromHref(item.href))
                   }
                   className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
                     currentPage ===
-                    item.page
+                    pageFromHref(item.href)
                       ? "bg-slate-100 text-slate-950"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                   }`}

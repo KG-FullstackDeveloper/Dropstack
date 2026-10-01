@@ -169,7 +169,7 @@ function Number({
         step={step}
         value={value}
         onChange={(event) =>
-          onChange(Number(event.target.value))
+          onChange(event.target.valueAsNumber)
         }
         className="h-8 w-full rounded-lg border bg-white px-2 text-[10px] outline-none focus:border-slate-500"
       />
