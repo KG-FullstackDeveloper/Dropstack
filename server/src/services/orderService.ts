@@ -1,16 +1,12 @@
 import type { Order } from "../types/order";
-import { orders } from "../data/store";
+import { getAllOrders as dbGetAllOrders, getOrderById as dbGetOrderById } from "../data/store";
 
-export function getAllOrders(): Order[] {
-  return [...orders].reverse();
+export function getAllOrders(): (Order & { items: import("../types/order").OrderItem[] })[] {
+  return dbGetAllOrders();
 }
 
 export function getOrderById(
   id: string
-): Order | null {
-  return (
-    orders.find(
-      (order) => order.id === id
-    ) ?? null
-  );
+): (Order & { items: import("../types/order").OrderItem[] }) | null {
+  return dbGetOrderById(id) ?? null;
 }

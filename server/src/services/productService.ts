@@ -1,32 +1,18 @@
 import type { Product } from "../types/product";
-import { products } from "../data/store";
+import {
+  getAllProducts as dbGetAllProducts,
+  getProductById as dbGetProductById,
+  getProductBySlug as dbGetProductBySlug,
+} from "../data/store";
 
 export function getAllProducts(): Product[] {
-  return products.filter(
-    (product) => product.active === 1
-  );
+  return dbGetAllProducts();
 }
 
-export function getProductById(
-  id: string
-): Product | null {
-  return (
-    products.find(
-      (product) =>
-        product.id === id &&
-        product.active === 1
-    ) ?? null
-  );
+export function getProductById(id: string): Product | null {
+  return dbGetProductById(id) ?? null;
 }
 
-export function getProductBySlug(
-  slug: string
-): Product | null {
-  return (
-    products.find(
-      (product) =>
-        product.slug === slug &&
-        product.active === 1
-    ) ?? null
-  );
+export function getProductBySlug(slug: string): Product | null {
+  return dbGetProductBySlug(slug) ?? null;
 }
