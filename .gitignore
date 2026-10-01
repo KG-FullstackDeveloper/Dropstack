@@ -8,6 +8,11 @@ dist-ssr/
 
 *.log
 
+# Local SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
+
 .vscode/*
 !.vscode/extensions.json
 .idea/

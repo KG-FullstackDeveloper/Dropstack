@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 
+// Initialize DB before routes
+import "./database/db";
+
 import products from "./routes/products";
 import orders from "./routes/orders";
 import checkout from "./routes/checkout";
@@ -11,6 +14,7 @@ import analytics from "./routes/analytics";
 import visitors from "./routes/visitors";
 import businessHealth from "./routes/businessHealth";
 import market from "./routes/market";
+import auth from "./routes/auth";
 
 const app = new Hono();
 
@@ -58,6 +62,11 @@ database: "local",
 },
 });
 });
+
+app.route(
+"/api/auth",
+auth
+);
 
 app.route(
 "/api/products",
