@@ -8,9 +8,8 @@ import {
   Truck,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { Order } from "../../types/order";
 import type { FulfillmentMode, PaymentMethod } from "../../types/fulfillment";
 import {
   getFulfillmentLabel,
@@ -22,7 +21,28 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:4000";
 
-type AdminOrder = Order & {
+type OrderStatus =
+  | "payment_pending"
+  | "payment_confirmed"
+  | "settlement_pending"
+  | "ready_to_fulfill"
+  | "supplier_ordered"
+  | "shipped"
+  | "delivered"
+  | "cancelled"
+  | string;
+
+type AdminOrder = {
+  id: string;
+  customer_name: string;
+  customer_email: string;
+  country: string;
+  currency: string;
+  total: number;
+  order_status: OrderStatus;
+  created_at: string;
+  supplier_name?: string | null;
+  tracking_number?: string | null;
   fulfillment_mode?: FulfillmentMode | "mixed" | "unset" | null;
   payment_method?: PaymentMethod | null;
 };
@@ -37,7 +57,7 @@ function readFulfillmentMode(order: AdminOrder): Exclude<FulfillmentMode, "unset
   return "unset";
 }
 
-function statusLabel(status: Order["order_status"]): string {
+function statusLabel(status: OrderStatus): string {
   switch (status) {
     case "payment_pending":
       return "Payment pending";
@@ -60,7 +80,7 @@ function statusLabel(status: Order["order_status"]): string {
   }
 }
 
-function statusTone(status: Order["order_status"]): string {
+function statusTone(status: OrderStatus): string {
   switch (status) {
     case "delivered":
       return "bg-emerald-50 text-emerald-700";
@@ -95,7 +115,7 @@ function StatCard({
   value,
   description,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: number;
   description: string;
@@ -185,9 +205,9 @@ export default function FulfillmentCenter() {
 
       return (
         order.id.toLowerCase().includes(query) ||
-        order.customer_name.toLowerCase().includes(query) ||
-        order.customer_email.toLowerCase().includes(query) ||
-        order.country.toLowerCase().includes(query) ||
+        (order.customer_name || "").toLowerCase().includes(query) ||
+        (order.customer_email || "").toLowerCase().includes(query) ||
+        (order.country || "").toLowerCase().includes(query) ||
         getFulfillmentLabel(mode).toLowerCase().includes(query)
       );
     });
