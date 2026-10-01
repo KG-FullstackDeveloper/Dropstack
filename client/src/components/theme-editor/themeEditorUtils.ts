@@ -318,6 +318,7 @@ export function createDefaultBlock(type: StoreBlockType): StoreBlock {
 const block: StoreBlock = {
 id: createId("block"),
 type,
+enabled: true,
 settings: {},
 };
 

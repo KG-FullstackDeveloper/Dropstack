@@ -164,7 +164,7 @@ setStore((current) => ({
   navigation:
     current.navigation.map(
       (item) =>
-        item.page === page
+        item.href === `/${page}`
           ? {
               ...item,
               enabled: !item.enabled,
@@ -398,19 +398,6 @@ return (
         />
 
         <NavButton
-          active={section === "editor"}
-          icon={
-            <LayoutTemplate
-              size={18}
-            />
-          }
-          label="Theme editor"
-          onClick={() =>
-            setSection("editor")
-          }
-        />
-
-        <NavButton
           active={section === "pages"}
           icon={
             <Store size={18} />
@@ -538,8 +525,7 @@ return (
                   const navigation =
                     store.navigation.find(
                       (item) =>
-                        item.page ===
-                        option.page
+                        item.href === `/${option.page}`
                     );
 
                   const enabled =
@@ -1004,22 +990,17 @@ return (sections ?? []).map(
 ...section,
 
   settings:
-    section.settings
-      ? {
-          ...section.settings,
-        }
-      : undefined,
+    {
+      ...section.settings,
+    },
 
   blocks:
     section.blocks?.map(
       (block) => ({
         ...block,
-        settings:
-          block.settings
-            ? {
-                ...block.settings,
-              }
-            : undefined,
+        settings: {
+          ...block.settings,
+        },
       })
     ),
 })
@@ -1044,7 +1025,7 @@ return (
 <button
 type="button"
 onClick={onClick}
-className={`mb-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold ${active ? "bg-slate-100 text-slate-950 dark dark" : "text-slate-500 hover dark:hover"}`}
+className={`mb-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold ${active ? "bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
 >
 {icon}
 {label}

@@ -124,7 +124,7 @@ setStore((current) => ({
   ...current,
   navigation:
     current.navigation.map((item) =>
-      item.page === page
+      item.href === `/${page}`
         ? {
             ...item,
             enabled: !item.enabled,
@@ -417,7 +417,7 @@ Store pages
       const navigationItem =
         store.navigation.find(
           (nav) =>
-            nav.page === item.page
+            nav.href === `/${item.page}`
         );
 
       const enabled =
@@ -623,9 +623,7 @@ sections: StoreSection[]
 ): StoreSection[] {
 return sections.map((section) => ({
 ...section,
-settings: section.settings
-? { ...section.settings }
-: undefined,
+settings: { ...section.settings },
 }));
 }
 

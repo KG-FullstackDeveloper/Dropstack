@@ -15,7 +15,7 @@ getEditorSections,
 getSection,
 } from "./themeEditorUtils";
 import {
-getSectionDefinition,
+getThemeSectionDefinition,
 type ThemeEditorDevice,
 } from "./ThemeEditorTypes";
 
@@ -100,7 +100,7 @@ return (
         </span>
         <span className="mt-1 block truncate text-[11px] text-slate-500">
           {selectedSection
-            ? getSectionDefinition(selectedSection.type).label
+            ? getThemeSectionDefinition(selectedSection.type).label
             : "Select a section"}
         </span>
       </span>
@@ -135,7 +135,7 @@ return (
 
       <div className="space-y-2">
         {sections.map((section, index) => {
-          const definition = getSectionDefinition(section.type);
+          const definition = getThemeSectionDefinition(section.type);
           const selected = section.id === selectedSectionId;
 
           return (

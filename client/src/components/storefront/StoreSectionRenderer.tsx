@@ -773,6 +773,7 @@ StoreSection["type"],
 string
 > = {
 announcement: "Important store update",
+header: "Store navigation",
 hero: "Build your brand around your products",
 "featured-products": "Featured products",
 collections: "Shop our collections",
@@ -783,6 +784,7 @@ benefits: "Why customers choose us",
 "how-it-works": "How it works",
 "image-text": "Designed around your customers",
 video: "See it in action",
+slideshow: "Featured slideshow",
 testimonials: "What customers are saying",
 reviews: "Customer reviews",
 faq: "Frequently asked questions",
@@ -806,6 +808,8 @@ string
 > = {
 announcement:
 "Important information for your customers.",
+header:
+"Your store navigation.",
 hero:
 "Introduce your store and direct customers toward your products.",
 "featured-products":
@@ -826,6 +830,8 @@ benefits:
 "Tell your brand story with image and text.",
 video:
 "Show your product or brand in action.",
+slideshow:
+"Highlight multiple images or offers in a carousel.",
 testimonials:
 "Display real customer testimonials.",
 reviews:

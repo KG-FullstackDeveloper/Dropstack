@@ -137,7 +137,6 @@ function PreviewSection({
         section={section}
         selected={selected}
         selectedBlockId={selectedBlockId}
-        inspector={inspector}
         onSelectSection={onSelectSection}
         onSelectBlock={onSelectBlock}
         accent={accent}
@@ -624,7 +623,6 @@ function SlideshowPreview({
   section,
   selected,
   selectedBlockId,
-  inspector,
   onSelectSection,
   onSelectBlock,
   accent,
@@ -632,7 +630,6 @@ function SlideshowPreview({
   section: StoreSection;
   selected: boolean;
   selectedBlockId: string | null;
-  inspector: boolean;
   onSelectSection: () => void;
   onSelectBlock: (id: string) => void;
   accent: string;

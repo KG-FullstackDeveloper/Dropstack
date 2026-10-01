@@ -5,7 +5,6 @@ Plus,
 Trash2,
 } from "lucide-react";
 import type {
-StoreBlock,
 StoreBlockType,
 StoreSection,
 } from "../../types/store";

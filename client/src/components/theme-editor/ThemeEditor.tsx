@@ -8,19 +8,17 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
+  Copy,
   Eye,
   GripVertical,
   Monitor,
   MoreHorizontal,
   PanelLeft,
-  PanelRight,
   Plus,
   Redo2,
   Save,
-  Settings2,
   Smartphone,
-  Tablet,
+  Trash2,
   Undo2,
   Upload,
   X,
@@ -66,6 +64,12 @@ export function ThemeEditor({
   );
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarView, setSidebarView] = useState<"sections" | "theme-settings" | "app-embeds">("sections");
+  const [previewInspector, setPreviewInspector] = useState(true);
+  const [template, setTemplate] = useState("home");
+  const [market, setMarket] = useState("all");
+  const [pendingSectionIndex, setPendingSectionIndex] = useState<number | null>(null);
 
   const sections = useMemo(
     () => [...(draft.homeSections || [])],
@@ -158,15 +162,28 @@ export function ThemeEditor({
     setPanel("section-settings");
   }
 
+  function openAddSection(index?: number) {
+    setPendingSectionIndex(typeof index === "number" ? index : null);
+    setShowAddSection(true);
+  }
+
   function addSection(type: StoreSectionType) {
-    const section = createThemeSection(type, sections.length);
+    const section = createThemeSection(type);
+    const nextSections = [...sections];
+    const insertAt =
+      pendingSectionIndex === null
+        ? nextSections.length
+        : Math.max(0, Math.min(pendingSectionIndex, nextSections.length));
+
+    nextSections.splice(insertAt, 0, section);
 
     commit({
       ...draft,
-      homeSections: [...sections, section],
+      homeSections: nextSections,
     });
 
     setShowAddSection(false);
+    setPendingSectionIndex(null);
     setSelectedSectionId(section.id);
     setSelectedBlockId(null);
     setPanel("section-settings");
@@ -175,10 +192,7 @@ export function ThemeEditor({
   function addBlock(type: StoreBlock["type"]) {
     if (!selectedSectionId) return;
 
-    const block = createThemeBlock(
-      type,
-      selectedSection?.blocks?.length || 0
-    );
+    const block = createThemeBlock(type);
 
     updateSection(selectedSectionId, (section) => ({
       ...section,
@@ -187,6 +201,94 @@ export function ThemeEditor({
 
     setSelectedBlockId(block.id);
     setPanel("block-settings");
+  }
+
+  function duplicateBlock(sectionId: string, blockId: string) {
+    const section = sections.find((item) => item.id === sectionId);
+
+    if (!section) return;
+
+    const source = (section.blocks || []).find((block) => block.id === blockId);
+
+    if (!source) return;
+
+    const copy: StoreBlock = {
+      ...source,
+      id: `${source.type}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`,
+      settings: { ...(source.settings || {}) },
+    };
+
+    const blocks = [...(section.blocks || [])];
+    const index = blocks.findIndex((block) => block.id === blockId);
+    blocks.splice(index + 1, 0, copy);
+
+    updateSection(sectionId, (current) => ({
+      ...current,
+      blocks,
+    }));
+
+    setSelectedSectionId(sectionId);
+    setSelectedBlockId(copy.id);
+    setPanel("block-settings");
+  }
+
+  function moveBlockBetweenSections(
+    sourceSectionId: string,
+    sourceBlockId: string,
+    targetSectionId: string,
+    targetBlockId: string
+  ) {
+    if (sourceSectionId === targetSectionId) {
+      moveBlock(sourceSectionId, sourceBlockId, targetBlockId);
+      return;
+    }
+
+    const sourceSection = sections.find(
+      (section) => section.id === sourceSectionId
+    );
+    const targetSection = sections.find(
+      (section) => section.id === targetSectionId
+    );
+
+    if (!sourceSection || !targetSection) return;
+
+    const sourceBlocks = [...(sourceSection.blocks || [])];
+    const targetBlocks = [...(targetSection.blocks || [])];
+    const sourceIndex = sourceBlocks.findIndex(
+      (block) => block.id === sourceBlockId
+    );
+
+    if (sourceIndex < 0) return;
+
+    const [removed] = sourceBlocks.splice(sourceIndex, 1);
+    const targetIndex = targetBlocks.findIndex(
+      (block) => block.id === targetBlockId
+    );
+
+    if (targetIndex < 0) {
+      targetBlocks.push(removed);
+    } else {
+      targetBlocks.splice(targetIndex, 0, removed);
+    }
+
+    const nextSections = sections.map((section) => {
+      if (section.id === sourceSectionId) {
+        return { ...section, blocks: sourceBlocks };
+      }
+
+      if (section.id === targetSectionId) {
+        return { ...section, blocks: targetBlocks };
+      }
+
+      return section;
+    });
+
+    commit({
+      ...draft,
+      homeSections: nextSections,
+    });
   }
 
   function deleteBlock(sectionId: string, blockId: string) {
@@ -331,90 +433,184 @@ export function ThemeEditor({
     setDraggedBlockId(null);
   }
 
-  const previewWidth =
-    device === "mobile"
-      ? "390px"
-      : device === "tablet"
-      ? "768px"
-      : "100%";
+  const previewWidth = device === "mobile" ? "390px" : "100%";
+
+  const settingsPanel =
+    sidebarView === "app-embeds" ? (
+      <AppEmbedsPanel />
+    ) : sidebarView === "theme-settings" ? (
+      <ThemeSettingsPanel
+        store={draft}
+        onChange={(next) => commit(next)}
+      />
+    ) : panel === "section-settings" && selectedSection ? (
+      <SectionSettingsPanel
+        section={selectedSection}
+        onChange={(next) => updateSection(selectedSection.id, () => next)}
+        onBack={() => {
+          setPanel("sections");
+          setSelectedBlockId(null);
+        }}
+        onAddBlock={addBlock}
+        onSelectBlock={(id) => {
+          setSelectedBlockId(id);
+          setPanel("block-settings");
+        }}
+        onDeleteBlock={deleteBlock}
+        onDuplicate={() => duplicateSection(selectedSection.id)}
+        onDelete={() => deleteSection(selectedSection.id)}
+        draggedBlockId={draggedBlockId}
+        onBlockDragStart={handleBlockDragStart}
+        onBlockDrop={handleBlockDrop}
+      />
+    ) : panel === "block-settings" && selectedSection && selectedBlock ? (
+      <BlockSettingsPanel
+        block={selectedBlock}
+        onChange={(next) =>
+          updateBlock(selectedSection.id, selectedBlock.id, () => next)
+        }
+        onBack={() => {
+          setPanel("section-settings");
+          setSelectedBlockId(null);
+        }}
+      />
+    ) : (
+      <div className="p-3">
+        <div className="mb-4 rounded-xl border bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-900">Home page</p>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+            Your storefront structure is shown below. Expand a section to manage its blocks.
+          </p>
+        </div>
+        <SectionsPanel
+          sections={sections}
+          selectedSectionId={selectedSectionId}
+          onSelect={(id) => {
+            setSelectedSectionId(id);
+            setSelectedBlockId(null);
+            setPanel("section-settings");
+          }}
+          onToggle={(id) =>
+            updateSection(id, (section) => ({ ...section, enabled: !section.enabled }))
+          }
+          onAdd={() => openAddSection()}
+          onDuplicate={duplicateSection}
+          onDelete={deleteSection}
+          draggedSectionId={draggedSectionId}
+          onDragStart={handleSectionDragStart}
+          onDrop={handleSectionDrop}
+        />
+      </div>
+    );
 
   return (
-    <div className="fixed inset-0 z-[100] flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-950">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white px-4 shadow-sm">
-        <div className="flex min-w-0 items-center gap-3">
+    <div className="fixed inset-0 z-[100] flex h-screen w-screen flex-col overflow-hidden bg-white text-slate-950">
+      <header className="flex h-14 shrink-0 items-center border-b bg-white px-3 shadow-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
             onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border text-slate-600 transition hover:bg-slate-50"
-            title="Back to themes"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
+            title="Back"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={17} />
           </button>
-
-          <div className="hidden h-7 w-px bg-slate-200 sm:block" />
-
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((value) => !value)}
+            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:flex"
+            title="Toggle sidebar"
+          >
+            <PanelLeft size={17} />
+          </button>
+          <div className="hidden h-7 w-px bg-slate-200 md:block" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold">{draft.name}</p>
             <div className="flex items-center gap-2">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  saved ? "bg-emerald-500" : "bg-amber-500"
-                }`}
-              />
-              <span className="text-[11px] text-slate-500">
-                {saved ? "Saved" : "Unsaved changes"}
+              <p className="max-w-[150px] truncate text-xs font-bold sm:max-w-none">{draft.name || "Untitled theme"}</p>
+              <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold text-slate-500">
+                {saved ? "Saved" : "Unsaved"}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-xl border bg-slate-50 p-1 md:flex">
-          <DeviceButton
-            active={device === "desktop"}
-            label="Desktop"
-            onClick={() => setDevice("desktop")}
+        <div className="flex items-center gap-2">
+          <select
+            value={market}
+            onChange={(event) => setMarket(event.target.value)}
+            className="hidden h-9 max-w-[150px] rounded-lg border bg-white px-2 text-xs font-semibold outline-none md:block"
+            title="Market"
           >
-            <Monitor size={16} />
-          </DeviceButton>
-
-          <DeviceButton
-            active={device === "tablet"}
-            label="Tablet"
-            onClick={() => setDevice("tablet")}
+            <option value="all">All markets</option>
+            <option value="ng">Nigeria</option>
+            <option value="gh">Ghana</option>
+            <option value="za">South Africa</option>
+            <option value="us">United States</option>
+            <option value="gb">United Kingdom</option>
+          </select>
+          <select
+            value={template}
+            onChange={(event) => setTemplate(event.target.value)}
+            className="hidden h-9 max-w-[160px] rounded-lg border bg-white px-2 text-xs font-semibold outline-none md:block"
+            title="Template"
           >
-            <Tablet size={16} />
-          </DeviceButton>
-
-          <DeviceButton
-            active={device === "mobile"}
-            label="Mobile"
-            onClick={() => setDevice("mobile")}
-          >
-            <Smartphone size={16} />
-          </DeviceButton>
+            <option value="home">Home page</option>
+            <option value="products" disabled>Products</option>
+            <option value="collections" disabled>Collections</option>
+            <option value="pages" disabled>Pages</option>
+            <option value="blog" disabled>Blog</option>
+          </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => setPreviewInspector((value) => !value)}
+            className={`hidden h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold sm:flex ${
+              previewInspector ? "bg-slate-100 text-slate-950" : "text-slate-500"
+            }`}
+            title="Preview inspector"
+          >
+            Inspector
+          </button>
+          <button
+            type="button"
+            onClick={() => setDevice("desktop")}
+            className={`hidden h-9 w-9 items-center justify-center rounded-lg sm:flex ${
+              device === "desktop" ? "bg-slate-100" : "text-slate-400"
+            }`}
+            title="Desktop preview"
+          >
+            <Monitor size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDevice("mobile")}
+            className={`hidden h-9 w-9 items-center justify-center rounded-lg sm:flex ${
+              device === "mobile" ? "bg-slate-100" : "text-slate-400"
+            }`}
+            title="Mobile preview"
+          >
+            <Smartphone size={16} />
+          </button>
           <button
             type="button"
             onClick={undo}
             disabled={!past.length}
-            className="hidden h-9 w-9 items-center justify-center rounded-lg border text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
+            className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 md:flex"
             title="Undo"
           >
-            <Undo2 size={17} />
+            <Undo2 size={16} />
           </button>
-
           <button
             type="button"
             onClick={redo}
             disabled={!future.length}
-            className="hidden h-9 w-9 items-center justify-center rounded-lg border text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
+            className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 md:flex"
             title="Redo"
           >
-            <Redo2 size={17} />
+            <Redo2 size={16} />
           </button>
-
           <button
             type="button"
             onClick={() => setShowPreview(true)}
@@ -423,7 +619,6 @@ export function ThemeEditor({
             <Eye size={15} />
             Preview
           </button>
-
           <button
             type="button"
             onClick={handleSave}
@@ -432,134 +627,82 @@ export function ThemeEditor({
             <Save size={15} />
             Save
           </button>
-
           <button
             type="button"
             onClick={handlePublish}
-            className="flex h-9 items-center gap-2 rounded-lg bg-slate-950 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800"
+            className="h-9 rounded-lg bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800"
           >
-            <Upload size={15} />
             Publish
           </button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[340px] shrink-0 flex-col border-r bg-white">
-          <div className="flex h-12 shrink-0 border-b">
-            <button
-              type="button"
-              onClick={() => {
-                setPanel("sections");
-                setSelectedSectionId(null);
-                setSelectedBlockId(null);
-              }}
-              className={`flex flex-1 items-center justify-center gap-2 text-xs font-bold ${
-                panel === "sections" ||
-                panel === "section-settings" ||
-                panel === "block-settings"
-                  ? "border-b-2 border-slate-950 text-slate-950"
-                  : "text-slate-400"
-              }`}
-            >
-              <PanelLeft size={15} />
-              Sections
-            </button>
+        {sidebarOpen && (
+          <aside className="flex w-[320px] shrink-0 flex-col border-r bg-white">
+            <div className="flex h-11 shrink-0 border-b">
+              {([
+                ["sections", "Sections"],
+                ["theme-settings", "Theme settings"],
+                ["app-embeds", "App embeds"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setSidebarView(value);
+                    if (value === "sections") {
+                      setPanel("sections");
+                    } else {
+                      setPanel("theme-settings");
+                    }
+                    setSelectedSectionId(null);
+                    setSelectedBlockId(null);
+                  }}
+                  className={`flex-1 text-[10px] font-bold ${
+                    sidebarView === value
+                      ? "border-b-2 border-slate-950 text-slate-950"
+                      : "text-slate-400 hover:text-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setPanel("theme-settings");
-                setSelectedSectionId(null);
-                setSelectedBlockId(null);
-              }}
-              className={`flex flex-1 items-center justify-center gap-2 text-xs font-bold ${
-                panel === "theme-settings"
-                  ? "border-b-2 border-slate-950 text-slate-950"
-                  : "text-slate-400"
-              }`}
-            >
-              <Settings2 size={15} />
-              Theme settings
-            </button>
-          </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="min-[1600px]:hidden">{settingsPanel}</div>
+              <div className="min-[1600px]:block">{sidebarView === "sections" ? (
+                <SectionsPanel
+                  sections={sections}
+                  selectedSectionId={selectedSectionId}
+                  onSelect={(id) => {
+                    setSelectedSectionId(id);
+                    setSelectedBlockId(null);
+                    setPanel("section-settings");
+                  }}
+                  onToggle={(id) =>
+                    updateSection(id, (section) => ({ ...section, enabled: !section.enabled }))
+                  }
+                  onAdd={() => openAddSection()}
+                  onDuplicate={duplicateSection}
+                  onDelete={deleteSection}
+                  draggedSectionId={draggedSectionId}
+                  onDragStart={handleSectionDragStart}
+                  onDrop={handleSectionDrop}
+                />
+              ) : settingsPanel}</div>
+            </div>
+          </aside>
+        )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {panel === "theme-settings" ? (
-              <ThemeSettingsPanel
-                store={draft}
-                onChange={(next) => commit(next)}
-              />
-            ) : panel === "section-settings" && selectedSection ? (
-              <SectionSettingsPanel
-                section={selectedSection}
-                onChange={(next) =>
-                  updateSection(selectedSection.id, () => next)
-                }
-                onBack={() => {
-                  setPanel("sections");
-                  setSelectedBlockId(null);
-                }}
-                onAddBlock={addBlock}
-                onSelectBlock={(id) => {
-                  setSelectedBlockId(id);
-                  setPanel("block-settings");
-                }}
-                onDeleteBlock={deleteBlock}
-                onDuplicate={() => duplicateSection(selectedSection.id)}
-                onDelete={() => deleteSection(selectedSection.id)}
-                draggedBlockId={draggedBlockId}
-                onBlockDragStart={handleBlockDragStart}
-                onBlockDrop={handleBlockDrop}
-              />
-            ) : panel === "block-settings" && selectedSection && selectedBlock ? (
-              <BlockSettingsPanel
-                block={selectedBlock}
-                onChange={(next) =>
-                  updateBlock(
-                    selectedSection.id,
-                    selectedBlock.id,
-                    () => next
-                  )
-                }
-                onBack={() => {
-                  setPanel("section-settings");
-                  setSelectedBlockId(null);
-                }}
-              />
-            ) : (
-              <SectionsPanel
-                sections={sections}
-                selectedSectionId={selectedSectionId}
-                onSelect={(id) => {
-                  setSelectedSectionId(id);
-                  setSelectedBlockId(null);
-                  setPanel("section-settings");
-                }}
-                onToggle={(id) =>
-                  updateSection(id, (section) => ({
-                    ...section,
-                    enabled: !section.enabled,
-                  }))
-                }
-                onAdd={() => setShowAddSection(true)}
-                onDuplicate={duplicateSection}
-                onDelete={deleteSection}
-                draggedSectionId={draggedSectionId}
-                onDragStart={handleSectionDragStart}
-                onDrop={handleSectionDrop}
-              />
-            )}
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1 overflow-auto bg-slate-100">
-          <div className="flex min-h-full justify-center p-4 md:p-8">
+        <main className="min-w-0 flex-1 overflow-auto bg-[#f1f1f1]">
+          <div className="flex min-h-full justify-center p-3 sm:p-6">
             <div
-              className="relative shrink-0 overflow-hidden rounded-xl border bg-white shadow-xl transition-all duration-200"
+              className="relative shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all duration-200"
               style={{
                 width: previewWidth,
-                minHeight: "calc(100vh - 128px)",
+                minHeight: "calc(100vh - 86px)",
                 maxWidth: "100%",
               }}
             >
@@ -567,30 +710,104 @@ export function ThemeEditor({
                 store={draft}
                 sections={sections}
                 selectedSectionId={selectedSectionId}
+                selectedBlockId={selectedBlockId}
+                interactive={previewInspector}
                 onSelectSection={(id) => {
                   setSelectedSectionId(id);
                   setSelectedBlockId(null);
+                  setSidebarView("sections");
                   setPanel("section-settings");
+                }}
+                onSelectBlock={(sectionId, blockId) => {
+                  setSelectedSectionId(sectionId);
+                  setSelectedBlockId(blockId);
+                  setSidebarView("sections");
+                  setPanel("block-settings");
+                }}
+                onMoveSection={moveSection}
+                onDuplicateSection={duplicateSection}
+                onDeleteSection={deleteSection}
+                onSectionDragStart={handleSectionDragStart}
+                onSectionDrop={handleSectionDrop}
+                onBlockDragStart={(event, sectionId, blockId) => {
+                  setDraggedBlockId(blockId);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", `${sectionId}::${blockId}`);
+                }}
+                onBlockDrop={(event, targetSectionId, targetBlockId) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const data = event.dataTransfer.getData("text/plain");
+                  const separatorIndex = data.indexOf("::");
+                  if (separatorIndex >= 0) {
+                    const sourceSectionId = data.slice(0, separatorIndex);
+                    const sourceBlockId = data.slice(separatorIndex + 2);
+                    if (sourceSectionId && sourceBlockId) {
+                      moveBlockBetweenSections(sourceSectionId, sourceBlockId, targetSectionId, targetBlockId);
+                      setSelectedSectionId(targetSectionId);
+                      setSelectedBlockId(sourceBlockId);
+                      setSidebarView("sections");
+                      setPanel("block-settings");
+                    }
+                  }
+                  setDraggedBlockId(null);
+                }}
+                onDuplicateBlock={duplicateBlock}
+                onDeleteBlock={deleteBlock}
+                onAddSection={(index) => openAddSection(index)}
+                onAddBlock={(sectionId, type) => {
+                  setSelectedSectionId(sectionId);
+                  const block = createThemeBlock(type);
+                  updateSection(sectionId, (section) => ({
+                    ...section,
+                    blocks: [...(section.blocks || []), block],
+                  }));
+                  setSelectedBlockId(block.id);
+                  setSidebarView("sections");
+                  setPanel("block-settings");
                 }}
               />
             </div>
           </div>
         </main>
 
-        <div className="hidden w-10 shrink-0 border-l bg-white xl:flex xl:flex-col xl:items-center xl:gap-2 xl:pt-3">
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
-            title="Editor panel"
-          >
-            <PanelRight size={16} />
-          </button>
-        </div>
+        <aside className="hidden w-[360px] shrink-0 border-l bg-white min-[1600px]:flex min-[1600px]:flex-col">
+          <div className="flex h-11 shrink-0 items-center border-b px-4">
+            <p className="text-xs font-bold">{
+              sidebarView === "theme-settings"
+                ? "Theme settings"
+                : sidebarView === "app-embeds"
+                ? "App embeds"
+                : selectedBlock
+                ? formatLabel(selectedBlock.type)
+                : selectedSection
+                ? formatLabel(selectedSection.type)
+                : "Settings"
+            }</p>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {sidebarView === "sections" && !selectedSection ? (
+              <div className="flex min-h-full items-center justify-center p-8 text-center">
+                <div>
+                  <p className="text-sm font-bold">Select a section or block</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Click an element in the preview inspector to open its settings.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              settingsPanel
+            )}
+          </div>
+        </aside>
       </div>
 
       {showAddSection && (
         <AddSectionModal
-          onClose={() => setShowAddSection(false)}
+          onClose={() => {
+            setShowAddSection(false);
+            setPendingSectionIndex(null);
+          }}
           onSelect={addSection}
         />
       )}
@@ -603,33 +820,6 @@ export function ThemeEditor({
         />
       )}
     </div>
-  );
-}
-
-function DeviceButton({
-  active,
-  label,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      onClick={onClick}
-      className={`flex h-8 w-9 items-center justify-center rounded-lg transition ${
-        active
-          ? "bg-white text-slate-950 shadow-sm"
-          : "text-slate-400 hover:text-slate-700"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -653,102 +843,150 @@ function SectionsPanel({
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   draggedSectionId: string | null;
-  onDragStart: (
-    event: DragEvent<HTMLDivElement>,
-    sectionId: string
-  ) => void;
-  onDrop: (
-    event: DragEvent<HTMLDivElement>,
-    sectionId: string
-  ) => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>, sectionId: string) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>, sectionId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState<string[]>(
+    () => sections.map((section) => section.id)
+  );
+
+  const groups = [
+    {
+      label: "Header",
+      items: sections.filter((section) => section.type === "announcement"),
+    },
+    {
+      label: "Template",
+      items: sections.filter(
+        (section) => section.type !== "announcement" && section.type !== "footer"
+      ),
+    },
+    {
+      label: "Footer",
+      items: sections.filter((section) => section.type === "footer"),
+    },
+  ];
+
+  function toggleExpanded(id: string) {
+    setExpanded((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
+  }
+
   return (
     <div className="p-3">
-      <div className="mb-3 rounded-xl bg-slate-50 p-3">
-        <p className="text-xs font-bold text-slate-900">Storefront</p>
-        <p className="mt-1 text-[11px] leading-5 text-slate-500">
-          Drag sections to change their order. Select a section to edit its
-          content, layout and behavior.
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        {sections.map((section) => (
-          <div
-            key={section.id}
-            draggable
-            onDragStart={(event) => onDragStart(event, section.id)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => onDrop(event, section.id)}
-            className={`group flex items-center gap-2 rounded-xl border bg-white p-2 transition ${
-              selectedSectionId === section.id
-                ? "border-slate-950 shadow-sm"
-                : "border-slate-200 hover:border-slate-300"
-            } ${draggedSectionId === section.id ? "opacity-40" : ""}`}
-          >
-            <div className="cursor-grab p-1 text-slate-300 group-hover:text-slate-500">
-              <GripVertical size={15} />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onSelect(section.id)}
-              className="min-w-0 flex-1 text-left"
-            >
-              <p className="truncate text-xs font-bold capitalize">
-                {formatLabel(section.type)}
-              </p>
-              <p className="mt-0.5 text-[10px] text-slate-400">
-                {section.enabled ? "Visible" : "Hidden"}
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onToggle(section.id)}
-              className={`h-6 w-10 rounded-full p-0.5 transition ${
-                section.enabled ? "bg-slate-950" : "bg-slate-200"
-              }`}
-              aria-label={section.enabled ? "Hide section" : "Show section"}
-            >
-              <span
-                className={`block h-5 w-5 rounded-full bg-white shadow transition ${
-                  section.enabled ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
-
-            <div className="relative">
-              <details>
-                <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                  <MoreHorizontal size={16} />
-                </summary>
-                <div className="absolute right-0 top-8 z-20 w-32 rounded-lg border bg-white p-1 shadow-xl">
-                  <button
-                    type="button"
-                    onClick={() => onDuplicate(section.id)}
-                    className="w-full rounded-md px-2 py-1.5 text-left text-[11px] hover:bg-slate-50"
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(section.id)}
-                    className="w-full rounded-md px-2 py-1.5 text-left text-[11px] text-red-600 hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </details>
-            </div>
+      {groups.map((group) => (
+        <div key={group.label} className="mb-5">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              {group.label}
+            </p>
+            {group.label === "Template" && (
+              <button
+                type="button"
+                onClick={onAdd}
+                className="flex h-6 items-center gap-1 rounded-md px-2 text-[10px] font-bold hover:bg-slate-100"
+              >
+                <Plus size={12} /> Add
+              </button>
+            )}
           </div>
-        ))}
-      </div>
+
+          <div className="space-y-1">
+            {group.items.map((section) => {
+              const isExpanded = expanded.includes(section.id);
+              const hasBlocks = (section.blocks || []).length > 0;
+
+              return (
+                <div key={section.id}>
+                  <div
+                    draggable
+                    onDragStart={(event) => onDragStart(event, section.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => onDrop(event, section.id)}
+                    className={`group rounded-lg border bg-white ${
+                      selectedSectionId === section.id
+                        ? "border-slate-950"
+                        : "border-transparent hover:border-slate-200"
+                    } ${draggedSectionId === section.id ? "opacity-40" : ""}`}
+                  >
+                    <div className="flex items-center gap-1">
+                      <div className="cursor-grab p-1.5 text-slate-300 group-hover:text-slate-500">
+                        <GripVertical size={14} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(section.id)}
+                        className="min-w-0 flex-1 py-2 text-left"
+                      >
+                        <p className="truncate text-xs font-semibold">{formatLabel(section.type)}</p>
+                      </button>
+                      {hasBlocks && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(section.id)}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"
+                          title={isExpanded ? "Collapse blocks" : "Expand blocks"}
+                        >
+                          <ChevronDown
+                            size={14}
+                            className={`transition-transform ${isExpanded ? "rotate-0" : "-rotate-90"}`}
+                          />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onToggle(section.id)}
+                        className={`mr-1 h-5 w-8 rounded-full p-0.5 ${section.enabled ? "bg-slate-950" : "bg-slate-200"}`}
+                        title={section.enabled ? "Hide section" : "Show section"}
+                      >
+                        <span className={`block h-4 w-4 rounded-full bg-white shadow transition ${section.enabled ? "translate-x-3" : "translate-x-0"}`} />
+                      </button>
+                      <details className="relative mr-1">
+                        <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-md text-slate-400 hover:bg-slate-100">
+                          <MoreHorizontal size={15} />
+                        </summary>
+                        <div className="absolute right-0 top-8 z-50 w-32 rounded-lg border bg-white p-1 shadow-xl">
+                          <button type="button" onClick={() => onDuplicate(section.id)} className="w-full rounded-md px-2 py-1.5 text-left text-[11px] hover:bg-slate-50">Duplicate</button>
+                          <button type="button" onClick={() => onDelete(section.id)} className="w-full rounded-md px-2 py-1.5 text-left text-[11px] text-red-600 hover:bg-red-50">Delete</button>
+                        </div>
+                      </details>
+                    </div>
+
+                    {hasBlocks && isExpanded && (
+                      <div className="border-t px-2 pb-2 pt-1">
+                        {(section.blocks || []).map((block) => (
+                          <button
+                            key={block.id}
+                            type="button"
+                            onClick={() => onSelect(section.id)}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                          >
+                            <span className="h-1 w-1 rounded-full bg-slate-300" />
+                            <span className="truncate text-[10px] text-slate-500">{formatLabel(block.type)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {group.items.length === 0 && (
+              <div className="rounded-lg border border-dashed p-3 text-center text-[10px] text-slate-400">
+                No sections
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
 
       <button
         type="button"
         onClick={onAdd}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-xs font-bold text-slate-600 transition hover:border-slate-500 hover:bg-slate-50"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-xs font-bold text-slate-600 hover:border-slate-500 hover:bg-slate-50"
       >
         <Plus size={15} />
         Add section
@@ -879,11 +1117,6 @@ function SectionSettingsPanel({
               label="Desktop image"
               value={stringValue(settings.imageUrl)}
               onChange={(value) => setSetting("imageUrl", value)}
-            />
-            <MediaField
-              label="Mobile image"
-              value={stringValue(settings.mobileImageUrl)}
-              onChange={(value) => setSetting("mobileImageUrl", value)}
             />
             <SelectField
               label="Content position"
@@ -1351,6 +1584,23 @@ function BlockSettingsPanel({
   );
 }
 
+function AppEmbedsPanel() {
+  return (
+    <div className="p-4">
+      <p className="text-sm font-bold">App embeds</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        App embeds will appear here when an installed app exposes a storefront embed.
+      </p>
+      <div className="mt-4 rounded-xl border border-dashed p-5 text-center">
+        <p className="text-xs font-bold text-slate-700">No app embeds installed</p>
+        <p className="mt-1 text-[10px] leading-5 text-slate-400">
+          Your app integration system can populate this area later.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ThemeSettingsPanel({
   store,
   onChange,
@@ -1645,7 +1895,20 @@ function PreviewModal({
           store={store}
           sections={sections}
           selectedSectionId={null}
+          selectedBlockId={null}
           onSelectSection={() => undefined}
+          onSelectBlock={() => undefined}
+          onMoveSection={() => undefined}
+          onDuplicateSection={() => undefined}
+          onDeleteSection={() => undefined}
+          onSectionDragStart={() => undefined}
+          onSectionDrop={() => undefined}
+          onBlockDragStart={() => undefined}
+          onBlockDrop={() => undefined}
+          onDuplicateBlock={() => undefined}
+          onDeleteBlock={() => undefined}
+          onAddSection={() => undefined}
+          onAddBlock={() => undefined}
         />
       </div>
     </div>
@@ -1656,12 +1919,48 @@ function ThemeStorePreview({
   store,
   sections,
   selectedSectionId,
+  selectedBlockId,
+  interactive = false,
   onSelectSection,
+  onSelectBlock,
+  onMoveSection,
+  onDuplicateSection,
+  onDeleteSection,
+  onSectionDragStart,
+  onSectionDrop,
+  onBlockDragStart,
+  onBlockDrop,
+  onDuplicateBlock,
+  onDeleteBlock,
+  onAddSection,
+  onAddBlock,
 }: {
   store: StoreConfig;
   sections: StoreSection[];
   selectedSectionId: string | null;
+  selectedBlockId: string | null;
+  interactive?: boolean;
   onSelectSection: (id: string) => void;
+  onSelectBlock: (sectionId: string, blockId: string) => void;
+  onMoveSection: (sourceId: string, targetId: string) => void;
+  onDuplicateSection: (id: string) => void;
+  onDeleteSection: (id: string) => void;
+  onSectionDragStart: (event: DragEvent<HTMLDivElement>, sectionId: string) => void;
+  onSectionDrop: (event: DragEvent<HTMLDivElement>, sectionId: string) => void;
+  onBlockDragStart: (
+    event: DragEvent<HTMLDivElement>,
+    sectionId: string,
+    blockId: string
+  ) => void;
+  onBlockDrop: (
+    event: DragEvent<HTMLDivElement>,
+    sectionId: string,
+    blockId: string
+  ) => void;
+  onDuplicateBlock: (sectionId: string, blockId: string) => void;
+  onDeleteBlock: (sectionId: string, blockId: string) => void;
+  onAddSection: (index: number) => void;
+  onAddBlock: (sectionId: string, type: StoreBlock["type"]) => void;
 }) {
   return (
     <div
@@ -1704,14 +2003,76 @@ function ThemeStorePreview({
 
         const selected = selectedSectionId === section.id;
 
+        const sectionIndex = sections.findIndex(
+          (item) => item.id === section.id
+        );
+
         return (
-          <PreviewSection
+          <>
+            {interactive && (
+              <button
+                type="button"
+                onClick={() => onAddSection(sectionIndex)}
+                className="group relative z-50 flex h-6 w-full items-center justify-center opacity-0 transition hover:opacity-100 focus:opacity-100"
+                title="Add section above"
+              >
+                <span className="flex h-5 items-center gap-1 rounded-full border bg-white px-3 text-[9px] font-bold shadow-sm">
+                  <Plus size={11} /> Add section
+                </span>
+              </button>
+            )}
+            <PreviewSection
             key={section.id}
             store={store}
             section={section}
             selected={selected}
+            selectedBlockId={selectedBlockId}
+            interactive={interactive}
+            isFirstSection={sectionIndex === 0}
+            isLastSection={sectionIndex === sections.length - 1}
             onSelect={() => onSelectSection(section.id)}
+            onSelectBlock={(blockId) => onSelectBlock(section.id, blockId)}
+            onMoveUp={() => {
+              if (sectionIndex > 0) {
+                onMoveSection(section.id, sections[sectionIndex - 1].id);
+              }
+            }}
+            onMoveDown={() => {
+              if (sectionIndex >= 0 && sectionIndex < sections.length - 1) {
+                onMoveSection(section.id, sections[sectionIndex + 1].id);
+              }
+            }}
+            onDuplicateSection={() => onDuplicateSection(section.id)}
+            onDeleteSection={() => onDeleteSection(section.id)}
+            onSectionDragStart={(event) =>
+              onSectionDragStart(event, section.id)
+            }
+            onSectionDrop={(event) => onSectionDrop(event, section.id)}
+            onBlockDragStart={(event, blockId) =>
+              onBlockDragStart(event, section.id, blockId)
+            }
+            onBlockDrop={(event, blockId) =>
+              onBlockDrop(event, section.id, blockId)
+            }
+            onDuplicateBlock={(blockId) =>
+              onDuplicateBlock(section.id, blockId)
+            }
+            onDeleteBlock={(blockId) => onDeleteBlock(section.id, blockId)}
+            onAddBlock={(type) => onAddBlock(section.id, type)}
           />
+            {interactive && (
+              <button
+                type="button"
+                onClick={() => onAddSection(sectionIndex + 1)}
+                className="group relative z-50 flex h-6 w-full items-center justify-center opacity-0 transition hover:opacity-100 focus:opacity-100"
+                title="Add section below"
+              >
+                <span className="flex h-5 items-center gap-1 rounded-full border bg-white px-3 text-[9px] font-bold shadow-sm">
+                  <Plus size={11} /> Add section
+                </span>
+              </button>
+            )}
+          </>
         );
       })}
 
@@ -1733,12 +2094,44 @@ function PreviewSection({
   store,
   section,
   selected,
+  selectedBlockId,
+  interactive,
+  isFirstSection,
+  isLastSection,
   onSelect,
+  onSelectBlock,
+  onMoveUp,
+  onMoveDown,
+  onDuplicateSection,
+  onDeleteSection,
+  onSectionDragStart,
+  onSectionDrop,
+  onBlockDragStart,
+  onBlockDrop,
+  onDuplicateBlock,
+  onDeleteBlock,
+  onAddBlock,
 }: {
   store: StoreConfig;
   section: StoreSection;
   selected: boolean;
+  selectedBlockId: string | null;
+  interactive: boolean;
+  isFirstSection: boolean;
+  isLastSection: boolean;
   onSelect: () => void;
+  onSelectBlock: (blockId: string) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDuplicateSection: () => void;
+  onDeleteSection: () => void;
+  onSectionDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onSectionDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onBlockDragStart: (event: DragEvent<HTMLDivElement>, blockId: string) => void;
+  onBlockDrop: (event: DragEvent<HTMLDivElement>, blockId: string) => void;
+  onDuplicateBlock: (blockId: string) => void;
+  onDeleteBlock: (blockId: string) => void;
+  onAddBlock: (type: StoreBlock["type"]) => void;
 }) {
   const settings = getSectionSettings(section);
   const accent = store.accentColor || "#2563eb";
@@ -1752,14 +2145,49 @@ function PreviewSection({
     ? { outlineColor: accent }
     : undefined;
 
+  const blockProps = {
+    selectedBlockId,
+    interactive,
+    accent,
+    onSelectBlock,
+    onBlockDragStart,
+    onBlockDrop,
+    onDuplicateBlock,
+    onDeleteBlock,
+    onAddBlock,
+  };
+
   if (section.type === "announcement") {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div
           className="px-4 py-2 text-center text-[11px] font-bold"
           style={{
@@ -1772,7 +2200,7 @@ function PreviewSection({
         >
           {stringValue(settings.text, "Free shipping on orders over $50")}
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -1780,12 +2208,35 @@ function PreviewSection({
     const position = stringValue(settings.contentPosition, "left");
 
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div
           className="relative flex min-h-[420px] items-center overflow-hidden bg-slate-900 px-8 py-14 md:px-14"
           style={{
@@ -1850,18 +2301,41 @@ function PreviewSection({
             </span>
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
   if (section.type === "video") {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div className="relative min-h-[420px] overflow-hidden bg-black">
           {stringValue(settings.videoUrl) ? (
             <video
@@ -1912,7 +2386,7 @@ function PreviewSection({
             </div>
           )}
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -1922,12 +2396,35 @@ function PreviewSection({
     section.type === "product-gallery"
   ) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div className="bg-white px-6 py-14 md:px-10">
           <PreviewHeading
             title={stringValue(
@@ -1962,7 +2459,7 @@ function PreviewSection({
             ))}
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -1971,12 +2468,35 @@ function PreviewSection({
       stringValue(settings.imagePosition, "left") === "left";
 
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div
           className={`grid items-center gap-10 bg-slate-50 px-6 py-14 md:grid-cols-2 md:px-10 ${
             imageFirst ? "" : "md:[&>div:first-child]:order-2"
@@ -2017,7 +2537,7 @@ function PreviewSection({
             )}
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -2027,12 +2547,35 @@ function PreviewSection({
     section.type === "how-it-works"
   ) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div className="bg-white px-6 py-14 md:px-10">
           <PreviewHeading
             centered
@@ -2051,10 +2594,13 @@ function PreviewSection({
                   const blockSettings = getBlockSettings(block);
 
                   return (
-                    <div
+                    <PreviewBlock
                       key={block.id}
-                      className="rounded-2xl border bg-white p-6"
+                      block={block}
+                      selected={interactive && selectedBlockId === block.id}
+                      {...blockProps}
                     >
+                      <div className="rounded-2xl border bg-white p-6">
                       <p className="text-xs font-black text-slate-400">
                         {stringValue(blockSettings.number, "01")}
                       </p>
@@ -2070,7 +2616,8 @@ function PreviewSection({
                           "Editable description."
                         )}
                       </p>
-                    </div>
+                      </div>
+                    </PreviewBlock>
                   );
                 })
               : ["Secure checkout", "Fast delivery", "Support"].map(
@@ -2086,7 +2633,7 @@ function PreviewSection({
                 )}
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -2095,12 +2642,35 @@ function PreviewSection({
     section.type === "testimonials"
   ) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div className="bg-slate-50 px-6 py-14 md:px-10">
           <PreviewHeading
             centered
@@ -2112,36 +2682,88 @@ function PreviewSection({
           />
 
           <div className="mt-9 grid gap-4 md:grid-cols-3">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="rounded-2xl bg-white p-6 shadow-sm"
-              >
-                <div className="text-sm tracking-widest">
-                  ★★★★★
-                </div>
-                <p className="mt-4 text-sm leading-6 text-slate-600">
-                  Customer review content will appear here.
-                </p>
-                <p className="mt-5 text-xs font-bold">
-                  Verified customer
-                </p>
-              </div>
-            ))}
+            {(section.blocks || []).length > 0
+              ? (section.blocks || []).map((block) => {
+                  const blockSettings = getBlockSettings(block);
+                  const rating = Math.max(1, Math.min(5, numberValue(blockSettings.rating, 5)));
+
+                  return (
+                    <PreviewBlock
+                      key={block.id}
+                      block={block}
+                      selected={interactive && selectedBlockId === block.id}
+                      {...blockProps}
+                    >
+                      <div className="rounded-2xl bg-white p-6 shadow-sm">
+                        <div className="text-sm tracking-widest">
+                          {"★".repeat(rating)}{"☆".repeat(5 - rating)}
+                        </div>
+                        <p className="mt-4 text-sm leading-6 text-slate-600">
+                          {stringValue(
+                            blockSettings.text,
+                            "Customer review content will appear here."
+                          )}
+                        </p>
+                        <p className="mt-5 text-xs font-bold">
+                          {stringValue(blockSettings.name, "Verified customer")}
+                        </p>
+                      </div>
+                    </PreviewBlock>
+                  );
+                })
+              : [1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-2xl bg-white p-6 shadow-sm"
+                  >
+                    <div className="text-sm tracking-widest">
+                      ★★★★★
+                    </div>
+                    <p className="mt-4 text-sm leading-6 text-slate-600">
+                      Customer review content will appear here.
+                    </p>
+                    <p className="mt-5 text-xs font-bold">
+                      Verified customer
+                    </p>
+                  </div>
+                ))}
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
   if (section.type === "faq") {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div className="bg-white px-6 py-14 md:px-10">
           <PreviewHeading
             title={stringValue(
@@ -2156,8 +2778,11 @@ function PreviewSection({
               const blockSettings = getBlockSettings(block);
 
               return (
-                <div
+                <PreviewBlock
                   key={block.id}
+                  block={block}
+                  selected={interactive && selectedBlockId === block.id}
+                  {...blockProps}
                   className="flex items-center justify-between px-5 py-5 text-sm font-semibold"
                 >
                   <span>
@@ -2167,23 +2792,46 @@ function PreviewSection({
                     )}
                   </span>
                   <span>+</span>
-                </div>
+                </PreviewBlock>
               );
             })}
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
   if (section.type === "newsletter") {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <div
           className="px-6 py-14 text-white md:px-10"
           style={{
@@ -2208,18 +2856,41 @@ function PreviewSection({
             />
           </div>
         </div>
-      </button>
+      </div>
     );
   }
 
   if (section.type === "footer") {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onSectionDrop}
         className={`block w-full text-left ${wrapper}`}
         style={wrapperStyle}
       >
+        {interactive && selected && (
+          <SectionCanvasToolbar
+            label={formatLabel(section.type)}
+            accent={accent}
+            canMoveUp={!isFirstSection}
+            canMoveDown={!isLastSection}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onSettings={onSelect}
+            onDuplicate={onDuplicateSection}
+            onDelete={onDeleteSection}
+            onDragStart={onSectionDragStart}
+          />
+        )}
         <footer
           className="px-6 py-12 md:px-10"
           style={{
@@ -2253,17 +2924,40 @@ function PreviewSection({
             ))}
           </div>
         </footer>
-      </button>
+      </div>
     );
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onSectionDrop}
       className={`block w-full text-left ${wrapper}`}
       style={wrapperStyle}
     >
+      {interactive && selected && (
+        <SectionCanvasToolbar
+          label={formatLabel(section.type)}
+          accent={accent}
+          canMoveUp={!isFirstSection}
+          canMoveDown={!isLastSection}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onSettings={onSelect}
+          onDuplicate={onDuplicateSection}
+          onDelete={onDeleteSection}
+          onDragStart={onSectionDragStart}
+        />
+      )}
       <div className="bg-white px-6 py-14 md:px-10">
         <PreviewHeading
           title={stringValue(
@@ -2273,7 +2967,243 @@ function PreviewSection({
           text={stringValue(settings.text)}
         />
       </div>
-    </button>
+    </div>
+  );
+}
+
+function SectionCanvasToolbar({
+  label,
+  accent,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onSettings,
+  onDuplicate,
+  onDelete,
+  onDragStart,
+}: {
+  label: string;
+  accent: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onSettings: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      className="absolute left-2 top-2 z-[60] flex items-center gap-1 rounded-lg border bg-white/95 p-1 shadow-lg backdrop-blur"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <div
+        draggable
+        onDragStart={onDragStart}
+        className="flex h-7 cursor-grab items-center gap-1 rounded-md px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100 active:cursor-grabbing"
+        title="Drag to move section"
+      >
+        <GripVertical size={13} />
+        <span style={{ color: accent }}>{label}</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={onSettings}
+        className="flex h-7 items-center rounded-md px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+        title="Edit section"
+      >
+        Edit
+      </button>
+
+      <button
+        type="button"
+        onClick={onMoveUp}
+        disabled={!canMoveUp}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-25"
+        title="Move section up"
+      >
+        ↑
+      </button>
+
+      <button
+        type="button"
+        onClick={onMoveDown}
+        disabled={!canMoveDown}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-25"
+        title="Move section down"
+      >
+        ↓
+      </button>
+
+      <button
+        type="button"
+        onClick={onDuplicate}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+        title="Duplicate section"
+      >
+        <Copy size={13} />
+      </button>
+
+      <button
+        type="button"
+        onClick={onDelete}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500"
+        title="Delete section"
+      >
+        <Trash2 size={13} />
+      </button>
+    </div>
+  );
+}
+
+function PreviewBlock({
+  block,
+  selected,
+  interactive,
+  accent,
+  onSelectBlock,
+  onBlockDragStart,
+  onBlockDrop,
+  onDuplicateBlock,
+  onDeleteBlock,
+  onAddBlock,
+  children,
+  className = "",
+}: {
+  block: StoreBlock;
+  selected: boolean;
+  interactive: boolean;
+  accent: string;
+  onSelectBlock: (blockId: string) => void;
+  onBlockDragStart: (event: DragEvent<HTMLDivElement>, blockId: string) => void;
+  onBlockDrop: (event: DragEvent<HTMLDivElement>, blockId: string) => void;
+  onDuplicateBlock: (blockId: string) => void;
+  onDeleteBlock: (blockId: string) => void;
+  onAddBlock: (type: StoreBlock["type"]) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [showBlockPicker, setShowBlockPicker] = useState(false);
+
+  return (
+    <div
+      className={`group relative ${
+        interactive
+          ? selected
+            ? "outline outline-2 outline-offset-[-2px]"
+            : "cursor-pointer outline-1 outline-transparent transition hover:outline hover:outline-dashed hover:outline-slate-300"
+          : ""
+      } ${className}`}
+      style={selected ? { outlineColor: accent } : undefined}
+      onClick={(event) => {
+        if (!interactive) return;
+        event.stopPropagation();
+        onSelectBlock(block.id);
+      }}
+      onDragOver={(event) => {
+        if (!interactive) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDrop={(event) => {
+        if (!interactive) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onBlockDrop(event, block.id);
+      }}
+    >
+      {interactive && selected && (
+        <div
+          className="absolute left-2 top-2 z-[55] flex items-center gap-1 rounded-lg border bg-white/95 p-1 shadow-lg backdrop-blur"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <div
+            draggable
+            onDragStart={(event) => onBlockDragStart(event, block.id)}
+            className="flex h-7 cursor-grab items-center gap-1 rounded-md px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100 active:cursor-grabbing"
+            title="Drag to move block"
+          >
+            <GripVertical size={12} />
+            <span style={{ color: accent }}>{formatLabel(block.type)}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onSelectBlock(block.id)}
+            className="flex h-7 items-center rounded-md px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+            title="Edit block"
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDuplicateBlock(block.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+            title="Duplicate block"
+          >
+            <Copy size={12} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDeleteBlock(block.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500"
+            title="Delete block"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      )}
+
+      {children}
+
+      {interactive && (
+        <div className="pointer-events-none absolute -bottom-4 left-1/2 z-[70] -translate-x-1/2 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowBlockPicker((value) => !value);
+            }}
+            className="flex h-7 items-center gap-1 rounded-full border bg-white px-3 text-[10px] font-bold shadow-lg"
+          >
+            <Plus size={12} />
+            Add block
+          </button>
+          {showBlockPicker && (
+            <div
+              className="pointer-events-auto absolute bottom-9 left-1/2 w-56 -translate-x-1/2 rounded-xl border bg-white p-2 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Add block
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                {THEME_BLOCK_DEFINITIONS.map((definition) => (
+                  <button
+                    key={definition.type}
+                    type="button"
+                    onClick={() => {
+                      onAddBlock(definition.type);
+                      setShowBlockPicker(false);
+                    }}
+                    className="rounded-lg px-2 py-2 text-left text-[10px] font-bold hover:bg-slate-50"
+                  >
+                    {definition.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

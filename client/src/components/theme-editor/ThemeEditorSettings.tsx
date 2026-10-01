@@ -2,10 +2,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Image as ImageIcon,
-  Link,
-  Play,
   Settings2,
-  Type,
   Video,
 } from "lucide-react";
 
