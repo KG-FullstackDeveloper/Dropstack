@@ -1,52 +1,79 @@
 import { Hono } from "hono";
 
-import { db } from "../database/db";
 import {
-  getAllProducts,
+  deleteProductRecord,
   getActiveProducts,
+  getAllProducts,
   getProductById,
   getProductBySlug,
+  insertProduct,
+  updateProductRecord,
 } from "../data/store";
-import { authMiddleware } from "../middleware/auth";
+import { createId } from "../utils/id";
 import type { CreateProductInput, Product } from "../types/product";
 
 const productsRoute = new Hono();
 
-/*
-|--------------------------------------------------------------------------
-| GET / — public active products
-|--------------------------------------------------------------------------
-*/
+function numberOrZero(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const valueString = String(value).trim();
+  return valueString ? valueString : null;
+}
+
+function buildProduct(input: CreateProductInput): Product {
+  const price = numberOrZero(input.price);
+  const supplierCost = numberOrZero(input.supplier_cost);
+  const shippingCost = numberOrZero(input.shipping_cost);
+  const otherCost = numberOrZero(input.other_cost);
+  const profitPerUnit = price - supplierCost - shippingCost - otherCost;
+  const profitMargin = price > 0 ? (profitPerUnit / price) * 100 : 0;
+  const now = new Date().toISOString();
+
+  return {
+    id: createId("product"),
+    name: String(input.name || "").trim(),
+    slug: String(input.slug || input.name || "").trim(),
+    description: String(input.description || "").trim(),
+    category: String(input.category || "Other").trim(),
+    price,
+    currency: String(input.currency || "USD").trim().toUpperCase(),
+    image_url: stringOrNull(input.image_url),
+    video_url: stringOrNull(input.video_url),
+    supplier_name: stringOrNull(input.supplier_name),
+    supplier_product_id: stringOrNull(input.supplier_product_id),
+    warehouse_country: input.warehouse_country
+      ? String(input.warehouse_country).trim().toUpperCase()
+      : null,
+    processing_time: stringOrNull(input.processing_time),
+    delivery_time: stringOrNull(input.delivery_time),
+    supplier_cost: supplierCost,
+    shipping_cost: shippingCost,
+    other_cost: otherCost,
+    profit_per_unit: profitPerUnit,
+    profit_margin: profitMargin,
+    active: 1,
+    created_at: now,
+  };
+}
 
 productsRoute.get("/", (c) => {
-  const activeProducts = getActiveProducts();
-
   return c.json({
     success: true,
-    data: activeProducts,
+    data: getActiveProducts(),
   });
 });
 
-/*
-|--------------------------------------------------------------------------
-| GET /admin/all — all products including inactive (protected)
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.get("/admin/all", authMiddleware, (c) => {
-  const allProducts = getAllProducts();
-
+productsRoute.get("/all", (c) => {
   return c.json({
     success: true,
-    data: allProducts,
+    data: getAllProducts(),
   });
 });
-
-/*
-|--------------------------------------------------------------------------
-| GET /slug/:slug — public product by slug
-|--------------------------------------------------------------------------
-*/
 
 productsRoute.get("/slug/:slug", (c) => {
   const slug = c.req.param("slug");
@@ -58,7 +85,7 @@ productsRoute.get("/slug/:slug", (c) => {
         success: false,
         error: "Product not found.",
       },
-      404
+      404,
     );
   }
 
@@ -68,18 +95,9 @@ productsRoute.get("/slug/:slug", (c) => {
   });
 });
 
-/*
-|--------------------------------------------------------------------------
-| GET /:id — public product by id
-|--------------------------------------------------------------------------
-*/
-
 productsRoute.get("/:id", (c) => {
   const id = c.req.param("id");
-
-  const product = db
-    .prepare("SELECT * FROM products WHERE id = ? AND active = 1")
-    .get(id) as Product | undefined;
+  const product = getProductById(id);
 
   if (!product) {
     return c.json(
@@ -87,7 +105,7 @@ productsRoute.get("/:id", (c) => {
         success: false,
         error: "Product not found.",
       },
-      404
+      404,
     );
   }
 
@@ -97,307 +115,243 @@ productsRoute.get("/:id", (c) => {
   });
 });
 
-/*
-|--------------------------------------------------------------------------
-| POST / — create product (protected)
-|--------------------------------------------------------------------------
-*/
+productsRoute.post("/", async (c) => {
+  let body: CreateProductInput;
 
-productsRoute.post("/", authMiddleware, async (c) => {
   try {
-    const body = await c.req.json<CreateProductInput>();
-
-    if (!body.name?.trim()) {
-      return c.json(
-        { success: false, error: "Product name is required." },
-        400
-      );
-    }
-
-    if (!body.slug?.trim()) {
-      return c.json(
-        { success: false, error: "Product slug is required." },
-        400
-      );
-    }
-
-    if (!body.description?.trim()) {
-      return c.json(
-        { success: false, error: "Product description is required." },
-        400
-      );
-    }
-
-    if (!body.category?.trim()) {
-      return c.json(
-        { success: false, error: "Product category is required." },
-        400
-      );
-    }
-
-    if (typeof body.price !== "number" || body.price < 0) {
-      return c.json(
-        { success: false, error: "Valid product price is required." },
-        400
-      );
-    }
-
-    // Check slug uniqueness
-    const existing = db
-      .prepare("SELECT id FROM products WHERE slug = ?")
-      .get(body.slug.trim()) as { id: string } | undefined;
-
-    if (existing) {
-      return c.json(
-        { success: false, error: "A product with that slug already exists." },
-        409
-      );
-    }
-
-    const supplierCost = Number(body.supplier_cost) || 0;
-    const shippingCost = Number(body.shipping_cost) || 0;
-    const otherCost = Number(body.other_cost) || 0;
-    const profitPerUnit =
-      body.price - supplierCost - shippingCost - otherCost;
-    const profitMargin =
-      body.price > 0 ? (profitPerUnit / body.price) * 100 : 0;
-
-    const id = "PRD-" + Date.now();
-    const now = new Date().toISOString();
-
-    db.prepare(`
-      INSERT INTO products (
-        id, name, slug, description, category, price, currency,
-        image_url, video_url, supplier_name, supplier_product_id,
-        warehouse_country, processing_time, delivery_time,
-        supplier_cost, shipping_cost, other_cost,
-        profit_per_unit, profit_margin, active, created_at
-      ) VALUES (
-        @id, @name, @slug, @description, @category, @price, @currency,
-        @image_url, @video_url, @supplier_name, @supplier_product_id,
-        @warehouse_country, @processing_time, @delivery_time,
-        @supplier_cost, @shipping_cost, @other_cost,
-        @profit_per_unit, @profit_margin, 1, @created_at
-      )
-    `).run({
-      id,
-      name: body.name.trim(),
-      slug: body.slug.trim(),
-      description: body.description.trim(),
-      category: body.category.trim(),
-      price: body.price,
-      currency: body.currency || "USD",
-      image_url: body.image_url || null,
-      video_url: body.video_url || null,
-      supplier_name: body.supplier_name || null,
-      supplier_product_id: body.supplier_product_id || null,
-      warehouse_country: body.warehouse_country || null,
-      processing_time: body.processing_time || null,
-      delivery_time: body.delivery_time || null,
-      supplier_cost: supplierCost,
-      shipping_cost: shippingCost,
-      other_cost: otherCost,
-      profit_per_unit: profitPerUnit,
-      profit_margin: profitMargin,
-      created_at: now,
-    });
-
-    const product = getProductById(id);
-
+    body = await c.req.json<CreateProductInput>();
+  } catch {
     return c.json(
       {
-        success: true,
-        data: product,
+        success: false,
+        error: "Invalid product data.",
       },
-      201
+      400,
     );
-  } catch (error) {
-    console.error("Create product error:", error);
+  }
+
+  const name = String(body.name || "").trim();
+  const description = String(body.description || "").trim();
+  const price = Number(body.price);
+
+  if (!name) {
     return c.json(
-      { success: false, error: "Unable to create product." },
-      500
+      { success: false, error: "Product name is required." },
+      400,
+    );
+  }
+
+  if (!description) {
+    return c.json(
+      { success: false, error: "Product description is required." },
+      400,
+    );
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    return c.json(
+      { success: false, error: "Product price must be a valid positive number." },
+      400,
+    );
+  }
+
+  const slug = String(body.slug || name).trim();
+  const existing = getProductBySlug(slug);
+
+  if (existing) {
+    return c.json(
+      {
+        success: false,
+        error: "A product with this slug already exists.",
+      },
+      409,
+    );
+  }
+
+  const product = buildProduct({
+    ...body,
+    name,
+    slug,
+    description,
+    price,
+  });
+
+  try {
+    insertProduct(product);
+  } catch (error) {
+    console.error("Product create error:", error);
+    return c.json(
+      {
+        success: false,
+        error: "Unable to create product.",
+      },
+      500,
+    );
+  }
+
+  return c.json(
+    {
+      success: true,
+      data: product,
+    },
+    201,
+  );
+});
+
+productsRoute.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  const current = getProductById(id);
+
+  if (!current) {
+    return c.json(
+      {
+        success: false,
+        error: "Product not found.",
+      },
+      404,
+    );
+  }
+
+  let body: Partial<CreateProductInput> & { active?: number };
+
+  try {
+    body = await c.req.json<Partial<CreateProductInput> & { active?: number }>();
+  } catch {
+    return c.json(
+      {
+        success: false,
+        error: "Invalid product update data.",
+      },
+      400,
+    );
+  }
+
+  const updates: Partial<Product> = {};
+
+  if (body.name !== undefined) {
+    const name = String(body.name).trim();
+    if (!name) {
+      return c.json(
+        { success: false, error: "Product name cannot be empty." },
+        400,
+      );
+    }
+    updates.name = name;
+  }
+
+  if (body.slug !== undefined) {
+    const slug = String(body.slug).trim();
+    if (!slug) {
+      return c.json(
+        { success: false, error: "Product slug cannot be empty." },
+        400,
+      );
+    }
+
+    const existing = getProductBySlug(slug);
+    if (existing && existing.id !== id) {
+      return c.json(
+        {
+          success: false,
+          error: "A product with this slug already exists.",
+        },
+        409,
+      );
+    }
+
+    updates.slug = slug;
+  }
+
+  if (body.description !== undefined) updates.description = String(body.description).trim();
+  if (body.category !== undefined) updates.category = String(body.category).trim();
+  if (body.currency !== undefined) updates.currency = String(body.currency).trim().toUpperCase();
+  if (body.image_url !== undefined) updates.image_url = stringOrNull(body.image_url);
+  if (body.video_url !== undefined) updates.video_url = stringOrNull(body.video_url);
+  if (body.supplier_name !== undefined) updates.supplier_name = stringOrNull(body.supplier_name);
+  if (body.supplier_product_id !== undefined) updates.supplier_product_id = stringOrNull(body.supplier_product_id);
+  if (body.warehouse_country !== undefined) {
+    updates.warehouse_country = stringOrNull(body.warehouse_country)?.toUpperCase() ?? null;
+  }
+  if (body.processing_time !== undefined) updates.processing_time = stringOrNull(body.processing_time);
+  if (body.delivery_time !== undefined) updates.delivery_time = stringOrNull(body.delivery_time);
+
+  if (body.price !== undefined) {
+    const price = Number(body.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      return c.json(
+        { success: false, error: "Product price must be a valid positive number." },
+        400,
+      );
+    }
+    updates.price = price;
+  }
+
+  if (body.supplier_cost !== undefined) updates.supplier_cost = Math.max(0, numberOrZero(body.supplier_cost));
+  if (body.shipping_cost !== undefined) updates.shipping_cost = Math.max(0, numberOrZero(body.shipping_cost));
+  if (body.other_cost !== undefined) updates.other_cost = Math.max(0, numberOrZero(body.other_cost));
+  if (body.active !== undefined) updates.active = Number(body.active) === 1 ? 1 : 0;
+
+  const nextPrice = updates.price ?? current.price;
+  const nextSupplierCost = updates.supplier_cost ?? current.supplier_cost;
+  const nextShippingCost = updates.shipping_cost ?? current.shipping_cost;
+  const nextOtherCost = updates.other_cost ?? current.other_cost;
+  const nextProfit = nextPrice - nextSupplierCost - nextShippingCost - nextOtherCost;
+
+  updates.profit_per_unit = nextProfit;
+  updates.profit_margin = nextPrice > 0 ? (nextProfit / nextPrice) * 100 : 0;
+
+  try {
+    const product = updateProductRecord(id, updates);
+
+    return c.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error("Product update error:", error);
+    return c.json(
+      {
+        success: false,
+        error: "Unable to update product.",
+      },
+      500,
     );
   }
 });
 
-/*
-|--------------------------------------------------------------------------
-| PUT /:id — update product (protected)
-|--------------------------------------------------------------------------
-*/
+productsRoute.delete("/:id", (c) => {
+  const id = c.req.param("id");
+  const exists = getProductById(id);
 
-productsRoute.put("/:id", authMiddleware, async (c) => {
-  try {
-    const id = c.req.param("id");
-    const body = await c.req.json<Partial<CreateProductInput> & { active?: number }>();
-
-    const product = getProductById(id);
-
-    if (!product) {
-      return c.json(
-        { success: false, error: "Product not found." },
-        404
-      );
-    }
-
-    // Check slug uniqueness if slug is being updated
-    if (body.slug && body.slug.trim() !== product.slug) {
-      const existing = db
-        .prepare("SELECT id FROM products WHERE slug = ? AND id != ?")
-        .get(body.slug.trim(), id) as { id: string } | undefined;
-
-      if (existing) {
-        return c.json(
-          {
-            success: false,
-            error: "A product with that slug already exists.",
-          },
-          409
-        );
-      }
-    }
-
-    const name = body.name?.trim() ?? product.name;
-    const slug = body.slug?.trim() ?? product.slug;
-    const description = body.description?.trim() ?? product.description;
-    const category = body.category?.trim() ?? product.category;
-    const price =
-      typeof body.price === "number" ? body.price : product.price;
-    const currency = body.currency ?? product.currency;
-    const image_url =
-      body.image_url !== undefined ? body.image_url || null : product.image_url;
-    const video_url =
-      body.video_url !== undefined ? body.video_url || null : product.video_url;
-    const supplier_name =
-      body.supplier_name !== undefined
-        ? body.supplier_name || null
-        : product.supplier_name;
-    const supplier_product_id =
-      body.supplier_product_id !== undefined
-        ? body.supplier_product_id || null
-        : product.supplier_product_id;
-    const warehouse_country =
-      body.warehouse_country !== undefined
-        ? body.warehouse_country || null
-        : product.warehouse_country;
-    const processing_time =
-      body.processing_time !== undefined
-        ? body.processing_time || null
-        : product.processing_time;
-    const delivery_time =
-      body.delivery_time !== undefined
-        ? body.delivery_time || null
-        : product.delivery_time;
-    const supplier_cost =
-      typeof body.supplier_cost === "number"
-        ? body.supplier_cost
-        : product.supplier_cost;
-    const shipping_cost =
-      typeof body.shipping_cost === "number"
-        ? body.shipping_cost
-        : product.shipping_cost;
-    const other_cost =
-      typeof body.other_cost === "number"
-        ? body.other_cost
-        : product.other_cost;
-    const active =
-      typeof body.active === "number" ? body.active : product.active;
-
-    const profit_per_unit = price - supplier_cost - shipping_cost - other_cost;
-    const profit_margin = price > 0 ? (profit_per_unit / price) * 100 : 0;
-
-    db.prepare(`
-      UPDATE products SET
-        name = @name,
-        slug = @slug,
-        description = @description,
-        category = @category,
-        price = @price,
-        currency = @currency,
-        image_url = @image_url,
-        video_url = @video_url,
-        supplier_name = @supplier_name,
-        supplier_product_id = @supplier_product_id,
-        warehouse_country = @warehouse_country,
-        processing_time = @processing_time,
-        delivery_time = @delivery_time,
-        supplier_cost = @supplier_cost,
-        shipping_cost = @shipping_cost,
-        other_cost = @other_cost,
-        profit_per_unit = @profit_per_unit,
-        profit_margin = @profit_margin,
-        active = @active
-      WHERE id = @id
-    `).run({
-      id,
-      name,
-      slug,
-      description,
-      category,
-      price,
-      currency,
-      image_url,
-      video_url,
-      supplier_name,
-      supplier_product_id,
-      warehouse_country,
-      processing_time,
-      delivery_time,
-      supplier_cost,
-      shipping_cost,
-      other_cost,
-      profit_per_unit,
-      profit_margin,
-      active,
-    });
-
-    const updated = getProductById(id);
-
-    return c.json({
-      success: true,
-      data: updated,
-    });
-  } catch (error) {
-    console.error("Update product error:", error);
+  if (!exists) {
     return c.json(
-      { success: false, error: "Unable to update product." },
-      500
+      {
+        success: false,
+        error: "Product not found.",
+      },
+      404,
     );
   }
-});
 
-/*
-|--------------------------------------------------------------------------
-| DELETE /:id — soft-delete product (sets active=0) (protected)
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.delete("/:id", authMiddleware, (c) => {
   try {
-    const id = c.req.param("id");
-
-    const product = getProductById(id);
-
-    if (!product) {
-      return c.json(
-        { success: false, error: "Product not found." },
-        404
-      );
-    }
-
-    db.prepare("UPDATE products SET active = 0 WHERE id = ?").run(id);
-
-    return c.json({
-      success: true,
-      message: "Product deactivated successfully.",
-    });
+    deleteProductRecord(id);
   } catch (error) {
-    console.error("Delete product error:", error);
+    console.error("Product delete error:", error);
     return c.json(
-      { success: false, error: "Unable to delete product." },
-      500
+      {
+        success: false,
+        error: "Unable to delete product.",
+      },
+      500,
     );
   }
+
+  return c.json({
+    success: true,
+    data: {
+      message: "Product deleted successfully.",
+    },
+  });
 });
 
 export default productsRoute;

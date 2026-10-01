@@ -7,11 +7,9 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Shipping from "./pages/Shipping";
 import FAQ from "./pages/FAQ";
-import Admin from "./pages/Admin";
+import AdminWorkspace from "./pages/AdminWorkspace";
 import Store from "./pages/Store";
-import StorePerformance from "./pages/StorePerformance";
-import Stores from "./pages/Stores";
-
+import NigeriaStore from "./pages/NigeriaStore";
 
 export default function App() {
   return (
@@ -27,11 +25,14 @@ export default function App() {
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/faq" element={<FAQ />} />
 
-        {/* Web app */}
-        <Route path="/admin" element={<Admin />} />
+        {/* Main admin workspace */}
+        <Route path="/admin" element={<AdminWorkspace />} />
+
+        {/* Normal worldwide store */}
         <Route path="/store/*" element={<Store />} />
-        <Route path="store-performance" element={<StorePerformance />} />
-        <Route path="/stores" element={<Stores />} />
+
+        {/* Separate Nigeria-only physical store */}
+        <Route path="/nigeria-store" element={<NigeriaStore />} />
 
         {/* Fallback */}
         <Route path="*" element={<Home />} />

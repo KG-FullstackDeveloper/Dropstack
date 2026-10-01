@@ -1,9 +1,16 @@
 import { Hono } from "hono";
 
-import { db } from "../database/db";
+import {
+  getProductById,
+  insertOrder,
+} from "../data/store";
 import { createId } from "../utils/id";
-import type { CreateOrderInput, OrderItem } from "../types/order";
-import type { Product } from "../types/product";
+
+import type {
+  CreateOrderInput,
+  Order,
+  OrderItem,
+} from "../types/order";
 
 const checkout = new Hono();
 
@@ -17,7 +24,7 @@ checkout.post("/", async (c) => {
           success: false,
           error: "Customer name is required.",
         },
-        400
+        400,
       );
     }
 
@@ -27,7 +34,7 @@ checkout.post("/", async (c) => {
           success: false,
           error: "Customer email is required.",
         },
-        400
+        400,
       );
     }
 
@@ -37,7 +44,7 @@ checkout.post("/", async (c) => {
           success: false,
           error: "Shipping address is required.",
         },
-        400
+        400,
       );
     }
 
@@ -47,7 +54,7 @@ checkout.post("/", async (c) => {
           success: false,
           error: "Country is required.",
         },
-        400
+        400,
       );
     }
 
@@ -57,17 +64,21 @@ checkout.post("/", async (c) => {
           success: false,
           error: "Currency is required.",
         },
-        400
+        400,
       );
     }
 
-    if (typeof body.subtotal !== "number" || body.subtotal < 0) {
+    if (
+      typeof body.subtotal !== "number" ||
+      !Number.isFinite(body.subtotal) ||
+      body.subtotal < 0
+    ) {
       return c.json(
         {
           success: false,
           error: "Invalid subtotal.",
         },
-        400
+        400,
       );
     }
 
@@ -84,13 +95,9 @@ checkout.post("/", async (c) => {
         continue;
       }
 
-      const product = db
-        .prepare(
-          "SELECT * FROM products WHERE id = ? AND active = 1"
-        )
-        .get(inputItem.product_id) as Product | undefined;
+      const product = getProductById(inputItem.product_id);
 
-      if (!product) {
+      if (!product || product.active !== 1) {
         continue;
       }
 
@@ -104,7 +111,6 @@ checkout.post("/", async (c) => {
       const supplierCost = Number(product.supplier_cost) || 0;
       const shippingCost = Number(product.shipping_cost) || 0;
       const otherCost = Number(product.other_cost) || 0;
-
       const total = sellingPrice * quantity;
       const totalCost =
         (supplierCost + shippingCost + otherCost) * quantity;
@@ -127,15 +133,23 @@ checkout.post("/", async (c) => {
       calculatedSubtotal += total;
     }
 
-    /*
-     * If product items were supplied, use the actual product subtotal.
-     * Otherwise keep the subtotal supplied by the checkout client.
-     */
+    if (inputItems.length > 0 && orderItems.length === 0) {
+      return c.json(
+        {
+          success: false,
+          error: "No valid products were found in the order.",
+        },
+        400,
+      );
+    }
+
     const subtotal =
       orderItems.length > 0 ? calculatedSubtotal : body.subtotal;
 
     const shippingFee =
-      typeof body.shipping_fee === "number" && body.shipping_fee >= 0
+      typeof body.shipping_fee === "number" &&
+      Number.isFinite(body.shipping_fee) &&
+      body.shipping_fee >= 0
         ? body.shipping_fee
         : 0;
 
@@ -147,87 +161,53 @@ checkout.post("/", async (c) => {
       item.order_id = orderId;
     }
 
-    // Persist order and items in a transaction
-    const insertOrder = db.transaction(() => {
-      db.prepare(`
-        INSERT INTO orders (
-          id, customer_name, customer_email, customer_phone,
-          shipping_address, city, state, postal_code, country,
-          currency, subtotal, shipping_fee, total,
-          payment_status, settlement_status, order_status,
-          flutterwave_transaction_id, flutterwave_reference,
-          supplier_name, supplier_order_reference, tracking_number,
-          created_at, updated_at
-        ) VALUES (
-          @id, @customer_name, @customer_email, @customer_phone,
-          @shipping_address, @city, @state, @postal_code, @country,
-          @currency, @subtotal, @shipping_fee, @total,
-          @payment_status, @settlement_status, @order_status,
-          @flutterwave_transaction_id, @flutterwave_reference,
-          @supplier_name, @supplier_order_reference, @tracking_number,
-          @created_at, @updated_at
-        )
-      `).run({
-        id: orderId,
-        customer_name: body.customer_name.trim(),
-        customer_email: body.customer_email.trim(),
-        customer_phone: body.customer_phone?.trim() || null,
-        shipping_address: body.shipping_address.trim(),
-        city: body.city?.trim() || null,
-        state: body.state?.trim() || null,
-        postal_code: body.postal_code?.trim() || null,
-        country: body.country.trim().toUpperCase(),
-        currency: body.currency.trim().toUpperCase(),
-        subtotal,
-        shipping_fee: shippingFee,
-        total,
-        payment_status: "pending",
-        settlement_status: "pending",
-        order_status: "payment_pending",
-        flutterwave_transaction_id: null,
-        flutterwave_reference: body.flutterwave_reference || null,
-        supplier_name: null,
-        supplier_order_reference: null,
-        tracking_number: null,
-        created_at: now,
-        updated_at: now,
-      });
+    const order: Order = {
+      id: orderId,
+      customer_name: body.customer_name.trim(),
+      customer_email: body.customer_email.trim(),
+      customer_phone: body.customer_phone?.trim() || null,
+      shipping_address: body.shipping_address.trim(),
+      city: body.city?.trim() || null,
+      state: body.state?.trim() || null,
+      postal_code: body.postal_code?.trim() || null,
+      country: body.country.trim().toUpperCase(),
+      currency: body.currency.trim().toUpperCase(),
+      subtotal,
+      shipping_fee: shippingFee,
+      total,
+      payment_status: "pending",
+      settlement_status: "pending",
+      order_status: "payment_pending",
+      fulfillment_mode: "international_dropship",
+      payment_method: "online",
+      flutterwave_transaction_id: null,
+      flutterwave_reference: body.flutterwave_reference?.trim() || null,
+      supplier_name: null,
+      supplier_order_reference: null,
+      tracking_number: null,
+      created_at: now,
+      updated_at: now,
+      items: orderItems,
+    };
 
-      const insertItem = db.prepare(`
-        INSERT INTO order_items (
-          id, order_id, product_id, product_name, quantity,
-          selling_price, supplier_cost, shipping_cost, other_cost,
-          total, profit
-        ) VALUES (
-          @id, @order_id, @product_id, @product_name, @quantity,
-          @selling_price, @supplier_cost, @shipping_cost, @other_cost,
-          @total, @profit
-        )
-      `);
-
-      for (const item of orderItems) {
-        insertItem.run(item);
-      }
-    });
-
-    insertOrder();
+    insertOrder(order);
 
     return c.json(
       {
         success: true,
         data: {
-          orderId,
-          subtotal,
-          shippingFee,
-          total,
-          currency: body.currency.trim().toUpperCase(),
+          orderId: order.id,
+          subtotal: order.subtotal,
+          shippingFee: order.shipping_fee,
+          total: order.total,
+          currency: order.currency,
           deliveryTime:
             "Delivery time will be confirmed based on the detected market.",
-          paymentStatus: "pending",
-          items: orderItems,
+          paymentStatus: order.payment_status,
+          items: order.items,
         },
       },
-      201
+      201,
     );
   } catch (error) {
     console.error("Checkout error:", error);
@@ -237,7 +217,7 @@ checkout.post("/", async (c) => {
         success: false,
         error: "Unable to create checkout order.",
       },
-      500
+      500,
     );
   }
 });

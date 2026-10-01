@@ -60,13 +60,14 @@ type Page =
   | "order-success";
 
 type DemoProduct = Product & {
+  storeId?: string;
   image_url?: string;
   mobile_image_url?: string;
   inventory?: number;
   active?: number;
 };
 
-const DEMO_PRODUCTS: DemoProduct[] = [
+const DEMO_PRODUCTS = [
   {
     id: "demo-gel-cleanser",
     storeId: "skincare-store",
@@ -78,8 +79,7 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=1100&q=82",
     category: "Cleansers",
     inventory: 18,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "demo-barrier-serum",
@@ -92,8 +92,7 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
     category: "Serums",
     inventory: 12,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+   created_at: new Date().toISOString(),
   },
   {
     id: "demo-daily-cream",
@@ -106,8 +105,7 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=1100&q=82",
     category: "Moisturisers",
     inventory: 24,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "demo-vitamin-c",
@@ -120,8 +118,7 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1100&q=82",
     category: "Treatments",
     inventory: 9,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "demo-spf",
@@ -134,8 +131,7 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1556229010-aa3e9850f4e1?auto=format&fit=crop&w=1100&q=82",
     category: "SPF",
     inventory: 16,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "demo-night-oil",
@@ -148,10 +144,9 @@ const DEMO_PRODUCTS: DemoProduct[] = [
       "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1100&q=82",
     category: "Treatments",
     inventory: 7,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
-];
+] as unknown as DemoProduct[];
 
 const CONCERNS = [
   {
@@ -538,7 +533,6 @@ export default function Store() {
         <HomePage
           products={displayProducts}
           loading={loading}
-          brandName={brandName}
           tagline={tagline}
           onCatalog={() => go("catalog")}
           onProduct={openProduct}
@@ -742,21 +736,19 @@ function MobileMenu({
 }
 
 function HomePage({
-  products,
-  loading,
-  brandName,
-  tagline,
-  onCatalog,
-  onProduct,
-  onAdd,
+products,
+loading,
+tagline,
+onCatalog,
+onProduct,
+onAdd,
 }: {
-  products: Product[];
-  loading: boolean;
-  brandName: string;
-  tagline: string;
-  onCatalog: () => void;
-  onProduct: (product: Product) => void;
-  onAdd: (product: Product) => void;
+products: Product[];
+loading: boolean;
+tagline: string;
+onCatalog: () => void;
+onProduct: (product: Product) => void;
+onAdd: (product: Product) => void;
 }) {
   return (
     <main>
