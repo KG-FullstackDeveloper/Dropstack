@@ -14,23 +14,15 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import Checkout from "./Checkout";
+import NigeriaCheckout from "./NigeriaCheckout";
 import OrderSuccess from "./OrderSuccess";
 
 import type { CartItem } from "../types/cart";
-import type { MarketInfo } from "../types/market";
 import type { Product } from "../types/product";
 
-import { getProducts } from "../services/api";
+import { getNigeriaProducts } from "../services/nigeriaData";
 import { convertCurrency, formatCurrency } from "../utils/currency";
 import { getDeliveryTime, getShippingFee } from "../utils/shipping";
-
-const NIGERIA_MARKET: MarketInfo = {
-  countryCode: "NG",
-  countryName: "Nigeria",
-  currency: "NGN",
-  market: "AFRICA",
-};
 
 type Page = "home" | "shop" | "product" | "cart" | "checkout" | "success";
 
@@ -75,11 +67,9 @@ export default function NigeriaStore() {
 
     async function loadProducts() {
       try {
-        const data = await getProducts();
+        const data = getNigeriaProducts();
         if (mounted) {
-          setProducts(
-            data.filter((product) => isActive(product as ActiveProduct)),
-          );
+          setProducts(data.filter((product) => isActive(product as ActiveProduct)));
         }
       } catch (error) {
         console.error("Unable to load Nigeria store products:", error);
@@ -155,9 +145,8 @@ export default function NigeriaStore() {
 
   if (view === "checkout") {
     return (
-      <Checkout
+      <NigeriaCheckout
         cart={cart}
-        market={NIGERIA_MARKET}
         onBack={() => navigate("cart")}
         onComplete={(nextOrderId, customer, nextTotal) => {
           setOrderId(nextOrderId);
@@ -201,7 +190,7 @@ export default function NigeriaStore() {
               {mobileMenu ? <X size={20} /> : <Menu size={20} />}
             </button>
 
-            <Link to="/admin" className="group flex items-center gap-2 text-sm font-bold">
+            <Link to="/nigeria-admin" className="group flex items-center gap-2 text-sm font-bold">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-white">
                 I
               </span>

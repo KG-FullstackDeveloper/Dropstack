@@ -10,6 +10,8 @@ import FAQ from "./pages/FAQ";
 import AdminWorkspace from "./pages/AdminWorkspace";
 import Store from "./pages/Store";
 import NigeriaStore from "./pages/NigeriaStore";
+import NigeriaAdmin from "./pages/NigeriaAdmin";
+import MEOAI from "./pages/MEOAI";
 
 export default function App() {
   return (
@@ -19,20 +21,31 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/product/:id" element={<Product />} />
-
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/faq" element={<FAQ />} />
 
-        {/* Main admin workspace */}
+        {/* Global Ecommerce workspace */}
         <Route path="/admin" element={<AdminWorkspace />} />
 
-        {/* Normal worldwide store */}
+        {/* Global MEO AI */}
+        <Route path="/admin/ai" element={<MEOAI />} />
+
+        {/* Global storefront */}
         <Route path="/store/*" element={<Store />} />
 
-        {/* Separate Nigeria-only physical store */}
-        <Route path="/nigeria-store" element={<NigeriaStore />} />
+        {/* Nigeria Ecommerce workspace */}
+        <Route
+          path="/nigeria-admin"
+          element={<NigeriaAdmin />}
+        />
+
+        {/* Nigeria storefront */}
+        <Route
+          path="/nigeria-store"
+          element={<NigeriaStore />}
+        />
 
         {/* Fallback */}
         <Route path="*" element={<Home />} />

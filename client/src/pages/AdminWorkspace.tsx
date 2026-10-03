@@ -1,6 +1,8 @@
-import { ArrowLeftRight } from "lucide-react";
-import { Link } from "react-router-dom";
-
+import {
+  DashboardAccountTools,
+  DashboardFAB,
+} from "../components/DashboardUtilities";
+import MEOAssistant from "../components/MEOAssistant";
 import Admin from "./Admin";
 
 export default function AdminWorkspace() {
@@ -8,14 +10,16 @@ export default function AdminWorkspace() {
     <div className="relative min-h-screen">
       <Admin />
 
-      <Link
-        to="/nigeria-store"
-        className="fixed right-4 top-4 z-[100] inline-flex min-h-11 items-center gap-2 rounded-full border border-black/10 bg-white px-4 text-sm font-bold text-neutral-950 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl sm:right-6 sm:top-5"
-      >
-        <ArrowLeftRight size={17} />
-        <span className="hidden sm:inline">Nigeria Store</span>
-        <span className="sm:hidden">Nigeria</span>
-      </Link>
+      <div className="fixed right-4 top-3 z-[100] sm:right-6 sm:top-4">
+        <DashboardAccountTools
+          workspace="global"
+          profileRole="Administrator"
+        />
+      </div>
+
+      <DashboardFAB workspace="global" />
+
+      <MEOAssistant />
     </div>
   );
 }

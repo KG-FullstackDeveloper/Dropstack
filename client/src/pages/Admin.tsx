@@ -1,20 +1,20 @@
 ﻿import {
-BarChart3,
-Bell,
-Box,
-ChevronDown,
-CreditCard,
-LayoutDashboard,
-Menu,
-Package,
-PackageCheck,
-Palette,
-Settings,
-ShoppingCart,
-Store,
-Truck,
-Users,
-X,
+  BarChart3,
+  Bell,
+  Box,
+  ChevronDown,
+  CreditCard,
+  LayoutDashboard,
+  Menu,
+  Package,
+  PackageCheck,
+  Palette,
+  Settings,
+  ShoppingCart,
+  Store,
+  Truck,
+  Users,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -24,12 +24,13 @@ import Products from "./admin/Products";
 import Analytics from "./admin/Analytics";
 import Payments from "./admin/Payments";
 import Shipping from "./admin/Shipping";
-import SettingsPage from "./admin/Settings";
 import Customers from "./admin/Customers";
 import Inventory from "./admin/Inventory";
 import Storefront from "./admin/Storefront";
 import Stores from "./Stores";
 import ThemeEditorPage from "./admin/ThemeEditorPage";
+
+import WorkspaceSettings from "./admin/WorkSpaceSettings";
 
 import BusinessHealthChart from "../components/admin/BusinessHealthChart";
 import WorldGlobe from "../components/admin/WorldGlobe";
@@ -41,7 +42,7 @@ const navigation = [
   { label: "Overview", icon: LayoutDashboard },
   { label: "Stores", icon: Store },
   { label: "Orders", icon: ShoppingCart },
-{ label: "Fulfillment", icon: PackageCheck },
+  { label: "Fulfillment", icon: PackageCheck },
   { label: "Products", icon: Package },
   { label: "Customers", icon: Users },
   { label: "Analytics", icon: BarChart3 },
@@ -59,10 +60,10 @@ export default function Admin() {
         return <Stores />;
 
       case "Orders":
-      return <Orders />;
+        return <Orders />;
 
-    case "Fulfillment":
-      return <FulfillmentCenter />;
+      case "Fulfillment":
+        return <FulfillmentCenter />;
 
       case "Products":
         return <Products />;
@@ -89,7 +90,12 @@ export default function Admin() {
         return <ThemeEditorPage />;
 
       case "Settings":
-        return <SettingsPage />;
+        return (
+          <WorkspaceSettings
+            workspaceKey="global"
+            workspaceName="Global Ecommerce"
+          />
+        );
 
       default:
         return <Overview />;
@@ -127,13 +133,9 @@ export default function Admin() {
         <div className="flex h-full flex-col">
           <div className="flex h-20 items-center justify-between border-b px-6">
             <div>
-              <h1 className="font-bold text-slate-950">
-                MEO Store
-              </h1>
+              <h1 className="font-bold text-slate-950">MEO Store</h1>
 
-              <p className="text-xs text-slate-500">
-                Admin dashboard
-              </p>
+              <p className="text-xs text-slate-500">Admin dashboard</p>
             </div>
 
             <button
@@ -153,13 +155,9 @@ export default function Admin() {
               </div>
 
               <div className="flex-1">
-                <p className="text-sm font-semibold">
-                  My Store
-                </p>
+                <p className="text-sm font-semibold">My Store</p>
 
-                <p className="text-xs text-slate-500">
-                  Online store
-                </p>
+                <p className="text-xs text-slate-500">Online store</p>
               </div>
 
               <ChevronDown size={16} />
@@ -273,13 +271,9 @@ export default function Admin() {
               </div>
 
               <div>
-                <p className="text-sm font-semibold">
-                  Store Owner
-                </p>
+                <p className="text-sm font-semibold">Store Owner</p>
 
-                <p className="text-xs text-slate-500">
-                  Administrator
-                </p>
+                <p className="text-xs text-slate-500">Administrator</p>
               </div>
             </div>
           </div>
@@ -289,9 +283,7 @@ export default function Admin() {
       <main className="min-h-screen lg:ml-64">
         <header className="hidden h-20 items-center justify-between border-b bg-white px-8 lg:flex">
           <div>
-            <h2 className="text-xl font-bold">
-              {active}
-            </h2>
+            <h2 className="text-xl font-bold">{active}</h2>
 
             <p className="text-sm text-slate-500">
               Manage your ecommerce business
@@ -309,34 +301,28 @@ export default function Admin() {
               </div>
 
               <div>
-                <p className="text-sm font-semibold">
-                  Store Owner
-                </p>
+                <p className="text-sm font-semibold">Store Owner</p>
 
-                <p className="text-xs text-slate-500">
-                  Administrator
-                </p>
+                <p className="text-xs text-slate-500">Administrator</p>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="px-5 pb-12 pt-24 lg:px-8 lg:pt-8">
-          {renderPage()}
-        </div>
+        <div className="px-5 pb-12 pt-24 lg:px-8 lg:pt-8">{renderPage()}</div>
       </main>
     </div>
   );
 }
 
 function Overview() {
-  const [businessHealth, setBusinessHealth] =
-    useState<BusinessHealth | null>(null);
+  const [businessHealth, setBusinessHealth] = useState<BusinessHealth | null>(
+    null,
+  );
 
   const [loading, setLoading] = useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -356,7 +342,7 @@ function Overview() {
           setError(
             err instanceof Error
               ? err.message
-              : "Failed to load business health."
+              : "Failed to load business health.",
           );
         }
       } finally {
@@ -373,28 +359,20 @@ function Overview() {
     };
   }, []);
 
-  const revenue =
-    businessHealth?.currentPeriod.revenue ?? 0;
+  const revenue = businessHealth?.currentPeriod.revenue ?? 0;
 
-  const orders =
-    businessHealth?.currentPeriod.orders ?? 0;
+  const orders = businessHealth?.currentPeriod.orders ?? 0;
 
-  const profit =
-    businessHealth?.currentPeriod.profit ?? 0;
+  const profit = businessHealth?.currentPeriod.profit ?? 0;
 
-  const margin =
-    businessHealth?.currentPeriod.margin ?? 0;
+  const margin = businessHealth?.currentPeriod.margin ?? 0;
 
   return (
     <div>
       <div>
-        <p className="text-sm text-slate-500">
-          Dashboard
-        </p>
+        <p className="text-sm text-slate-500">Dashboard</p>
 
-        <h1 className="mt-1 text-3xl font-bold">
-          Good afternoon 👋
-        </h1>
+        <h1 className="mt-1 text-3xl font-bold">Good afternoon 👋</h1>
 
         <p className="mt-2 text-slate-500">
           Here's what's happening with your store.
@@ -402,25 +380,13 @@ function Overview() {
       </div>
 
       <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          title="30-day sales"
-          value={`$${revenue.toFixed(2)}`}
-        />
+        <Stat title="30-day sales" value={`$${revenue.toFixed(2)}`} />
 
-        <Stat
-          title="Orders"
-          value={orders.toString()}
-        />
+        <Stat title="Orders" value={orders.toString()} />
 
-        <Stat
-          title="Profit"
-          value={`$${profit.toFixed(2)}`}
-        />
+        <Stat title="Profit" value={`$${profit.toFixed(2)}`} />
 
-        <Stat
-          title="Profit margin"
-          value={`${margin.toFixed(2)}%`}
-        />
+        <Stat title="Profit margin" value={`${margin.toFixed(2)}%`} />
       </div>
 
       {error && (
@@ -451,8 +417,7 @@ function Overview() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Approximate visitor locations based on
-              network location data.
+              Approximate visitor locations based on network location data.
             </p>
           </div>
 
@@ -464,24 +429,20 @@ function Overview() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 xl:col-span-2">
-          <h2 className="font-bold">
-            Business profitability
-          </h2>
+          <h2 className="font-bold">Business profitability</h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Your overall business performance is
-            calculated from confirmed business orders.
+            Your overall business performance is calculated from confirmed
+            business orders.
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <BusinessMetric
               label="Business status"
               value={
-                businessHealth?.businessStatus ===
-                "profitable"
+                businessHealth?.businessStatus === "profitable"
                   ? "Profitable"
-                  : businessHealth?.businessStatus ===
-                      "loss"
+                  : businessHealth?.businessStatus === "loss"
                     ? "Loss"
                     : "Break-even"
               }
@@ -492,8 +453,7 @@ function Overview() {
               value={
                 businessHealth?.profitTrend === "up"
                   ? "Trending up"
-                  : businessHealth?.profitTrend ===
-                      "down"
+                  : businessHealth?.profitTrend === "down"
                     ? "Trending down"
                     : "Stable"
               }
@@ -501,26 +461,18 @@ function Overview() {
 
             <BusinessMetric
               label="Healthy products"
-              value={
-                businessHealth?.healthyProducts.toString() ??
-                "0"
-              }
+              value={businessHealth?.healthyProducts.toString() ?? "0"}
             />
 
             <BusinessMetric
               label="Low-margin products"
-              value={
-                businessHealth?.lowMarginProducts.toString() ??
-                "0"
-              }
+              value={businessHealth?.lowMarginProducts.toString() ?? "0"}
             />
           </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="font-bold">
-            Order status
-          </h2>
+          <h2 className="font-bold">Order status</h2>
 
           <div className="mt-6 space-y-4">
             <Status label="Payment pending" />
@@ -535,56 +487,30 @@ function Overview() {
   );
 }
 
-function Stat({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
+function Stat({ title, value }: { title: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <p className="text-sm text-slate-500">
-        {title}
-      </p>
+      <p className="text-sm text-slate-500">{title}</p>
 
-      <p className="mt-3 text-2xl font-bold">
-        {value}
-      </p>
+      <p className="mt-3 text-2xl font-bold">{value}</p>
     </div>
   );
 }
 
-function BusinessMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function BusinessMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-slate-50 p-4">
-      <p className="text-xs font-medium text-slate-500">
-        {label}
-      </p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
 
-      <p className="mt-2 text-lg font-bold text-slate-950">
-        {value}
-      </p>
+      <p className="mt-2 text-lg font-bold text-slate-950">{value}</p>
     </div>
   );
 }
 
-function Status({
-  label,
-}: {
-  label: string;
-}) {
+function Status({ label }: { label: string }) {
   return (
     <div className="flex justify-between border-b border-slate-100 pb-3 text-sm">
-      <span className="text-slate-600">
-        {label}
-      </span>
+      <span className="text-slate-600">{label}</span>
 
       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">
         0
@@ -592,4 +518,3 @@ function Status({
     </div>
   );
 }
-
