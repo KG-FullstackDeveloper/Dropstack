@@ -28,12 +28,28 @@ export default function App() {
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/faq" element={<FAQ />} />
 
-        {/* Global Ecommerce workspace */}
+        {/* Admin login */}
         <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin" element={<ProtectedRoute><AdminWorkspace /></ProtectedRoute>} />
+
+        {/* Global Ecommerce workspace */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminWorkspace />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Global MEO AI */}
-        <Route path="/admin/ai" element={<ProtectedRoute><MEOAI /></ProtectedRoute>} />
+        <Route
+          path="/admin/ai"
+          element={
+            <ProtectedRoute>
+              <MEOAI />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Global storefront */}
         <Route path="/store/*" element={<Store />} />
@@ -41,14 +57,15 @@ export default function App() {
         {/* Nigeria Ecommerce workspace */}
         <Route
           path="/nigeria-admin"
-          element={<NigeriaAdmin />}
+          element={
+            <ProtectedRoute>
+              <NigeriaAdmin />
+            </ProtectedRoute>
+          }
         />
 
         {/* Nigeria storefront */}
-        <Route
-          path="/nigeria-store"
-          element={<NigeriaStore />}
-        />
+        <Route path="/nigeria-store" element={<NigeriaStore />} />
 
         {/* Fallback */}
         <Route path="*" element={<Home />} />

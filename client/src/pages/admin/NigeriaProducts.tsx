@@ -1,5 +1,6 @@
 import {
   Package,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -15,9 +16,12 @@ import {
 
 import {
   createNigeriaProduct,
+  deleteNigeriaProduct,
   getNigeriaProducts,
+  updateNigeriaProduct,
   type CreateNigeriaProductInput,
   type NigeriaProduct,
+  type UpdateNigeriaProductInput,
 } from "../../services/nigeriaApi";
 import { formatCurrency } from "../../utils/currency";
 
@@ -29,6 +33,8 @@ export default function NigeriaProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] =
+    useState<NigeriaProduct | null>(null);
 
   const loadProducts = useCallback(
     async () => {
@@ -89,6 +95,53 @@ export default function NigeriaProducts() {
     setModalOpen(false);
   }
 
+  function handleUpdated(
+    product: NigeriaProduct,
+  ) {
+    setProducts((current) =>
+      current.map((item) =>
+        item.id === product.id
+          ? product
+          : item,
+      ),
+    );
+    setEditingProduct(null);
+  }
+
+  async function handleDelete(
+    product: NigeriaProduct,
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${product.name}" from Nigeria Ecommerce? This cannot be undone.`,
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      await deleteNigeriaProduct(
+        product.id,
+      );
+
+      setProducts((current) =>
+        current.filter(
+          (item) =>
+            item.id !== product.id,
+        ),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to delete Nigeria product.",
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -141,8 +194,16 @@ export default function NigeriaProducts() {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
-          {error}
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+          <span>{error}</span>
+
+          <button
+            type="button"
+            onClick={() => setError("")}
+            className="shrink-0 rounded-lg p-1 hover:bg-red-100"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -210,6 +271,16 @@ export default function NigeriaProducts() {
                     <ProductRow
                       key={product.id}
                       product={product}
+                      onEdit={() =>
+                        setEditingProduct(
+                          product,
+                        )
+                      }
+                      onDelete={() =>
+                        void handleDelete(
+                          product,
+                        )
+                      }
                     />
                   ),
                 )}
@@ -227,6 +298,16 @@ export default function NigeriaProducts() {
           onCreated={handleCreated}
         />
       )}
+
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          onClose={() =>
+            setEditingProduct(null)
+          }
+          onUpdated={handleUpdated}
+        />
+      )}
     </div>
   );
 }
@@ -237,8 +318,12 @@ export default function NigeriaProducts() {
 
 function ProductRow({
   product,
+  onEdit,
+  onDelete,
 }: {
   product: NigeriaProduct;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const inventory = Number(
     product.inventory,
@@ -355,15 +440,26 @@ function ProductRow({
         </span>
       </td>
 
-      <td className="px-5 py-4 text-right">
-        <button
-          type="button"
-          disabled
-          title="Delete will be added with the Nigeria product API"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300"
-        >
-          <Trash2 size={16} />
-        </button>
+      <td className="px-5 py-4">
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Edit product"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+          >
+            <Pencil size={16} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Delete product"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-50 hover:text-red-700"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -494,16 +590,536 @@ function CreateProductModal({
   }
 
   return (
+    <ProductModalShell
+      title="Add Nigeria product"
+      description="This product will belong only to Nigeria Ecommerce."
+      onClose={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="overflow-y-auto p-6"
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            label="Product name"
+            value={name}
+            onChange={setName}
+            required
+          />
+
+          <Field
+            label="Category"
+            value={category}
+            onChange={setCategory}
+          />
+
+          <div className="sm:col-span-2">
+            <Field
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              textarea
+            />
+          </div>
+
+          <Field
+            label="Selling price (NGN)"
+            value={price}
+            onChange={setPrice}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Supplier cost (NGN)"
+            value={supplierCost}
+            onChange={setSupplierCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Shipping cost (NGN)"
+            value={shippingCost}
+            onChange={setShippingCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Other cost (NGN)"
+            value={otherCost}
+            onChange={setOtherCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Inventory"
+            value={inventory}
+            onChange={setInventory}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Low stock threshold"
+            value={lowStockThreshold}
+            onChange={
+              setLowStockThreshold
+            }
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Image URL"
+            value={imageUrl}
+            onChange={setImageUrl}
+            type="url"
+          />
+
+          <Field
+            label="Video URL"
+            value={videoUrl}
+            onChange={setVideoUrl}
+            type="url"
+          />
+
+          <Field
+            label="Supplier name"
+            value={supplierName}
+            onChange={setSupplierName}
+          />
+
+          <Field
+            label="Supplier product ID"
+            value={supplierProductId}
+            onChange={
+              setSupplierProductId
+            }
+          />
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-slate-50 p-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <PreviewStat
+              label="Profit / unit"
+              value={formatCurrency(
+                previewProfit,
+                "NGN",
+              )}
+            />
+
+            <PreviewStat
+              label="Profit margin"
+              value={`${previewMargin.toFixed(1)}%`}
+            />
+
+            <PreviewStat
+              label="Selling price"
+              value={formatCurrency(
+                Number(price) || 0,
+                "NGN",
+              )}
+            />
+          </div>
+        </div>
+
+        <label className="mt-5 flex items-center gap-3 text-sm font-semibold text-slate-700">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(event) =>
+              setActive(
+                event.target.checked,
+              )
+            }
+            className="h-4 w-4"
+          />
+          Product is active
+        </label>
+
+        {error && (
+          <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="min-h-11 rounded-xl bg-slate-950 px-6 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {saving
+              ? "Creating..."
+              : "Create product"}
+          </button>
+        </div>
+      </form>
+    </ProductModalShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Edit Product Modal                                                         */
+/* -------------------------------------------------------------------------- */
+
+function EditProductModal({
+  product,
+  onClose,
+  onUpdated,
+}: {
+  product: NigeriaProduct;
+  onClose: () => void;
+  onUpdated: (
+    product: NigeriaProduct,
+  ) => void;
+}) {
+  const [name, setName] =
+    useState(product.name);
+  const [description, setDescription] =
+    useState(product.description || "");
+  const [category, setCategory] =
+    useState(product.category || "");
+  const [price, setPrice] =
+    useState(String(product.price ?? ""));
+  const [supplierCost, setSupplierCost] =
+    useState(
+      String(product.supplier_cost ?? ""),
+    );
+  const [shippingCost, setShippingCost] =
+    useState(
+      String(product.shipping_cost ?? ""),
+    );
+  const [otherCost, setOtherCost] =
+    useState(
+      String(product.other_cost ?? ""),
+    );
+  const [inventory, setInventory] =
+    useState(
+      String(product.inventory ?? ""),
+    );
+  const [lowStockThreshold, setLowStockThreshold] =
+    useState(
+      String(
+        product.low_stock_threshold ?? 5,
+      ),
+    );
+  const [imageUrl, setImageUrl] =
+    useState(product.image_url || "");
+  const [videoUrl, setVideoUrl] =
+    useState(product.video_url || "");
+  const [supplierName, setSupplierName] =
+    useState(product.supplier_name || "");
+  const [supplierProductId, setSupplierProductId] =
+    useState(
+      product.supplier_product_id || "",
+    );
+  const [active, setActive] =
+    useState(Boolean(product.active));
+
+  const [saving, setSaving] =
+    useState(false);
+  const [error, setError] =
+    useState("");
+
+  const previewProfit =
+    (Number(price) || 0) -
+    (Number(supplierCost) || 0) -
+    (Number(shippingCost) || 0) -
+    (Number(otherCost) || 0);
+
+  const previewMargin =
+    Number(price) > 0
+      ? (previewProfit /
+          Number(price)) *
+        100
+      : 0;
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (!name.trim()) {
+      setError(
+        "Product name is required.",
+      );
+      return;
+    }
+
+    const payload: UpdateNigeriaProductInput =
+      {
+        name: name.trim(),
+        description:
+          description.trim(),
+        category: category.trim(),
+        price: Number(price) || 0,
+        supplierCost:
+          Number(supplierCost) || 0,
+        shippingCost:
+          Number(shippingCost) || 0,
+        otherCost:
+          Number(otherCost) || 0,
+        inventory:
+          Number(inventory) || 0,
+        lowStockThreshold:
+          Number(
+            lowStockThreshold,
+          ) || 0,
+        imageUrl:
+          imageUrl.trim() || null,
+        videoUrl:
+          videoUrl.trim() || null,
+        supplierName:
+          supplierName.trim() || null,
+        supplierProductId:
+          supplierProductId.trim() ||
+          null,
+        active,
+      };
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const updated =
+        await updateNigeriaProduct(
+          product.id,
+          payload,
+        );
+
+      onUpdated(updated);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to update Nigeria product.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ProductModalShell
+      title="Edit Nigeria product"
+      description="Changes apply only to this Nigeria Ecommerce product."
+      onClose={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="overflow-y-auto p-6"
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            label="Product name"
+            value={name}
+            onChange={setName}
+            required
+          />
+
+          <Field
+            label="Category"
+            value={category}
+            onChange={setCategory}
+          />
+
+          <div className="sm:col-span-2">
+            <Field
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              textarea
+            />
+          </div>
+
+          <Field
+            label="Selling price (NGN)"
+            value={price}
+            onChange={setPrice}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Supplier cost (NGN)"
+            value={supplierCost}
+            onChange={setSupplierCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Shipping cost (NGN)"
+            value={shippingCost}
+            onChange={setShippingCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Other cost (NGN)"
+            value={otherCost}
+            onChange={setOtherCost}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Inventory"
+            value={inventory}
+            onChange={setInventory}
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Low stock threshold"
+            value={lowStockThreshold}
+            onChange={
+              setLowStockThreshold
+            }
+            type="number"
+            min="0"
+          />
+
+          <Field
+            label="Image URL"
+            value={imageUrl}
+            onChange={setImageUrl}
+            type="url"
+          />
+
+          <Field
+            label="Video URL"
+            value={videoUrl}
+            onChange={setVideoUrl}
+            type="url"
+          />
+
+          <Field
+            label="Supplier name"
+            value={supplierName}
+            onChange={setSupplierName}
+          />
+
+          <Field
+            label="Supplier product ID"
+            value={supplierProductId}
+            onChange={
+              setSupplierProductId
+            }
+          />
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-slate-50 p-5">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <PreviewStat
+              label="Profit / unit"
+              value={formatCurrency(
+                previewProfit,
+                "NGN",
+              )}
+            />
+
+            <PreviewStat
+              label="Profit margin"
+              value={`${previewMargin.toFixed(1)}%`}
+            />
+
+            <PreviewStat
+              label="Selling price"
+              value={formatCurrency(
+                Number(price) || 0,
+                "NGN",
+              )}
+            />
+          </div>
+        </div>
+
+        <label className="mt-5 flex items-center gap-3 text-sm font-semibold text-slate-700">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(event) =>
+              setActive(
+                event.target.checked,
+              )
+            }
+            className="h-4 w-4"
+          />
+          Product is active
+        </label>
+
+        {error && (
+          <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="min-h-11 rounded-xl bg-slate-950 px-6 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {saving
+              ? "Saving..."
+              : "Save changes"}
+          </button>
+        </div>
+      </form>
+    </ProductModalShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Modal Shell                                                                */
+/* -------------------------------------------------------------------------- */
+
+function ProductModalShell({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
           <div>
             <h2 className="text-xl font-black text-slate-950">
-              Add Nigeria product
+              {title}
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              This product will belong only to Nigeria Ecommerce.
+              {description}
             </p>
           </div>
 
@@ -516,178 +1132,7 @@ function CreateProductModal({
           </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="overflow-y-auto p-6"
-        >
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              label="Product name"
-              value={name}
-              onChange={setName}
-              required
-            />
-
-            <Field
-              label="Category"
-              value={category}
-              onChange={setCategory}
-            />
-
-            <div className="sm:col-span-2">
-              <Field
-                label="Description"
-                value={description}
-                onChange={setDescription}
-                textarea
-              />
-            </div>
-
-            <Field
-              label="Selling price (NGN)"
-              value={price}
-              onChange={setPrice}
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Supplier cost (NGN)"
-              value={supplierCost}
-              onChange={setSupplierCost}
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Shipping cost (NGN)"
-              value={shippingCost}
-              onChange={setShippingCost}
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Other cost (NGN)"
-              value={otherCost}
-              onChange={setOtherCost}
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Inventory"
-              value={inventory}
-              onChange={setInventory}
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Low stock threshold"
-              value={lowStockThreshold}
-              onChange={
-                setLowStockThreshold
-              }
-              type="number"
-              min="0"
-            />
-
-            <Field
-              label="Image URL"
-              value={imageUrl}
-              onChange={setImageUrl}
-              type="url"
-            />
-
-            <Field
-              label="Video URL"
-              value={videoUrl}
-              onChange={setVideoUrl}
-              type="url"
-            />
-
-            <Field
-              label="Supplier name"
-              value={supplierName}
-              onChange={setSupplierName}
-            />
-
-            <Field
-              label="Supplier product ID"
-              value={supplierProductId}
-              onChange={
-                setSupplierProductId
-              }
-            />
-          </div>
-
-          <div className="mt-6 rounded-2xl bg-slate-50 p-5">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <PreviewStat
-                label="Profit / unit"
-                value={formatCurrency(
-                  previewProfit,
-                  "NGN",
-                )}
-              />
-
-              <PreviewStat
-                label="Profit margin"
-                value={`${previewMargin.toFixed(1)}%`}
-              />
-
-              <PreviewStat
-                label="Selling price"
-                value={formatCurrency(
-                  Number(price) || 0,
-                  "NGN",
-                )}
-              />
-            </div>
-          </div>
-
-          <label className="mt-5 flex items-center gap-3 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(event) =>
-                setActive(
-                  event.target.checked,
-                )
-              }
-              className="h-4 w-4"
-            />
-            Product is active
-          </label>
-
-          {error && (
-            <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="min-h-11 rounded-xl bg-slate-950 px-6 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
-            >
-              {saving
-                ? "Creating..."
-                : "Create product"}
-            </button>
-          </div>
-        </form>
+        {children}
       </div>
     </div>
   );

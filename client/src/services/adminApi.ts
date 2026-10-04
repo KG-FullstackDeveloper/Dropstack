@@ -6,7 +6,10 @@ export interface AdminUser {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
+  twoFactorEnabled?: boolean;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ApiResponse<T> {
@@ -16,13 +19,68 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-interface LoginResponse {
+export interface LoginSuccess {
   token: string;
   admin: AdminUser;
 }
 
+/*
+ * Kept for compatibility with existing code.
+ *
+ * Normal login no longer requires this.
+ * Two-factor authentication can be enabled later
+ * as an optional account-security feature.
+ */
+export interface LoginTwoFactorRequired {
+  requiresTwoFactor: true;
+  challenge: {
+    id: string;
+    method: "email" | "email_and_sms";
+    expiresInSeconds: number;
+  };
+}
+
+export type LoginResult =
+  | LoginSuccess
+  | LoginTwoFactorRequired;
+
+interface LoginApiResult {
+  requiresTwoFactor?: boolean;
+  challenge?: {
+    id: string;
+    method: "email" | "email_and_sms";
+    expiresInSeconds: number;
+  };
+  token?: string;
+  admin?: AdminUser;
+}
+
+interface VerifyTwoFactorResult {
+  token: string;
+  admin: AdminUser;
+}
+
+export interface ForgotPasswordResult {
+  message: string;
+  expiresInSeconds?: number;
+  delivery?:
+    | "email"
+    | "email_and_sms";
+}
+
+export interface VerifyForgotPasswordResult {
+  resetToken: string;
+  expiresInSeconds: number;
+}
+
+export interface ResetForgotPasswordResult {
+  message: string;
+}
+
 function getToken(): string | null {
-  return localStorage.getItem("admin_token");
+  return localStorage.getItem(
+    "admin_token"
+  );
 }
 
 async function request<T>(
@@ -31,28 +89,48 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken();
 
-  const headers = new Headers(options.headers);
+  const headers = new Headers(
+    options.headers
+  );
 
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (
+    options.body &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set(
+      "Content-Type",
+      "application/json"
+    );
   }
 
   if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+    headers.set(
+      "Authorization",
+      `Bearer ${token}`
+    );
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
+  const response = await fetch(
+    `${API_URL}${path}`,
+    {
+      ...options,
+      headers,
+      credentials: "include",
+    }
+  );
 
   const contentType =
-    response.headers.get("content-type") || "";
+    response.headers.get(
+      "content-type"
+    ) || "";
 
   let result: unknown;
 
-  if (contentType.includes("application/json")) {
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
     result = await response.json();
   } else {
     result = await response.text();
@@ -72,18 +150,35 @@ async function request<T>(
       if (body.error) {
         errorMessage = body.error;
       } else if (body.message) {
-        errorMessage = body.message;
+        errorMessage =
+          body.message;
       }
     }
 
+    /*
+     * Password recovery endpoints intentionally
+     * do not clear an existing admin session.
+     */
+    const isAuthRequest =
+      path === "/auth/login" ||
+      path === "/auth/login/verify" ||
+      path === "/auth/login/resend" ||
+      path === "/auth/forgot-password" ||
+      path === "/auth/forgot-password/verify" ||
+      path === "/auth/forgot-password/reset";
+
     if (
       response.status === 401 &&
-      path !== "/auth/login"
+      !isAuthRequest
     ) {
-      localStorage.removeItem("admin_token");
+      localStorage.removeItem(
+        "admin_token"
+      );
     }
 
-    throw new Error(errorMessage);
+    throw new Error(
+      errorMessage
+    );
   }
 
   if (
@@ -97,13 +192,15 @@ async function request<T>(
       throw new Error(
         body.error ||
           body.message ||
-          "Request failed.",
+          "Request failed."
       );
     }
 
     if ("data" in body) {
       return body.data as T;
     }
+
+    return result as T;
   }
 
   return result as T;
@@ -113,12 +210,21 @@ async function request<T>(
 /* Authentication                                                             */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * Normal login:
+ *
+ * Email
+ * Password
+ * Sign in
+ *
+ * No verification-code screen is shown.
+ */
 export async function login(
   email: string,
   password: string,
-): Promise<LoginResponse> {
+): Promise<LoginSuccess> {
   const result =
-    await request<LoginResponse>(
+    await request<LoginApiResult>(
       "/auth/login",
       {
         method: "POST",
@@ -126,15 +232,105 @@ export async function login(
           email,
           password,
         }),
-      },
+      }
     );
+
+  /*
+   * This is retained as a defensive compatibility
+   * check in case an older backend is still running.
+   *
+   * The new backend does not return this during
+   * normal login.
+   */
+  if (
+    result.requiresTwoFactor &&
+    result.challenge
+  ) {
+    return {
+      requiresTwoFactor: true,
+      challenge:
+        result.challenge,
+    } as never;
+  }
+
+  if (
+    !result.token ||
+    !result.admin
+  ) {
+    throw new Error(
+      "The server returned an incomplete login response."
+    );
+  }
 
   localStorage.setItem(
     "admin_token",
-    result.token,
+    result.token
+  );
+
+  return {
+    token: result.token,
+    admin: result.admin,
+  };
+}
+
+/*
+ * Kept for future optional 2FA account-security
+ * settings. It is NOT used by normal login.
+ */
+export async function verifyLoginTwoFactor(
+  adminId: string,
+  code: string,
+): Promise<VerifyTwoFactorResult> {
+  const result =
+    await request<VerifyTwoFactorResult>(
+      "/auth/login/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          adminId,
+          code,
+        }),
+      }
+    );
+
+  if (
+    !result.token ||
+    !result.admin
+  ) {
+    throw new Error(
+      "The server returned an incomplete verification response."
+    );
+  }
+
+  localStorage.setItem(
+    "admin_token",
+    result.token
   );
 
   return result;
+}
+
+/*
+ * Kept for future optional 2FA account-security
+ * settings. It is NOT used by normal login.
+ */
+export async function resendLoginTwoFactor(
+  adminId: string,
+): Promise<{
+  method:
+    | "email"
+    | "email_and_sms";
+  expiresInSeconds: number;
+}> {
+  return request(
+    "/auth/login/resend",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        adminId,
+      }),
+    }
+  );
 }
 
 export async function logout(): Promise<void> {
@@ -143,11 +339,11 @@ export async function logout(): Promise<void> {
       "/auth/logout",
       {
         method: "POST",
-      },
+      }
     );
   } finally {
     localStorage.removeItem(
-      "admin_token",
+      "admin_token"
     );
   }
 }
@@ -157,8 +353,132 @@ export async function getMe(): Promise<AdminUser> {
     "/auth/me",
     {
       method: "GET",
-    },
+    }
   );
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{
+  message: string;
+}> {
+  return request(
+    "/auth/change-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword,
+        newPassword,
+      }),
+    }
+  );
+}
+
+export async function changeEmail(
+  currentPassword: string,
+  newEmail: string,
+): Promise<{
+  message: string;
+  email: string;
+}> {
+  return request(
+    "/auth/change-email",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword,
+        newEmail,
+      }),
+    }
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Forgot Password                                                            */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Step 1:
+ *
+ * User enters their administrator email.
+ *
+ * The server responds generically so that an attacker
+ * cannot determine whether an email belongs to the owner.
+ */
+export async function forgotPassword(
+  email: string,
+): Promise<ForgotPasswordResult> {
+  return request<ForgotPasswordResult>(
+    "/auth/forgot-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+      }),
+    }
+  );
+}
+
+/*
+ * Step 2:
+ *
+ * User enters the 6-digit code received by email.
+ *
+ * Successful verification returns a short-lived
+ * reset token. This token is required for the
+ * next step.
+ */
+export async function verifyForgotPassword(
+  email: string,
+  code: string,
+): Promise<VerifyForgotPasswordResult> {
+  const result =
+    await request<VerifyForgotPasswordResult>(
+      "/auth/forgot-password/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          code,
+        }),
+      }
+    );
+
+  if (
+    !result.resetToken
+  ) {
+    throw new Error(
+      "The server did not return a valid password reset session."
+    );
+  }
+
+  return result;
+}
+
+/*
+ * Step 3:
+ *
+ * User creates the new password using
+ * the short-lived reset token.
+ */
+export async function resetForgotPassword(
+  resetToken: string,
+  newPassword: string,
+): Promise<ResetForgotPasswordResult> {
+  const result =
+    await request<ResetForgotPasswordResult>(
+      "/auth/forgot-password/reset",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          resetToken,
+          newPassword,
+        }),
+      }
+    );
+
+  return result;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -168,56 +488,71 @@ export async function getMe(): Promise<AdminUser> {
 export async function apiGet<T>(
   path: string,
 ): Promise<T> {
-  return request<T>(path, {
-    method: "GET",
-  });
+  return request<T>(
+    path,
+    {
+      method: "GET",
+    }
+  );
 }
 
 export async function apiPost<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  return request<T>(path, {
-    method: "POST",
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body),
-  });
+  return request<T>(
+    path,
+    {
+      method: "POST",
+      body:
+        body === undefined
+          ? undefined
+          : JSON.stringify(body),
+    }
+  );
 }
 
 export async function apiPut<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  return request<T>(path, {
-    method: "PUT",
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body),
-  });
+  return request<T>(
+    path,
+    {
+      method: "PUT",
+      body:
+        body === undefined
+          ? undefined
+          : JSON.stringify(body),
+    }
+  );
 }
 
 export async function apiPatch<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  return request<T>(path, {
-    method: "PATCH",
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body),
-  });
+  return request<T>(
+    path,
+    {
+      method: "PATCH",
+      body:
+        body === undefined
+          ? undefined
+          : JSON.stringify(body),
+    }
+  );
 }
 
 export async function apiDelete<T>(
   path: string,
 ): Promise<T> {
-  return request<T>(path, {
-    method: "DELETE",
-  });
+  return request<T>(
+    path,
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -242,7 +577,9 @@ export const apiClient = {
 
 export async function getAdminOrders(): Promise<any[]> {
   const result =
-    await apiGet<unknown>("/admin/orders");
+    await apiGet<unknown>(
+      "/admin/orders"
+    );
 
   if (Array.isArray(result)) {
     return result;
@@ -253,9 +590,16 @@ export async function getAdminOrders(): Promise<any[]> {
     typeof result === "object"
   ) {
     const data =
-      result as Record<string, unknown>;
+      result as Record<
+        string,
+        unknown
+      >;
 
-    if (Array.isArray(data.orders)) {
+    if (
+      Array.isArray(
+        data.orders
+      )
+    ) {
       return data.orders;
     }
   }
@@ -265,7 +609,9 @@ export async function getAdminOrders(): Promise<any[]> {
 
 export async function getCustomers(): Promise<any[]> {
   const result =
-    await apiGet<unknown>("/admin/customers");
+    await apiGet<unknown>(
+      "/admin/customers"
+    );
 
   if (Array.isArray(result)) {
     return result;
@@ -276,9 +622,16 @@ export async function getCustomers(): Promise<any[]> {
     typeof result === "object"
   ) {
     const data =
-      result as Record<string, unknown>;
+      result as Record<
+        string,
+        unknown
+      >;
 
-    if (Array.isArray(data.customers)) {
+    if (
+      Array.isArray(
+        data.customers
+      )
+    ) {
       return data.customers;
     }
   }
@@ -287,7 +640,9 @@ export async function getCustomers(): Promise<any[]> {
 }
 
 export async function getAdminStats(): Promise<any> {
-  return apiGet("/admin/stats");
+  return apiGet(
+    "/admin/stats"
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -296,7 +651,9 @@ export async function getAdminStats(): Promise<any> {
 
 export async function getProducts(): Promise<any[]> {
   const result =
-    await apiGet<unknown>("/products/all");
+    await apiGet<unknown>(
+      "/products/all"
+    );
 
   if (Array.isArray(result)) {
     return result;
@@ -307,9 +664,16 @@ export async function getProducts(): Promise<any[]> {
     typeof result === "object"
   ) {
     const data =
-      result as Record<string, unknown>;
+      result as Record<
+        string,
+        unknown
+      >;
 
-    if (Array.isArray(data.products)) {
+    if (
+      Array.isArray(
+        data.products
+      )
+    ) {
       return data.products;
     }
   }
@@ -326,7 +690,7 @@ export async function createProduct(
 ): Promise<any> {
   return apiPost(
     "/products",
-    product,
+    product
   );
 }
 
@@ -335,8 +699,10 @@ export async function updateProduct(
   product: unknown,
 ): Promise<any> {
   return apiPatch(
-    `/products/${encodeURIComponent(productId)}`,
-    product,
+    `/products/${encodeURIComponent(
+      productId
+    )}`,
+    product
   );
 }
 
@@ -344,7 +710,9 @@ export async function deleteProduct(
   productId: string,
 ): Promise<any> {
   return apiDelete(
-    `/products/${encodeURIComponent(productId)}`,
+    `/products/${encodeURIComponent(
+      productId
+    )}`
   );
 }
 
@@ -357,8 +725,10 @@ export async function updateOrder(
   update: unknown,
 ): Promise<any> {
   return apiPatch(
-    `/orders/${encodeURIComponent(orderId)}`,
-    update,
+    `/orders/${encodeURIComponent(
+      orderId
+    )}`,
+    update
   );
 }
 
@@ -372,7 +742,7 @@ export async function updateOrderStatus(
 ): Promise<any> {
   return updateOrder(
     orderId,
-    update,
+    update
   );
 }
 
@@ -389,7 +759,7 @@ export async function updateStore(
 ): Promise<any> {
   return apiPut(
     "/store",
-    settings,
+    settings
   );
 }
 
@@ -398,7 +768,9 @@ export async function updateStore(
 /* -------------------------------------------------------------------------- */
 
 export async function getAnalytics(): Promise<any> {
-  return apiGet("/analytics");
+  return apiGet(
+    "/analytics"
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -407,7 +779,7 @@ export async function getAnalytics(): Promise<any> {
 
 export async function getBusinessHealth(): Promise<any> {
   return apiGet(
-    "/business-health",
+    "/business-health"
   );
 }
 
@@ -426,7 +798,7 @@ export async function sendAIMessage(
       message,
       history,
       context,
-    },
+    }
   );
 }
 

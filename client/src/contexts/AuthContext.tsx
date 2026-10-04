@@ -16,10 +16,12 @@ import {
 interface AuthContextValue {
   admin: AdminUser | null;
   loading: boolean;
+
   login: (
     email: string,
     password: string
   ) => Promise<void>;
+
   logout: () => void;
 }
 
@@ -46,7 +48,9 @@ export function AuthProvider({
     let mounted = true;
 
     const token =
-      localStorage.getItem("admin_token");
+      localStorage.getItem(
+        "admin_token"
+      );
 
     if (!token) {
       if (mounted) {
@@ -60,9 +64,11 @@ export function AuthProvider({
 
     getMe()
       .then((user) => {
-        if (mounted) {
-          setAdmin(user);
+        if (!mounted) {
+          return;
         }
+
+        setAdmin(user);
       })
       .catch(() => {
         localStorage.removeItem(
@@ -116,9 +122,7 @@ export function AuthProvider({
     setAdmin(null);
 
     void apiLogout().catch(() => {
-      // Local authentication state has already
-      // been cleared. The API logout endpoint
-      // does not maintain a server session.
+      // Local authentication state is already cleared.
     });
   }
 
