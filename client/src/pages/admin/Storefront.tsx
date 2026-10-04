@@ -1,7 +1,8 @@
 import { useState } from "react";
 import {
 Check,
-Eye,
+Copy,
+ExternalLink,
 Palette,
 Save,
 Settings2,
@@ -51,6 +52,7 @@ useState<StorePageType>("home");
 
 const [saved, setSaved] =
 useState(false);
+const [copied, setCopied] = useState(false);
 
 const sections =
 selectedPage === "home"
@@ -159,6 +161,16 @@ window.open(
 );
 }
 
+async function copyStoreLink() {
+try {
+  await navigator.clipboard.writeText(`${window.location.origin}/store`);
+  setCopied(true);
+  window.setTimeout(() => setCopied(false), 1800);
+} catch {
+  setCopied(false);
+}
+}
+
 return (
 <div className="min-h-full bg-slate-100 dark:bg-slate-950">
 <header className="border-b bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -182,11 +194,20 @@ return (
       <div className="flex gap-2">
         <button
           type="button"
+          onClick={copyStoreLink}
+          className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+        >
+          {copied ? <Check size={17} /> : <Copy size={17} />}
+          {copied ? "Copied" : "Copy store link"}
+        </button>
+
+        <button
+          type="button"
           onClick={previewStore}
           className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
         >
-          <Eye size={17} />
-          Preview
+          <ExternalLink size={17} />
+          Open store
         </button>
 
         <button

@@ -143,6 +143,7 @@ export default function MEOAI() {
     setLoading(true);
 
     try {
+      const token = localStorage.getItem("admin_token");
       const response = await fetch(
         "http://localhost:4000/api/ai",
         {
@@ -150,6 +151,7 @@ export default function MEOAI() {
           headers: {
             "Content-Type":
               "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             messages: nextMessages.map(
@@ -272,6 +274,7 @@ export default function MEOAI() {
 
     void (async () => {
       try {
+        const token = localStorage.getItem("admin_token");
         const response = await fetch(
           "http://localhost:4000/api/ai",
           {
@@ -279,6 +282,7 @@ export default function MEOAI() {
             headers: {
               "Content-Type":
                 "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
               messages: [

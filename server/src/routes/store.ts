@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import { db } from "../database/db";
 import type {
@@ -62,7 +63,7 @@ store.get("/", (c) => {
   });
 });
 
-store.put("/", async (c) => {
+store.put("/", authMiddleware, async (c) => {
   try {
     const body = await c.req.json<Partial<StoreConfig>>();
 

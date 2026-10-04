@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import { getAllOrders, getProductById } from "../data/store";
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "../types/analytics";
 
 const analytics = new Hono();
+analytics.use("*", authMiddleware);
 
 function getProductCost(productId: string) {
   const product = getProductById(productId);

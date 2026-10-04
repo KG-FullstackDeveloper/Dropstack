@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import {
   getAllOrders,
@@ -7,6 +8,7 @@ import {
 } from "../data/store";
 
 const ordersRoute = new Hono();
+ordersRoute.use("*", authMiddleware);
 
 const ORDER_STATUSES = new Set([
   "payment_pending",

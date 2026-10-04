@@ -2,233 +2,430 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:4000/api";
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+}
+
+interface ApiResponse<T> {
+  success?: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+interface LoginResponse {
+  token: string;
+  admin: AdminUser;
+}
+
+function getToken(): string | null {
+  return localStorage.getItem("admin_token");
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
+  const token = getToken();
 
-  const contentType = response.headers.get("content-type") || "";
+  const headers = new Headers(options.headers);
 
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
-
-  if (!response.ok) {
-    const message =
-      typeof payload === "object" &&
-      payload !== null &&
-      "error" in payload
-        ? String((payload as { error?: unknown }).error)
-        : typeof payload === "object" &&
-            payload !== null &&
-            "message" in payload
-          ? String((payload as { message?: unknown }).message)
-          : `Request failed with status ${response.status}`;
-
-    throw new Error(message);
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
-  if (typeof payload === "object" && payload !== null && "success" in payload) {
-    const envelope = payload as {
-      success?: boolean;
-      data?: T;
-      error?: unknown;
-      message?: unknown;
-    };
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
-    if (envelope.success === false) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+
+  const contentType =
+    response.headers.get("content-type") || "";
+
+  let result: unknown;
+
+  if (contentType.includes("application/json")) {
+    result = await response.json();
+  } else {
+    result = await response.text();
+  }
+
+  if (!response.ok) {
+    let errorMessage =
+      `Request failed with status ${response.status}.`;
+
+    if (
+      result &&
+      typeof result === "object"
+    ) {
+      const body =
+        result as ApiResponse<unknown>;
+
+      if (body.error) {
+        errorMessage = body.error;
+      } else if (body.message) {
+        errorMessage = body.message;
+      }
+    }
+
+    if (
+      response.status === 401 &&
+      path !== "/auth/login"
+    ) {
+      localStorage.removeItem("admin_token");
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  if (
+    result &&
+    typeof result === "object"
+  ) {
+    const body =
+      result as ApiResponse<T>;
+
+    if (body.success === false) {
       throw new Error(
-        String(envelope.error ?? envelope.message ?? "Request failed."),
+        body.error ||
+          body.message ||
+          "Request failed.",
       );
     }
 
-    if ("data" in envelope) {
-      return envelope.data as T;
+    if ("data" in body) {
+      return body.data as T;
     }
   }
 
-  return payload as T;
+  return result as T;
 }
 
-function normalizeList<T>(value: unknown, key: string): T[] {
-  if (Array.isArray(value)) {
-    return value as T[];
+/* -------------------------------------------------------------------------- */
+/* Authentication                                                             */
+/* -------------------------------------------------------------------------- */
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  const result =
+    await request<LoginResponse>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      },
+    );
+
+  localStorage.setItem(
+    "admin_token",
+    result.token,
+  );
+
+  return result;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await request(
+      "/auth/logout",
+      {
+        method: "POST",
+      },
+    );
+  } finally {
+    localStorage.removeItem(
+      "admin_token",
+    );
+  }
+}
+
+export async function getMe(): Promise<AdminUser> {
+  return request<AdminUser>(
+    "/auth/me",
+    {
+      method: "GET",
+    },
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Generic API                                                                */
+/* -------------------------------------------------------------------------- */
+
+export async function apiGet<T>(
+  path: string,
+): Promise<T> {
+  return request<T>(path, {
+    method: "GET",
+  });
+}
+
+export async function apiPost<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
+}
+
+export async function apiPut<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
+}
+
+export async function apiPatch<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
+}
+
+export async function apiDelete<T>(
+  path: string,
+): Promise<T> {
+  return request<T>(path, {
+    method: "DELETE",
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* API Client Compatibility                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const apiClient = {
+  get: apiGet,
+  post: apiPost,
+  put: apiPut,
+  patch: apiPatch,
+  delete: apiDelete,
+
+  stores: async (): Promise<any> => {
+    return apiGet("/stores");
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Admin                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export async function getAdminOrders(): Promise<any[]> {
+  const result =
+    await apiGet<unknown>("/admin/orders");
+
+  if (Array.isArray(result)) {
+    return result;
   }
 
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const list = record[key];
-    return Array.isArray(list) ? (list as T[]) : [];
+  if (
+    result &&
+    typeof result === "object"
+  ) {
+    const data =
+      result as Record<string, unknown>;
+
+    if (Array.isArray(data.orders)) {
+      return data.orders;
+    }
   }
 
   return [];
 }
 
-export const apiClient = {
-  get: <T = unknown>(path: string) =>
-    request<T>(path, { method: "GET" }),
+export async function getCustomers(): Promise<any[]> {
+  const result =
+    await apiGet<unknown>("/admin/customers");
 
-  post: <T = unknown>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: "POST",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
+  if (Array.isArray(result)) {
+    return result;
+  }
 
-  patch: <T = unknown>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: "PATCH",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
+  if (
+    result &&
+    typeof result === "object"
+  ) {
+    const data =
+      result as Record<string, unknown>;
 
-  put: <T = unknown>(path: string, body?: unknown) =>
-    request<T>(path, {
-      method: "PUT",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
-
-  delete: <T = unknown>(path: string) =>
-    request<T>(path, { method: "DELETE" }),
-
-  stores: () =>
-    request<{ stores: unknown[] }>("/stores", {
-      method: "GET",
-    }),
-};
-
-export async function login(
-  email: string,
-  password: string,
-): Promise<any> {
-  const result = await request<{
-    user: any;
-    message?: string;
-    redirectTo?: string;
-  }>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-
-  return result.user;
-}
-
-export async function logout() {
-  return request<{ message: string }>("/auth/logout", {
-    method: "POST",
-  });
-}
-
-export async function getMe(): Promise<any> {
-  const result = await request<{ user: any }>("/auth/me", {
-    method: "GET",
-  });
-
-  return result.user;
-}
-
-export async function getCustomers(storeId?: string): Promise<any[]> {
-  const path = storeId
-    ? `/customers?storeId=${encodeURIComponent(storeId)}`
-    : "/customers";
-
-  const result = await request<unknown>(path, {
-    method: "GET",
-  });
-
-  return normalizeList<any>(result, "customers");
-}
-
-export async function getAdminOrders(storeId?: string): Promise<any[]> {
-  const path = storeId
-    ? `/orders?storeId=${encodeURIComponent(storeId)}`
-    : "/admin/orders";
-
-  const result = await request<unknown>(path, {
-    method: "GET",
-  });
-
-  return normalizeList<any>(result, "orders");
-}
-
-export async function getAdminProducts(storeId?: string): Promise<any[]> {
-  const path = storeId
-    ? `/products?storeId=${encodeURIComponent(storeId)}`
-    : "/products/all";
-
-  const result = await request<unknown>(path, {
-    method: "GET",
-  });
-
-  return normalizeList<any>(result, "products");
-}
-
-export async function deleteProduct(productId: string) {
-  return request<unknown>(
-    `/products/${encodeURIComponent(productId)}`,
-    { method: "DELETE" },
-  );
-}
-
-export async function createProduct(data: unknown) {
-  return request<unknown>("/products", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateProduct(
-  productOrId: unknown,
-  maybeData?: unknown,
-) {
-  let productId = "";
-  let data = maybeData;
-
-  if (typeof productOrId === "string") {
-    productId = productOrId;
-  } else if (productOrId && typeof productOrId === "object") {
-    const record = productOrId as Record<string, unknown>;
-    productId = String(record.id || "");
-
-    if (data === undefined) {
-      const { id: _id, ...rest } = record;
-      data = rest;
+    if (Array.isArray(data.customers)) {
+      return data.customers;
     }
   }
 
-  if (!productId) {
-    throw new Error("Product ID is required.");
+  return [];
+}
+
+export async function getAdminStats(): Promise<any> {
+  return apiGet("/admin/stats");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Products                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export async function getProducts(): Promise<any[]> {
+  const result =
+    await apiGet<unknown>("/products/all");
+
+  if (Array.isArray(result)) {
+    return result;
   }
 
-  return request<unknown>(
+  if (
+    result &&
+    typeof result === "object"
+  ) {
+    const data =
+      result as Record<string, unknown>;
+
+    if (Array.isArray(data.products)) {
+      return data.products;
+    }
+  }
+
+  return [];
+}
+
+export async function getAdminProducts(): Promise<any[]> {
+  return getProducts();
+}
+
+export async function createProduct(
+  product: unknown,
+): Promise<any> {
+  return apiPost(
+    "/products",
+    product,
+  );
+}
+
+export async function updateProduct(
+  productId: string,
+  product: unknown,
+): Promise<any> {
+  return apiPatch(
     `/products/${encodeURIComponent(productId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(data ?? {}),
-    },
+    product,
+  );
+}
+
+export async function deleteProduct(
+  productId: string,
+): Promise<any> {
+  return apiDelete(
+    `/products/${encodeURIComponent(productId)}`,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Orders                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export async function updateOrder(
+  orderId: string,
+  update: unknown,
+): Promise<any> {
+  return apiPatch(
+    `/orders/${encodeURIComponent(orderId)}`,
+    update,
   );
 }
 
 export async function updateOrderStatus(
   orderId: string,
-  update: unknown,
-) {
-  const body =
-    update && typeof update === "object"
-      ? update
-      : { order_status: update, status: update };
+  update: {
+    order_status?: string;
+    payment_status?: string;
+    tracking_number?: string;
+  },
+): Promise<any> {
+  return updateOrder(
+    orderId,
+    update,
+  );
+}
 
-  return request<unknown>(
-    `/orders/${encodeURIComponent(orderId)}`,
+/* -------------------------------------------------------------------------- */
+/* Store                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export async function getStore(): Promise<any> {
+  return apiGet("/store");
+}
+
+export async function updateStore(
+  settings: unknown,
+): Promise<any> {
+  return apiPut(
+    "/store",
+    settings,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Analytics                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function getAnalytics(): Promise<any> {
+  return apiGet("/analytics");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Business health                                                            */
+/* -------------------------------------------------------------------------- */
+
+export async function getBusinessHealth(): Promise<any> {
+  return apiGet(
+    "/business-health",
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AI                                                                         */
+/* -------------------------------------------------------------------------- */
+
+export async function sendAIMessage(
+  message: string,
+  history?: unknown[],
+  context?: unknown,
+): Promise<any> {
+  return apiPost(
+    "/ai",
     {
-      method: "PATCH",
-      body: JSON.stringify(body),
+      message,
+      history,
+      context,
     },
   );
 }

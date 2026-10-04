@@ -37,6 +37,11 @@ async function handleResponse<T>(
 
   return result.data as T;
 }
+
+function adminHeaders(): HeadersInit {
+  const token = localStorage.getItem("admin_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 export async function getProducts(): Promise<Product[]> {
   const response = await fetch(
     `${API_URL}/api/products`
@@ -109,6 +114,7 @@ export async function updateStoreConfig(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        ...adminHeaders(),
       },
       body: JSON.stringify(store),
     }

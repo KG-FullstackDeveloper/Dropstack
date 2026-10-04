@@ -7,8 +7,10 @@ const API_URL =
   "http://localhost:4000";
 
 export async function getAnalytics(): Promise<AnalyticsResponse> {
+  const token = localStorage.getItem("admin_token");
   const response = await fetch(
-    `${API_URL}/api/analytics`
+    `${API_URL}/api/analytics`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
   );
 
   let result: {

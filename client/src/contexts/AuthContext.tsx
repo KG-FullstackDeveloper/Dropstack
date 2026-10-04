@@ -5,65 +5,132 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { login as apiLogin, logout as apiLogout, getMe } from "../services/adminApi";
 
-interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-}
+import {
+  login as apiLogin,
+  logout as apiLogout,
+  getMe,
+  type AdminUser,
+} from "../services/adminApi";
 
 interface AuthContextValue {
   admin: AdminUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => void;
 }
 
-export const AuthContext = createContext<AuthContextValue>({
-  admin: null,
-  loading: true,
-  login: async () => {},
-  logout: () => {},
-});
+export const AuthContext =
+  createContext<AuthContextValue>({
+    admin: null,
+    loading: true,
+    login: async () => {},
+    logout: () => {},
+  });
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [admin, setAdmin] = useState<AdminUser | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [admin, setAdmin] =
+    useState<AdminUser | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
+    let mounted = true;
+
+    const token =
+      localStorage.getItem("admin_token");
+
     if (!token) {
-      setLoading(false);
-      return;
+      if (mounted) {
+        setLoading(false);
+      }
+
+      return () => {
+        mounted = false;
+      };
     }
 
     getMe()
       .then((user) => {
-        setAdmin(user);
+        if (mounted) {
+          setAdmin(user);
+        }
       })
       .catch(() => {
-        localStorage.removeItem("admin_token");
+        localStorage.removeItem(
+          "admin_token"
+        );
+
+        if (mounted) {
+          setAdmin(null);
+        }
       })
       .finally(() => {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  async function login(email: string, password: string) {
-    const result = await apiLogin(email, password);
-    localStorage.setItem("admin_token", result.token);
-    setAdmin(result.admin);
+  async function login(
+    email: string,
+    password: string
+  ) {
+    setLoading(true);
+
+    try {
+      const result =
+        await apiLogin(
+          email,
+          password
+        );
+
+      localStorage.setItem(
+        "admin_token",
+        result.token
+      );
+
+      setAdmin(result.admin);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function logout() {
-    apiLogout();
+    localStorage.removeItem(
+      "admin_token"
+    );
+
     setAdmin(null);
-    localStorage.removeItem("admin_token");
+
+    void apiLogout().catch(() => {
+      // Local authentication state has already
+      // been cleared. The API logout endpoint
+      // does not maintain a server session.
+    });
   }
 
   return (
-    <AuthContext.Provider value={{ admin, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        admin,
+        loading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

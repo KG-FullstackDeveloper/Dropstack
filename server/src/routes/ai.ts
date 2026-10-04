@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import {
   getAllOrders,
@@ -24,6 +25,7 @@ interface GroqResponse {
 }
 
 const ai = new Hono();
+ai.use("*", authMiddleware);
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const DEFAULT_MODEL = "qwen/qwen3.8-27b";

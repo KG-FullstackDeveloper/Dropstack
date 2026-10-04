@@ -12,6 +12,8 @@ import Store from "./pages/Store";
 import NigeriaStore from "./pages/NigeriaStore";
 import NigeriaAdmin from "./pages/NigeriaAdmin";
 import MEOAI from "./pages/MEOAI";
+import AdminLogin from "./pages/AdminLogin";
+import ProtectedRoute from "./components/admin/ProtectedRoute";
 
 export default function App() {
   return (
@@ -27,10 +29,11 @@ export default function App() {
         <Route path="/faq" element={<FAQ />} />
 
         {/* Global Ecommerce workspace */}
-        <Route path="/admin" element={<AdminWorkspace />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<ProtectedRoute><AdminWorkspace /></ProtectedRoute>} />
 
         {/* Global MEO AI */}
-        <Route path="/admin/ai" element={<MEOAI />} />
+        <Route path="/admin/ai" element={<ProtectedRoute><MEOAI /></ProtectedRoute>} />
 
         {/* Global storefront */}
         <Route path="/store/*" element={<Store />} />

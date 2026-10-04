@@ -5,8 +5,10 @@ import.meta.env.VITE_API_URL ||
 "http://localhost:4000";
 
 export async function getBusinessHealth(): Promise<BusinessHealth> {
+const token = localStorage.getItem("admin_token");
 const response = await fetch(
-`${API_URL}/api/business-health`
+`${API_URL}/api/business-health`,
+{ headers: token ? { Authorization: `Bearer ${token}` } : {} }
 );
 
 let result: {

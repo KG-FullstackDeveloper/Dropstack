@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import {
   deleteProductRecord,
@@ -68,7 +69,7 @@ productsRoute.get("/", (c) => {
   });
 });
 
-productsRoute.get("/all", (c) => {
+productsRoute.get("/all", authMiddleware, (c) => {
   return c.json({
     success: true,
     data: getAllProducts(),
@@ -115,7 +116,7 @@ productsRoute.get("/:id", (c) => {
   });
 });
 
-productsRoute.post("/", async (c) => {
+productsRoute.post("/", authMiddleware, async (c) => {
   let body: CreateProductInput;
 
   try {
@@ -198,7 +199,7 @@ productsRoute.post("/", async (c) => {
   );
 });
 
-productsRoute.patch("/:id", async (c) => {
+productsRoute.patch("/:id", authMiddleware, async (c) => {
   const id = c.req.param("id");
   const current = getProductById(id);
 
@@ -319,7 +320,7 @@ productsRoute.patch("/:id", async (c) => {
   }
 });
 
-productsRoute.delete("/:id", (c) => {
+productsRoute.delete("/:id", authMiddleware, (c) => {
   const id = c.req.param("id");
   const exists = getProductById(id);
 

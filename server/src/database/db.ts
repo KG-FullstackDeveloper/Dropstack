@@ -259,15 +259,21 @@ const adminCount = (
 ).count;
 
 if (adminCount === 0) {
-  const passwordHash = bcryptjs.hashSync("admin123", 10);
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL ||
+    (process.env.NODE_ENV === "production" ? "" : "admin@store.com");
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD ||
+    (process.env.NODE_ENV === "production" ? "" : "admin123");
+  if (!bootstrapEmail || !bootstrapPassword) {
+    throw new Error("No admin exists. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD for the first production startup.");
+  }
   const now = new Date().toISOString();
 
   db.prepare(`
     INSERT INTO admin_users (id, email, password_hash, name, created_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run("admin-1", "admin@store.com", passwordHash, "Store Owner", now);
+  `).run("admin-1", bootstrapEmail.trim().toLowerCase(), bcryptjs.hashSync(bootstrapPassword, 12), "Store Owner", now);
 
-  console.log("Created default admin user (admin@store.com / admin123).");
+  console.log(`Created initial admin user for ${bootstrapEmail.trim().toLowerCase()}.`);
 }
 
 /*

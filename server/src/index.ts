@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 
+import auth from "./routes/auth";
 import products from "./routes/products";
 import orders from "./routes/orders";
 import checkout from "./routes/checkout";
@@ -14,11 +15,25 @@ import visitors from "./routes/visitors";
 import businessHealth from "./routes/businessHealth";
 import market from "./routes/market";
 import ai from "./routes/ai";
+import nigeria from "./routes/nigeria";
+
+import { authMiddleware } from "./middleware/auth";
 
 const app = new Hono();
 
-const PORT = 4000;
-const CLIENT_URL = "http://localhost:5173";
+const PORT = Number(
+  process.env.PORT || 4000
+);
+
+const CLIENT_URL =
+  process.env.CLIENT_URL ||
+  "http://localhost:5173";
+
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET is required. Add it to server/.env before starting the API."
+  );
+}
 
 app.use(
   "*",
@@ -37,7 +52,7 @@ app.use(
       "Authorization",
     ],
     credentials: true,
-  }),
+  })
 );
 
 app.get("/", (c) => {
@@ -46,7 +61,9 @@ app.get("/", (c) => {
     message:
       "Custom Ecommerce API is running.",
     platform: "MEO Store",
-    environment: "development",
+    environment:
+      process.env.NODE_ENV ||
+      "development",
   });
 });
 
@@ -55,25 +72,137 @@ app.get("/api/health", (c) => {
     success: true,
     data: {
       status: "ok",
-      service: "custom-ecommerce-api",
-      environment: "development",
+      service:
+        "custom-ecommerce-api",
+      environment:
+        process.env.NODE_ENV ||
+        "development",
       database: "local",
     },
   });
 });
 
-app.route("/api/products", products);
-app.route("/api/orders", orders);
-app.route("/api/checkout", checkout);
-app.route("/api/admin", admin);
-app.route("/api/store", store);
-app.route("/api/analytics", analytics);
-app.route("/api/visitors", visitors);
-app.route("/api/business-health", businessHealth);
-app.route("/api/market", market);
+/*
+|--------------------------------------------------------------------------
+| Authentication
+|--------------------------------------------------------------------------
+*/
 
-/* Global Ecommerce AI */
-app.route("/api/ai", ai);
+app.route(
+  "/api/auth",
+  auth
+);
+
+/*
+|--------------------------------------------------------------------------
+| Public ecommerce APIs
+|--------------------------------------------------------------------------
+*/
+
+app.route(
+  "/api/products",
+  products
+);
+
+app.route(
+  "/api/checkout",
+  checkout
+);
+
+app.route(
+  "/api/visitors",
+  visitors
+);
+
+app.route(
+  "/api/market",
+  market
+);
+
+/*
+|--------------------------------------------------------------------------
+| Protected admin APIs
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  "/api/admin/*",
+  authMiddleware
+);
+
+app.use(
+  "/api/orders/*",
+  authMiddleware
+);
+
+app.use(
+  "/api/analytics/*",
+  authMiddleware
+);
+
+app.use(
+  "/api/business-health/*",
+  authMiddleware
+);
+
+app.use(
+  "/api/ai/*",
+  authMiddleware
+);
+
+app.route(
+  "/api/admin",
+  admin
+);
+
+app.route(
+  "/api/orders",
+  orders
+);
+
+app.route(
+  "/api/store",
+  store
+);
+
+app.route(
+  "/api/analytics",
+  analytics
+);
+
+app.route(
+  "/api/business-health",
+  businessHealth
+);
+
+app.route(
+  "/api/ai",
+  ai
+);
+
+/*
+|--------------------------------------------------------------------------
+| Nigeria Ecommerce
+|--------------------------------------------------------------------------
+|
+| Completely separate Nigeria workspace.
+|
+| IMPORTANT:
+| Nigeria products/orders/customers/inventory use the nigeria_* tables.
+| They do not use the Global products/orders tables.
+|
+*/
+
+app.route(
+  "/api/nigeria",
+  nigeria
+);
+
+/*
+|--------------------------------------------------------------------------
+| Errors
+|--------------------------------------------------------------------------
+*/
 
 app.notFound((c) => {
   return c.json(
@@ -82,12 +211,15 @@ app.notFound((c) => {
       error: "Route not found.",
       path: c.req.path,
     },
-    404,
+    404
   );
 });
 
 app.onError((error, c) => {
-  console.error("API ERROR:", error);
+  console.error(
+    "API ERROR:",
+    error
+  );
 
   return c.json(
     {
@@ -97,28 +229,40 @@ app.onError((error, c) => {
           ? error.message
           : "Internal server error.",
     },
-    500,
+    500
   );
 });
 
 console.log("");
 console.log(
-  "========================================",
-);
-console.log(" Custom Ecommerce API");
-console.log(
-  "========================================",
+  "========================================"
 );
 console.log(
-  `Server: http://localhost:${PORT}`,
+  " Custom Ecommerce API"
 );
 console.log(
-  `Client: ${CLIENT_URL}`,
+  "========================================"
 );
-console.log(" Runtime: Hono + Node.js");
-console.log(" Status: starting...");
 console.log(
-  "========================================",
+  `Server: http://localhost:${PORT}`
+);
+console.log(
+  `Client: ${CLIENT_URL}`
+);
+console.log(
+  "Runtime: Hono + Node.js"
+);
+console.log(
+  "Authentication: enabled"
+);
+console.log(
+  "Nigeria Ecommerce API: enabled"
+);
+console.log(
+  "Status: starting..."
+);
+console.log(
+  "========================================"
 );
 console.log("");
 
@@ -130,9 +274,9 @@ serve(
   },
   (info) => {
     console.log(
-      `API server running at http://${info.address}:${info.port}`,
+      `API server running at http://${info.address}:${info.port}`
     );
-  },
+  }
 );
 
 export default app;

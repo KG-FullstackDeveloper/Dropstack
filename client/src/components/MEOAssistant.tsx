@@ -172,6 +172,7 @@ export default function MEOAssistant() {
     setLoading(true);
 
     try {
+      const token = localStorage.getItem("admin_token");
       const response =
         await fetch(
           "http://localhost:4000/api/ai/chat",
@@ -180,6 +181,7 @@ export default function MEOAssistant() {
             headers: {
               "Content-Type":
                 "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             credentials: "include",
             body: JSON.stringify({
