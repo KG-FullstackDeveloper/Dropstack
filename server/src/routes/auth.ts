@@ -8,6 +8,7 @@ import {
   authMiddleware,
   type AuthVariables,
 } from "../middleware/auth";
+import { sendPasswordResetCode } from "../services/emailService";
 
 interface AdminUser {
   id: string;
@@ -588,12 +589,11 @@ function getAdminByEmail(
 | LOGIN
 |--------------------------------------------------------------------------
 |
-| Normal login is:
+| Normal login:
 |
 | email + password -> JWT -> dashboard
 |
 | 2FA is NOT forced by this login flow.
-| It can be enabled later as an optional security setting.
 |--------------------------------------------------------------------------
 */
 
@@ -764,10 +764,6 @@ auth.post(
 /*
 |--------------------------------------------------------------------------
 | OPTIONAL 2FA ENDPOINTS
-|--------------------------------------------------------------------------
-|
-| These remain available for future account-security settings.
-| They are NOT part of normal login.
 |--------------------------------------------------------------------------
 */
 
@@ -1093,11 +1089,53 @@ auth.post(
         });
       }
 
-      createAuthCode(
-        admin.id,
-        "password_reset",
-        CODE_EXPIRY_MINUTES
-      );
+      const code =
+        createAuthCode(
+          admin.id,
+          "password_reset",
+          CODE_EXPIRY_MINUTES
+        );
+
+      try {
+        await sendPasswordResetCode({
+          recipientEmail:
+            admin.email,
+          recipientName:
+            admin.name,
+          code,
+          expiresInMinutes:
+            CODE_EXPIRY_MINUTES,
+        });
+      } catch (emailError) {
+        console.error(
+          "Password reset email delivery failed:",
+          emailError
+        );
+
+        /*
+         * Invalidate the code if delivery failed so an undelivered
+         * recovery code cannot remain active.
+         */
+        db.prepare(`
+          UPDATE auth_codes
+          SET used_at = ?
+          WHERE admin_id = ?
+            AND purpose = 'password_reset'
+            AND used_at IS NULL
+        `).run(
+          nowIso(),
+          admin.id
+        );
+
+        return c.json(
+          {
+            success: false,
+            error:
+              "We could not send the password recovery email. Please try again later.",
+          },
+          503
+        );
+      }
 
       recordLoginEvent(
         admin.id,
@@ -1106,14 +1144,6 @@ auth.post(
         getClientIp(c),
         getUserAgent(c)
       );
-
-      /*
-       * IMPORTANT:
-       * The code is stored hashed and is never returned to the browser.
-       *
-       * A real email provider must be configured before the code can
-       * actually be delivered to the owner.
-       */
 
       return c.json({
         success: true,
@@ -1252,13 +1282,10 @@ auth.post(
         "password_reset_verify"
       );
 
-      /*
-       * The verified reset session is represented by a short-lived,
-       * single-use random token stored in auth_codes.
-       */
-
       const resetToken =
-        crypto.randomBytes(32).toString("hex");
+        crypto
+          .randomBytes(32)
+          .toString("hex");
 
       db.prepare(`
         INSERT INTO auth_codes (

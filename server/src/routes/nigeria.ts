@@ -16,7 +16,25 @@ const nigeria = new Hono<{
   Variables: AuthVariables;
 }>();
 
-nigeria.use("*", authMiddleware);
+nigeria.use("*", async (c, next) => {
+const method = c.req.method;
+const path = c.req.path;
+
+// Customer-facing Nigeria storefront endpoints.
+// These must remain public because customers do not have
+// admin JWT tokens when placing an order or loading checkout settings.
+const isPublicCustomerRoute =
+(method === "GET" && path === "/settings") ||
+(method === "POST" && path === "/orders");
+
+if (isPublicCustomerRoute) {
+await next();
+return;
+}
+
+// Every other Nigeria route remains admin-protected.
+await authMiddleware(c, next);
+});
 
 /* -------------------------------------------------------------------------- */
 /* Dashboard                                                                  */
