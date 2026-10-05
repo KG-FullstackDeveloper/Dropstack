@@ -1,6 +1,6 @@
 import { db } from "../database/db";
 
-import type { Product } from "../types/product";
+import type { Product, ProductVariant } from "../types/product";
 import type {
   Order,
   OrderItem,
@@ -10,43 +10,114 @@ export type OrderWithItems = Order & {
   items: OrderItem[];
 };
 
+function parseJsonArray<T>(
+  value: unknown,
+  fallback: T[] = [],
+): T[] {
+  if (Array.isArray(value)) return value;
+
+  if (typeof value !== "string" || !value.trim()) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? (parsed as T[])
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeProduct(
+  product: Product,
+): Product {
+  return {
+    ...product,
+
+    images: parseJsonArray<string>(
+      product.images,
+      [],
+    ),
+
+    variants: parseJsonArray<ProductVariant>(
+      product.variants,
+      [],
+    ),
+
+    stock: Number(product.stock ?? 0),
+
+    low_stock_threshold: Number(
+      product.low_stock_threshold ?? 0,
+    ),
+  };
+}
+
 export function getAllProducts(): Product[] {
-  return db
-    .prepare("SELECT * FROM products ORDER BY created_at DESC")
+  const products = db
+    .prepare(
+      "SELECT * FROM products ORDER BY created_at DESC",
+    )
     .all() as Product[];
+
+  return products.map(normalizeProduct);
 }
 
 export function getActiveProducts(): Product[] {
-  return db
+  const products = db
     .prepare(
       "SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC",
     )
     .all() as Product[];
+
+  return products.map(normalizeProduct);
 }
 
-export function getProductById(id: string): Product | undefined {
-  return db
-    .prepare("SELECT * FROM products WHERE id = ?")
+export function getProductById(
+  id: string,
+): Product | undefined {
+  const product = db
+    .prepare(
+      "SELECT * FROM products WHERE id = ?",
+    )
     .get(id) as Product | undefined;
+
+  return product
+    ? normalizeProduct(product)
+    : undefined;
 }
 
-export function getProductBySlug(slug: string): Product | undefined {
-  return db
-    .prepare("SELECT * FROM products WHERE slug = ? AND active = 1")
+export function getProductBySlug(
+  slug: string,
+): Product | undefined {
+  const product = db
+    .prepare(
+      "SELECT * FROM products WHERE slug = ? AND active = 1",
+    )
     .get(slug) as Product | undefined;
+
+  return product
+    ? normalizeProduct(product)
+    : undefined;
 }
 
-export function insertProduct(product: Product): Product {
+export function insertProduct(
+  product: Product,
+): Product {
   db.prepare(
     `INSERT INTO products (
       id,
       name,
       slug,
+      sku,
       description,
       category,
       price,
       currency,
       image_url,
+      images,
       video_url,
       supplier_name,
       supplier_product_id,
@@ -58,18 +129,25 @@ export function insertProduct(product: Product): Product {
       other_cost,
       profit_per_unit,
       profit_margin,
+      stock,
+      low_stock_threshold,
+      variants,
       active,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )`,
   ).run(
     product.id,
     product.name,
     product.slug,
+    product.sku ?? null,
     product.description,
     product.category,
     product.price,
     product.currency,
     product.image_url ?? null,
+    JSON.stringify(product.images ?? []),
     product.video_url ?? null,
     product.supplier_name ?? null,
     product.supplier_product_id ?? null,
@@ -81,11 +159,14 @@ export function insertProduct(product: Product): Product {
     product.other_cost,
     product.profit_per_unit,
     product.profit_margin,
+    product.stock ?? 0,
+    product.low_stock_threshold ?? 0,
+    JSON.stringify(product.variants ?? []),
     product.active,
     product.created_at,
   );
 
-  return product;
+  return normalizeProduct(product);
 }
 
 export function updateProductRecord(
@@ -96,20 +177,22 @@ export function updateProductRecord(
 
   if (!current) return undefined;
 
-  const next: Product = {
+  const next: Product = normalizeProduct({
     ...current,
     ...updates,
-  };
+  });
 
   db.prepare(
     `UPDATE products SET
       name = ?,
       slug = ?,
+      sku = ?,
       description = ?,
       category = ?,
       price = ?,
       currency = ?,
       image_url = ?,
+      images = ?,
       video_url = ?,
       supplier_name = ?,
       supplier_product_id = ?,
@@ -121,16 +204,21 @@ export function updateProductRecord(
       other_cost = ?,
       profit_per_unit = ?,
       profit_margin = ?,
+      stock = ?,
+      low_stock_threshold = ?,
+      variants = ?,
       active = ?
     WHERE id = ?`,
   ).run(
     next.name,
     next.slug,
+    next.sku ?? null,
     next.description,
     next.category,
     next.price,
     next.currency,
     next.image_url ?? null,
+    JSON.stringify(next.images ?? []),
     next.video_url ?? null,
     next.supplier_name ?? null,
     next.supplier_product_id ?? null,
@@ -142,16 +230,23 @@ export function updateProductRecord(
     next.other_cost,
     next.profit_per_unit,
     next.profit_margin,
+    next.stock ?? 0,
+    next.low_stock_threshold ?? 0,
+    JSON.stringify(next.variants ?? []),
     next.active,
     id,
   );
 
-  return next;
+  return getProductById(id);
 }
 
-export function deleteProductRecord(id: string): boolean {
+export function deleteProductRecord(
+  id: string,
+): boolean {
   const result = db
-    .prepare("DELETE FROM products WHERE id = ?")
+    .prepare(
+      "DELETE FROM products WHERE id = ?",
+    )
     .run(id);
 
   return result.changes > 0;
@@ -159,13 +254,17 @@ export function deleteProductRecord(id: string): boolean {
 
 export function getAllOrders(): OrderWithItems[] {
   const orders = db
-    .prepare("SELECT * FROM orders ORDER BY created_at DESC")
+    .prepare(
+      "SELECT * FROM orders ORDER BY created_at DESC",
+    )
     .all() as Order[];
 
   return orders.map((order) => ({
     ...order,
     items: db
-      .prepare("SELECT * FROM order_items WHERE order_id = ?")
+      .prepare(
+        "SELECT * FROM order_items WHERE order_id = ?",
+      )
       .all(order.id) as OrderItem[],
   }));
 }
@@ -174,7 +273,9 @@ export function getOrderById(
   id: string,
 ): OrderWithItems | undefined {
   const order = db
-    .prepare("SELECT * FROM orders WHERE id = ?")
+    .prepare(
+      "SELECT * FROM orders WHERE id = ?",
+    )
     .get(id) as Order | undefined;
 
   if (!order) return undefined;
@@ -182,7 +283,9 @@ export function getOrderById(
   return {
     ...order,
     items: db
-      .prepare("SELECT * FROM order_items WHERE order_id = ?")
+      .prepare(
+        "SELECT * FROM order_items WHERE order_id = ?",
+      )
       .all(order.id) as OrderItem[],
   };
 }
@@ -286,17 +389,19 @@ export function insertOrder(
 
 export function updateOrderRecord(
   id: string,
-  updates: Partial<Pick<
-    Order,
-    | "payment_status"
-    | "settlement_status"
-    | "order_status"
-    | "supplier_name"
-    | "supplier_order_reference"
-    | "tracking_number"
-    | "flutterwave_transaction_id"
-    | "flutterwave_reference"
-  >>,
+  updates: Partial<
+    Pick<
+      Order,
+      | "payment_status"
+      | "settlement_status"
+      | "order_status"
+      | "supplier_name"
+      | "supplier_order_reference"
+      | "tracking_number"
+      | "flutterwave_transaction_id"
+      | "flutterwave_reference"
+    >
+  >,
 ): OrderWithItems | undefined {
   const current = getOrderById(id);
 

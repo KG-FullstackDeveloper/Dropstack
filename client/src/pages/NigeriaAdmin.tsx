@@ -5,18 +5,14 @@ CheckCircle2,
 CircleDollarSign,
 CreditCard,
 ExternalLink,
-LayoutDashboard,
-Menu,
 Package,
 PackageCheck,
 Palette,
 Plus,
-RefreshCw,
 Search,
 Settings2,
 ShoppingCart,
 Store,
-Truck,
 Users,
 WalletCards,
 X,
@@ -32,10 +28,8 @@ type ReactNode,
 
 import WorkspaceSettings from "./admin/WorkSpaceSettings";
 
-import {
-DashboardAccountTools,
-DashboardFAB,
-} from "../components/DashboardUtilities";
+import AdminShell from "../components/admin/AdminShell";
+import type { SettingsSection } from "../components/settings/DashboardSettingsTypes";
 
 type PageKey =
 | "Overview"
@@ -121,66 +115,6 @@ type IconType = ComponentType<{
 size?: number;
 className?: string;
 }>;
-
-const NAVIGATION: {
-label: PageKey;
-icon: IconType;
-}[] = [
-{
-label: "Overview",
-icon: LayoutDashboard,
-},
-{
-label: "Stores",
-icon: Store,
-},
-{
-label: "Orders",
-icon: ShoppingCart,
-},
-{
-label: "Fulfillment",
-icon: PackageCheck,
-},
-{
-label: "Products",
-icon: Package,
-},
-{
-label: "Customers",
-icon: Users,
-},
-{
-label: "Analytics",
-icon: BarChart3,
-},
-{
-label: "Payments",
-icon: CreditCard,
-},
-{
-label: "Shipping",
-icon: Truck,
-},
-];
-
-const STORE_TOOLS: {
-label: PageKey;
-icon: IconType;
-}[] = [
-{
-label: "Storefront",
-icon: Store,
-},
-{
-label: "Theme Editor",
-icon: Palette,
-},
-{
-label: "Inventory",
-icon: Boxes,
-},
-];
 
 function loadData(): NigeriaData {
 try {
@@ -1650,231 +1584,62 @@ return (
 }
 
 export default function NigeriaAdmin() {
-const [page, setPage] = useState<PageKey>("Overview");
-const [mobileOpen, setMobileOpen] = useState(false);
-const [data, setData] = useState<NigeriaData>(() => loadData());
+  const [page, setPage] = useState<PageKey>("Overview");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("General");
+  const [data, setData] = useState<NigeriaData>(() => loadData());
 
-useEffect(() => {
-saveData(data);
-}, [data]);
+  useEffect(() => {
+    saveData(data);
+  }, [data]);
 
-function setOrders(orders: NigeriaOrder[]) {
-setData((current) => ({
-...current,
-orders,
-}));
-}
+  useEffect(() => {
+    const handleAiNavigation = (event: Event) => {
+      const customEvent = event as CustomEvent<{ page?: string }>;
+      const target = customEvent.detail?.page as PageKey | undefined;
+      const allowed: PageKey[] = ["Overview", "Stores", "Orders", "Fulfillment", "Products", "Customers", "Analytics", "Payments", "Shipping", "Storefront", "Theme Editor", "Inventory", "Settings"];
+      if (target && allowed.includes(target)) setPage(target);
+    };
+    window.addEventListener("meo:navigate", handleAiNavigation);
+    return () => window.removeEventListener("meo:navigate", handleAiNavigation);
+  }, []);
 
-function addProduct(product: NigeriaProduct) {
-setData((current) => ({
-...current,
-products: [product, ...current.products],
-}));
-}
+  function setOrders(orders: NigeriaOrder[]) {
+    setData((current) => ({ ...current, orders }));
+  }
 
-function renderPage() {
-switch (page) {
-case "Overview":
-return <Overview data={data} />;
+  function addProduct(product: NigeriaProduct) {
+    setData((current) => ({ ...current, products: [product, ...current.products] }));
+  }
 
-  case "Stores":
-    return <Stores data={data} />;
+  function renderPage() {
+    switch (page) {
+      case "Overview": return <Overview data={data} />;
+      case "Stores": return <Stores data={data} />;
+      case "Orders": return <Orders data={data} setOrders={setOrders} />;
+      case "Fulfillment": return <Fulfillment data={data} />;
+      case "Products": return <Products data={data} addProduct={addProduct} />;
+      case "Customers": return <Customers data={data} />;
+      case "Analytics": return <Analytics data={data} />;
+      case "Payments": return <Payments data={data} />;
+      case "Shipping": return <Shipping data={data} />;
+      case "Inventory": return <Inventory data={data} />;
+      case "Storefront": return <Storefront />;
+      case "Theme Editor": return <ThemeEditor />;
+      case "Settings": return <WorkspaceSettings workspaceKey="nigeria" workspaceName="Nigeria Ecommerce" initialSection={settingsSection} />;
+      default: return null;
+    }
+  }
 
-  case "Orders":
-    return <Orders data={data} setOrders={setOrders} />;
-
-  case "Fulfillment":
-    return <Fulfillment data={data} />;
-
-  case "Products":
-    return <Products data={data} addProduct={addProduct} />;
-
-  case "Customers":
-    return <Customers data={data} />;
-
-  case "Analytics":
-    return <Analytics data={data} />;
-
-  case "Payments":
-    return <Payments data={data} />;
-
-  case "Shipping":
-    return <Shipping data={data} />;
-
-  case "Inventory":
-    return <Inventory data={data} />;
-
-  case "Storefront":
-    return <Storefront />;
-
-  case "Theme Editor":
-    return <ThemeEditor />;
-
-  case "Settings":
-    return (
-      <WorkspaceSettings
-        workspaceKey="nigeria"
-        workspaceName="Nigeria Ecommerce"
-      />
-    );
-
-  default:
-    return null;
-}
-
-}
-
-return (
-<div className="min-h-screen bg-slate-50 text-slate-950">
-<aside
-className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0 ${
-  mobileOpen ? "translate-x-0" : "-translate-x-full"
-}`}
->
-<div className="flex h-16 items-center justify-between border-b border-slate-200 px-5">
-<div className="flex items-center gap-3">
-<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
-<Store size={18} />
-</div>
-
-        <div>
-          <p className="text-sm font-black">Nigeria Ecommerce</p>
-
-          <p className="text-[11px] text-slate-400">
-            Separate workspace
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setMobileOpen(false)}
-        className="rounded-lg p-2 text-slate-500 lg:hidden"
-      >
-        <X size={19} />
-      </button>
-    </div>
-
-    <nav className="flex-1 overflow-y-auto p-4">
-      <p className="px-3 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-        Dashboard
-      </p>
-
-      <div className="space-y-1">
-        {NAVIGATION.map(({ label, icon: Icon }) => {
-          const active = page === label;
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => {
-                setPage(label);
-                setMobileOpen(false);
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${
-                active
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Icon size={17} />
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="mt-7 px-3 pb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-        Store
-      </p>
-
-      <div className="space-y-1">
-        {STORE_TOOLS.map(({ label, icon: Icon }) => {
-          const active = page === label;
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => {
-                setPage(label);
-                setMobileOpen(false);
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
-                active
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Icon size={17} />
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-
-    <div className="border-t border-slate-200 p-4">
-      <button
-        type="button"
-        onClick={() => setPage("Settings")}
-        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
-          page === "Settings"
-            ? "bg-slate-950 text-white"
-            : "text-slate-600 hover:bg-slate-100"
-        }`}
-      >
-        <Settings2 size={17} />
-        Settings
-      </button>
-    </div>
-  </aside>
-
-  <div className="lg:pl-72">
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="rounded-xl p-2 text-slate-600 lg:hidden"
-        >
-          <Menu size={21} />
-        </button>
-
-        <div>
-          <p className="text-xs font-semibold text-slate-400">
-            Workspace
-          </p>
-
-          <p className="font-black">Nigeria Ecommerce</p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setData(loadData())}
-          title="Refresh data"
-          className="hidden rounded-xl border border-slate-200 p-2.5 text-slate-500 hover:bg-slate-50 sm:block"
-        >
-          <RefreshCw size={17} />
-        </button>
-
-        <DashboardAccountTools
-          workspace="nigeria"
-          profileRole="Administrator"
-        />
-      </div>
-    </header>
-
-    <main className="p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl">{renderPage()}</div>
-    </main>
-  </div>
-
-  <DashboardFAB workspace="nigeria" />
-</div>
-
-);
+  return (
+    <AdminShell
+      workspace="nigeria"
+      active={page}
+      onNavigate={(next) => setPage(next as PageKey)}
+      settingsSection={settingsSection}
+      onSettingsSectionChange={setSettingsSection}
+      profileName="Store Owner"
+    >
+      {renderPage()}
+    </AdminShell>
+  );
 }

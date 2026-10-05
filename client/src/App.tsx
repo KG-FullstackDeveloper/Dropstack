@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
@@ -15,12 +15,34 @@ import MEOAI from "./pages/MEOAI";
 import AdminLogin from "./pages/AdminLogin";
 import ProtectedRoute from "./components/admin/ProtectedRoute";
 import Profile from "./pages/Profile";
+import MEOAssistant from "./components/MEOAssistant";
+
+function PlatformAssistant() {
+  const location = useLocation();
+  const path = location.pathname;
+  const workspace = path.startsWith("/nigeria-admin") || path.startsWith("/nigeria-store") ? "nigeria" : "global";
+
+  const currentPage = path.startsWith("/nigeria-admin")
+    ? path.includes("/profile") ? "Profile" : "Nigeria Ecommerce"
+    : path.startsWith("/admin")
+      ? path.includes("/profile") ? "Profile" : path.includes("/ai") ? "AI Assistant" : "Global Ecommerce"
+      : path.startsWith("/nigeria-store") ? "Nigeria Storefront"
+      : path.startsWith("/store") ? "Global Storefront"
+      : path === "/shop" ? "Shop"
+      : path === "/about" ? "About"
+      : path === "/contact" ? "Contact"
+      : path === "/shipping" ? "Shipping"
+      : path === "/faq" ? "FAQ"
+      : path.startsWith("/product/") ? "Product"
+      : "Home";
+
+  return <MEOAssistant key={workspace} workspace={workspace} currentPage={currentPage} />;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public website */}
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/product/:id" element={<Product />} />
@@ -29,68 +51,20 @@ export default function App() {
         <Route path="/shipping" element={<Shipping />} />
         <Route path="/faq" element={<FAQ />} />
 
-        {/* Admin login */}
         <Route path="/admin/login" element={<AdminLogin />} />
 
-        {/* Global Ecommerce workspace */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminWorkspace />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/admin" element={<ProtectedRoute><AdminWorkspace /></ProtectedRoute>} />
+        <Route path="/admin/ai" element={<ProtectedRoute><MEOAI /></ProtectedRoute>} />
+        <Route path="/admin/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/nigeria-admin/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
-        {/* Global MEO AI */}
-        <Route
-          path="/admin/ai"
-          element={
-            <ProtectedRoute>
-              <MEOAI />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Global account profile */}
-        <Route
-          path="/admin/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Nigeria account profile */}
-        <Route
-          path="/nigeria-admin/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Global storefront */}
         <Route path="/store/*" element={<Store />} />
-
-        {/* Nigeria Ecommerce workspace */}
-        <Route
-          path="/nigeria-admin"
-          element={
-            <ProtectedRoute>
-              <NigeriaAdmin />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Nigeria storefront */}
+        <Route path="/nigeria-admin" element={<ProtectedRoute><NigeriaAdmin /></ProtectedRoute>} />
         <Route path="/nigeria-store" element={<NigeriaStore />} />
 
-        {/* Fallback */}
         <Route path="*" element={<Home />} />
       </Routes>
+      <PlatformAssistant />
     </BrowserRouter>
   );
 }

@@ -34,11 +34,13 @@ db.exec(`
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
+    sku TEXT,
     description TEXT NOT NULL,
     category TEXT NOT NULL,
     price REAL NOT NULL,
     currency TEXT DEFAULT 'USD',
     image_url TEXT,
+    images TEXT DEFAULT '[]',
     video_url TEXT,
     supplier_name TEXT,
     supplier_product_id TEXT,
@@ -50,6 +52,9 @@ db.exec(`
     other_cost REAL DEFAULT 0,
     profit_per_unit REAL DEFAULT 0,
     profit_margin REAL DEFAULT 0,
+    stock INTEGER DEFAULT 0,
+    low_stock_threshold INTEGER DEFAULT 0,
+    variants TEXT DEFAULT '[]',
     active INTEGER DEFAULT 1,
     created_at TEXT NOT NULL
   );
@@ -134,6 +139,12 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS admin_workspace_settings (
+    workspace TEXT PRIMARY KEY,
+    settings TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS login_events (
     id TEXT PRIMARY KEY,
     admin_id TEXT,
@@ -149,10 +160,6 @@ db.exec(`
 /*
 |--------------------------------------------------------------------------
 | SAFE ADMIN USER MIGRATION
-|--------------------------------------------------------------------------
-|
-| The existing database was created with an older admin_users table.
-| We add missing columns without deleting or replacing existing data.
 |--------------------------------------------------------------------------
 */
 
@@ -218,6 +225,74 @@ db.exec(`
 
 /*
 |--------------------------------------------------------------------------
+| SAFE PRODUCT MIGRATION
+|--------------------------------------------------------------------------
+|
+| Adds the new product-management fields to existing databases
+| without deleting or recreating the products table.
+|--------------------------------------------------------------------------
+*/
+
+const productColumns = db
+  .prepare("PRAGMA table_info(products)")
+  .all() as Array<{
+    name: string;
+  }>;
+
+const productColumnNames = new Set(
+  productColumns.map((column) => column.name)
+);
+
+if (!productColumnNames.has("sku")) {
+  db.exec(
+    "ALTER TABLE products ADD COLUMN sku TEXT"
+  );
+}
+
+if (!productColumnNames.has("images")) {
+  db.exec(
+    "ALTER TABLE products ADD COLUMN images TEXT DEFAULT '[]'"
+  );
+}
+
+if (!productColumnNames.has("stock")) {
+  db.exec(
+    "ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 0"
+  );
+}
+
+if (!productColumnNames.has("low_stock_threshold")) {
+  db.exec(
+    "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 0"
+  );
+}
+
+if (!productColumnNames.has("variants")) {
+  db.exec(
+    "ALTER TABLE products ADD COLUMN variants TEXT DEFAULT '[]'"
+  );
+}
+
+db.exec(`
+  UPDATE products
+  SET images = '[]'
+  WHERE images IS NULL;
+
+  UPDATE products
+  SET variants = '[]'
+  WHERE variants IS NULL;
+
+  UPDATE products
+  SET stock = 0
+  WHERE stock IS NULL;
+
+  UPDATE products
+  SET low_stock_threshold = 0
+  WHERE low_stock_threshold IS NULL;
+`);
+
+/*
+|--------------------------------------------------------------------------
 | AUTH INDEXES
 |--------------------------------------------------------------------------
 */
@@ -240,6 +315,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_login_events_created_at
     ON login_events(created_at);
+
+  CREATE INDEX IF NOT EXISTS idx_products_sku
+    ON products(sku);
+
+  CREATE INDEX IF NOT EXISTS idx_products_category
+    ON products(category);
+
+  CREATE INDEX IF NOT EXISTS idx_products_active
+    ON products(active);
 `);
 
 /*
@@ -264,12 +348,14 @@ if (productCount === 0) {
       id: "PRD-" + Date.now() + "-1",
       name: "Wireless Smart Device",
       slug: "wireless-smart-device",
+      sku: "MEO-ELEC-001",
       description:
         "A cutting-edge wireless smart device designed for modern lifestyles. Features seamless connectivity, long battery life, and intuitive controls.",
       category: "Electronics",
       price: 79.99,
       currency: "USD",
       image_url: null,
+      images: JSON.stringify([]),
       video_url: null,
       supplier_name: null,
       supplier_product_id: null,
@@ -282,6 +368,9 @@ if (productCount === 0) {
       profit_per_unit: 79.99 - 35 - 8 - 2,
       profit_margin:
         ((79.99 - 35 - 8 - 2) / 79.99) * 100,
+      stock: 25,
+      low_stock_threshold: 5,
+      variants: JSON.stringify([]),
       active: 1,
       created_at: now,
     },
@@ -289,12 +378,14 @@ if (productCount === 0) {
       id: "PRD-" + (Date.now() + 1) + "-2",
       name: "Skincare Essentials",
       slug: "skincare-essentials",
+      sku: "MEO-BEAU-001",
       description:
         "Premium skincare essentials formulated with natural ingredients for radiant, healthy-looking skin. Suitable for all skin types.",
       category: "Beauty & Skincare",
       price: 49.99,
       currency: "USD",
       image_url: null,
+      images: JSON.stringify([]),
       video_url: null,
       supplier_name: null,
       supplier_product_id: null,
@@ -307,6 +398,9 @@ if (productCount === 0) {
       profit_per_unit: 49.99 - 18 - 5 - 2,
       profit_margin:
         ((49.99 - 18 - 5 - 2) / 49.99) * 100,
+      stock: 40,
+      low_stock_threshold: 8,
+      variants: JSON.stringify([]),
       active: 1,
       created_at: now,
     },
@@ -314,12 +408,14 @@ if (productCount === 0) {
       id: "PRD-" + (Date.now() + 2) + "-3",
       name: "Pet Care Accessory",
       slug: "pet-care-accessory",
+      sku: "MEO-PET-001",
       description:
         "High-quality pet care accessory designed for your furry friends' comfort and well-being. Durable, safe, and easy to use.",
       category: "Pet Products",
       price: 34.99,
       currency: "USD",
       image_url: null,
+      images: JSON.stringify([]),
       video_url: null,
       supplier_name: null,
       supplier_product_id: null,
@@ -332,6 +428,9 @@ if (productCount === 0) {
       profit_per_unit: 34.99 - 12 - 4 - 1,
       profit_margin:
         ((34.99 - 12 - 4 - 1) / 34.99) * 100,
+      stock: 18,
+      low_stock_threshold: 5,
+      variants: JSON.stringify([]),
       active: 1,
       created_at: now,
     },
@@ -339,12 +438,14 @@ if (productCount === 0) {
       id: "PRD-" + (Date.now() + 3) + "-4",
       name: "Comfort Shapewear",
       slug: "comfort-shapewear",
+      sku: "MEO-SHAP-001",
       description:
         "Luxurious comfort shapewear crafted from premium breathable fabric. Provides excellent support and a flattering silhouette for everyday wear.",
       category: "Shapewear",
       price: 44.99,
       currency: "USD",
       image_url: null,
+      images: JSON.stringify([]),
       video_url: null,
       supplier_name: null,
       supplier_product_id: null,
@@ -357,6 +458,9 @@ if (productCount === 0) {
       profit_per_unit: 44.99 - 15 - 6 - 2,
       profit_margin:
         ((44.99 - 15 - 6 - 2) / 44.99) * 100,
+      stock: 30,
+      low_stock_threshold: 6,
+      variants: JSON.stringify([]),
       active: 1,
       created_at: now,
     },
@@ -367,11 +471,13 @@ if (productCount === 0) {
       id,
       name,
       slug,
+      sku,
       description,
       category,
       price,
       currency,
       image_url,
+      images,
       video_url,
       supplier_name,
       supplier_product_id,
@@ -383,6 +489,9 @@ if (productCount === 0) {
       other_cost,
       profit_per_unit,
       profit_margin,
+      stock,
+      low_stock_threshold,
+      variants,
       active,
       created_at
     )
@@ -390,11 +499,13 @@ if (productCount === 0) {
       @id,
       @name,
       @slug,
+      @sku,
       @description,
       @category,
       @price,
       @currency,
       @image_url,
+      @images,
       @video_url,
       @supplier_name,
       @supplier_product_id,
@@ -406,6 +517,9 @@ if (productCount === 0) {
       @other_cost,
       @profit_per_unit,
       @profit_margin,
+      @stock,
+      @low_stock_threshold,
+      @variants,
       @active,
       @created_at
     )

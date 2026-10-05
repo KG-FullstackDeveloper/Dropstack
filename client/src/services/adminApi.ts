@@ -357,6 +357,22 @@ export async function getMe(): Promise<AdminUser> {
   );
 }
 
+export async function updateProfile(
+  name: string,
+  phone?: string | null,
+): Promise<AdminUser> {
+  return request<AdminUser>(
+    "/auth/profile",
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        name,
+        phone: phone ?? null,
+      }),
+    },
+  );
+}
+
 export async function changePassword(
   currentPassword: string,
   newPassword: string,

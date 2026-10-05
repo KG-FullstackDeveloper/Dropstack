@@ -1,10 +1,8 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../middleware/auth";
+import { db as globalDb } from "../database/db";
 
-import {
-  getAllOrders,
-  getAllProducts,
-} from "../data/store";
+type Workspace = "global" | "nigeria";
 
 type ChatRole = "system" | "user" | "assistant";
 
@@ -30,100 +28,154 @@ ai.use("*", authMiddleware);
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const DEFAULT_MODEL = "qwen/qwen3.8-27b";
 
-function buildBusinessContext() {
-  const orders = getAllOrders();
-  const products = getAllProducts();
+function buildBusinessContext(workspace: Workspace) {
+  if (workspace === "nigeria") {
+    const products = globalDb.prepare(`
+      SELECT p.*, COALESCE(i.quantity, p.inventory) AS inventory
+      FROM nigeria_products p
+      LEFT JOIN nigeria_inventory i ON i.product_id = p.id
+      ORDER BY p.created_at DESC
+    `).all() as any[];
 
-  const paidOrders = orders.filter(
-    (order) => order.payment_status === "confirmed",
-  );
+    const orders = globalDb.prepare(`
+      SELECT * FROM nigeria_orders ORDER BY created_at DESC LIMIT 100
+    `).all() as any[];
 
-  const revenue = paidOrders.reduce(
-    (sum, order) => sum + Number(order.total || 0),
-    0,
-  );
+    const customers = globalDb.prepare(`
+      SELECT * FROM nigeria_customers ORDER BY created_at DESC
+    `).all() as any[];
 
-  const profit = paidOrders.reduce(
-    (sum, order) =>
-      sum +
-      order.items.reduce(
-        (itemSum, item) => itemSum + Number(item.profit || 0),
-        0,
-      ),
-    0,
-  );
+    const orderItems = globalDb.prepare(`
+      SELECT oi.*
+      FROM nigeria_order_items oi
+      INNER JOIN nigeria_orders o ON o.id = oi.order_id
+      WHERE o.payment_status = 'confirmed'
+    `).all() as any[];
 
-  const unitsSold = paidOrders.reduce(
-    (sum, order) =>
-      sum +
-      order.items.reduce(
-        (itemSum, item) => itemSum + Number(item.quantity || 0),
-        0,
-      ),
-    0,
-  );
+    const paidOrders = orders.filter((order) => order.payment_status === "confirmed");
+    const revenue = paidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const profit = paidOrders.reduce((sum, order) => sum + Number(order.profit || 0), 0);
+    const unitsSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
-  const customers = new Set(
-    paidOrders
-      .map((order) => order.customer_email?.trim().toLowerCase())
-      .filter(Boolean),
-  );
-
-  const productPerformance = new Map<
-    string,
-    {
-      name: string;
-      units: number;
-      revenue: number;
-      profit: number;
-    }
-  >();
-
-  for (const order of paidOrders) {
-    for (const item of order.items) {
+    const productPerformance = new Map<string, { name: string; units: number; revenue: number; profit: number }>();
+    for (const item of orderItems) {
       const existing = productPerformance.get(item.product_id);
-
       if (existing) {
         existing.units += Number(item.quantity || 0);
-        existing.revenue += Number(item.total || 0);
+        existing.revenue += Number(item.subtotal || 0);
         existing.profit += Number(item.profit || 0);
       } else {
         productPerformance.set(item.product_id, {
           name: item.product_name,
           units: Number(item.quantity || 0),
-          revenue: Number(item.total || 0),
+          revenue: Number(item.subtotal || 0),
           profit: Number(item.profit || 0),
         });
       }
+    }
+
+    return {
+      workspace: "Nigeria Ecommerce",
+      workspaceKey: "nigeria",
+      dataSource: "Nigeria Ecommerce database only",
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalOrders: orders.length,
+        confirmedOrders: paidOrders.length,
+        totalProducts: products.length,
+        activeProducts: products.filter((product) => product.active === 1).length,
+        uniqueCustomers: customers.length,
+        revenue,
+        profit,
+        unitsSold,
+        averageOrderValue: paidOrders.length ? revenue / paidOrders.length : 0,
+        profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0,
+      },
+      products: products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        currency: product.currency,
+        supplierCost: product.supplier_cost,
+        shippingCost: product.shipping_cost,
+        otherCost: product.other_cost,
+        inventory: product.inventory,
+        profitPerUnit: product.profit_per_unit,
+        profitMargin: product.profit_margin,
+        active: product.active === 1,
+        supplier: product.supplier_name,
+      })),
+      productPerformance: Array.from(productPerformance.values()),
+      orders: orders.map((order) => ({
+        id: order.id,
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+        country: order.country,
+        currency: order.currency,
+        total: order.total,
+        profit: order.profit,
+        paymentStatus: order.payment_status,
+        settlementStatus: order.settlement_status,
+        orderStatus: order.order_status,
+        createdAt: order.created_at,
+      })),
+    };
+  }
+
+  const orders = globalDb.prepare(`
+    SELECT * FROM orders ORDER BY created_at DESC LIMIT 100
+  `).all() as any[];
+  const products = globalDb.prepare(`
+    SELECT * FROM products ORDER BY created_at DESC
+  `).all() as any[];
+  const customers = globalDb.prepare(`SELECT * FROM customers ORDER BY created_at DESC`).all() as any[];
+  const orderItems = globalDb.prepare(`
+    SELECT oi.*
+    FROM order_items oi
+    INNER JOIN orders o ON o.id = oi.order_id
+    WHERE o.payment_status = 'confirmed'
+  `).all() as any[];
+
+  const paidOrders = orders.filter((order) => order.payment_status === "confirmed");
+  const revenue = paidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const profit = orderItems.reduce((sum, item) => sum + Number(item.profit || 0), 0);
+  const unitsSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+  const productPerformance = new Map<string, { name: string; units: number; revenue: number; profit: number }>();
+  for (const item of orderItems) {
+    const existing = productPerformance.get(item.product_id);
+    if (existing) {
+      existing.units += Number(item.quantity || 0);
+      existing.revenue += Number(item.total || 0);
+      existing.profit += Number(item.profit || 0);
+    } else {
+      productPerformance.set(item.product_id, {
+        name: item.product_name,
+        units: Number(item.quantity || 0),
+        revenue: Number(item.total || 0),
+        profit: Number(item.profit || 0),
+      });
     }
   }
 
   return {
     workspace: "Global Ecommerce",
+    workspaceKey: "global",
     dataSource: "Global Ecommerce database only",
     generatedAt: new Date().toISOString(),
-
     summary: {
       totalOrders: orders.length,
       confirmedOrders: paidOrders.length,
       totalProducts: products.length,
-      activeProducts: products.filter(
-        (product) => product.active === 1,
-      ).length,
-      uniqueCustomers: customers.size,
+      activeProducts: products.filter((product) => product.active === 1).length,
+      uniqueCustomers: customers.length,
       revenue,
       profit,
       unitsSold,
-      averageOrderValue:
-        paidOrders.length > 0
-          ? revenue / paidOrders.length
-          : 0,
-      profitMargin:
-        revenue > 0
-          ? (profit / revenue) * 100
-          : 0,
+      averageOrderValue: paidOrders.length ? revenue / paidOrders.length : 0,
+      profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0,
     },
-
     products: products.map((product) => ({
       id: product.id,
       name: product.name,
@@ -133,43 +185,29 @@ function buildBusinessContext() {
       supplierCost: product.supplier_cost,
       shippingCost: product.shipping_cost,
       otherCost: product.other_cost,
+      inventory: product.inventory,
       profitPerUnit: product.profit_per_unit,
       profitMargin: product.profit_margin,
       active: product.active === 1,
       supplier: product.supplier_name,
-      warehouseCountry: product.warehouse_country,
-      processingTime: product.processing_time,
-      deliveryTime: product.delivery_time,
     })),
-
-    productPerformance: Array.from(
-      productPerformance.values(),
-    ),
-
-    orders: orders.slice(0, 100).map((order) => ({
+    productPerformance: Array.from(productPerformance.values()),
+    orders: orders.map((order) => ({
       id: order.id,
       customerName: order.customer_name,
       customerEmail: order.customer_email,
       country: order.country,
       currency: order.currency,
       total: order.total,
+      profit: order.profit,
       paymentStatus: order.payment_status,
       settlementStatus: order.settlement_status,
       orderStatus: order.order_status,
       createdAt: order.created_at,
-      items: order.items.map((item) => ({
-        productId: item.product_id,
-        productName: item.product_name,
-        quantity: item.quantity,
-        sellingPrice: item.selling_price,
-        total: item.total,
-        profit: item.profit,
-      })),
     })),
   };
 }
-
-function buildSystemPrompt(context: ReturnType<typeof buildBusinessContext>) {
+function buildSystemPrompt(context: ReturnType<typeof buildBusinessContext>, currentPage: string) {
   return `
 You are MEO Assistant, the intelligent AI assistant built into the MEO ecommerce platform.
 
@@ -311,7 +349,10 @@ Use these links naturally when they help. Do not invent navigation targets.
 
 CURRENT PLATFORM/BUSINESS CONTEXT:
 
-[INSERT THE CURRENT MEO PLATFORM CONTEXT AND ANY WORKSPACE-SCOPED DATA HERE]
+Current page: ${currentPage}
+Current workspace: ${context.workspace}
+
+The current workspace is the business boundary for business-data questions. Platform-wide questions can use MEO application knowledge, but business figures must come only from the current workspace dataset.
 
 ${JSON.stringify(context, null, 2)}
 `;
@@ -360,8 +401,12 @@ ai.post("/", async (c) => {
 
     const body = await c.req.json<{
       messages?: unknown;
+      workspace?: Workspace;
+      currentPage?: string;
     }>();
 
+    const workspace: Workspace = body.workspace === "nigeria" ? "nigeria" : "global";
+    const currentPage = String(body.currentPage || "Overview");
     const history = cleanHistory(body.messages);
 
     if (history.length === 0) {
@@ -374,7 +419,7 @@ ai.post("/", async (c) => {
       );
     }
 
-    const context = buildBusinessContext();
+    const context = buildBusinessContext(workspace);
 
     const model =
       process.env.GROQ_MODEL?.trim() ||
@@ -383,7 +428,7 @@ ai.post("/", async (c) => {
     const groqMessages = [
       {
         role: "system" as const,
-        content: buildSystemPrompt(context),
+        content: buildSystemPrompt(context, currentPage),
       },
       ...history,
     ];

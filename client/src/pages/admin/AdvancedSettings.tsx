@@ -26,7 +26,7 @@ import type {
 interface AdvancedSettingsProps {
   workspaceKey: "global" | "nigeria";
   initialSettings: DashboardSettingsData;
-  onSave: (settings: DashboardSettingsData) => void;
+  onSave: (settings: DashboardSettingsData) => Promise<void> | void;
   initialSection?: SettingsSection;
 }
 
@@ -321,6 +321,8 @@ export default function AdvancedSettings({
     useState<SettingsSection>(initialSection);
 
   const [saved, setSaved] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     setSettings(initialSettings);
@@ -349,9 +351,18 @@ export default function AdvancedSettings({
     setSaved(false);
   };
 
-  const save = () => {
-    onSave(settings);
-    setSaved(true);
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(settings);
+      setSaved(true);
+    } catch (error) {
+      setSaved(false);
+      setSaveError(error instanceof Error ? error.message : "Couldn&apos;t save changes.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const currentSectionIndex = useMemo(
@@ -1040,7 +1051,7 @@ export default function AdvancedSettings({
             <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  {saved ? "All changes saved" : "You have unsaved changes"}
+                  {saveError ? saveError : saved ? "All changes saved" : "You have unsaved changes"}
                 </p>
 
                 <p className="mt-1 text-xs text-slate-500">
@@ -1070,7 +1081,7 @@ export default function AdvancedSettings({
                     className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
                   >
                     <Save size={16} />
-                    Save changes
+                    {saving ? "Saving…" : "Save changes"}
                   </button>
                 )}
               </div>

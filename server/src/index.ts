@@ -16,6 +16,7 @@ import businessHealth from "./routes/businessHealth";
 import market from "./routes/market";
 import ai from "./routes/ai";
 import nigeria from "./routes/nigeria";
+import settings from "./routes/settings";
 
 import { authMiddleware } from "./middleware/auth";
 
@@ -91,6 +92,11 @@ app.get("/api/health", (c) => {
 app.route(
   "/api/auth",
   auth
+);
+
+app.route(
+  "/api/settings",
+  settings
 );
 
 /*

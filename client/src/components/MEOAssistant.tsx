@@ -35,6 +35,13 @@ interface ApiResponse {
   error?: string;
 }
 
+type AssistantWorkspace = "global" | "nigeria";
+
+interface MEOAssistantProps {
+  workspace?: AssistantWorkspace;
+  currentPage?: string;
+}
+
 function createId() {
   return `${Date.now()}-${Math.random()
     .toString(36)
@@ -69,7 +76,7 @@ const starterPrompts = [
   "Analyze my products",
 ];
 
-export default function MEOAssistant() {
+export default function MEOAssistant({ workspace = "global", currentPage = "Overview" }: MEOAssistantProps) {
   const [open, setOpen] =
     useState(false);
 
@@ -105,7 +112,9 @@ export default function MEOAssistant() {
   }, [messages, loading]);
 
   useEffect(() => {
-    const openAssistant = () => {
+    const openAssistant = (event?: Event) => {
+      const detail = (event as CustomEvent<{ workspace?: AssistantWorkspace }> | undefined)?.detail;
+      if (detail?.workspace && detail.workspace !== workspace) return;
       setOpen(true);
 
       window.setTimeout(() => {
@@ -130,8 +139,8 @@ export default function MEOAssistant() {
       if (
         customEvent.detail?.command ===
           "open-assistant" &&
-        customEvent.detail?.workspace ===
-          "global"
+        (!customEvent.detail?.workspace ||
+          customEvent.detail.workspace === workspace)
       ) {
         setOpen(true);
 
@@ -205,6 +214,8 @@ export default function MEOAssistant() {
             },
             credentials: "include",
             body: JSON.stringify({
+              workspace,
+              currentPage,
               messages: [
                 ...previousMessages.map((item) => ({
                   role: item.role,
@@ -341,9 +352,8 @@ export default function MEOAssistant() {
   }
 
   return (
-    <div className="fixed inset-0 z-[120]">
-      <button type="button" aria-label="Close MEO Assistant" onClick={() => setOpen(false)} className="absolute inset-0 bg-slate-950/20 backdrop-blur-[1px]" />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-[460px] flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+    <div className="pointer-events-none fixed inset-y-0 right-0 z-[120] flex w-full justify-end">
+      <div className="pointer-events-auto flex h-full w-full max-w-[460px] flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-slate-950">
@@ -366,14 +376,14 @@ export default function MEOAssistant() {
               </div>
 
               <p className="text-xs text-slate-500">
-                Global Ecommerce
+                {workspace === "nigeria" ? "Nigeria Ecommerce" : "Global Ecommerce"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
             <Link
-              to="/admin/ai"
+              to={workspace === "nigeria" ? "/nigeria-admin" : "/admin/ai"}
               onClick={() => setOpen(false)}
               className="rounded-xl px-2.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-900"
             >

@@ -33,11 +33,8 @@ import type { MarketInfo } from "../types/market";
 import type { CartItem } from "../types/cart";
 import type { StoreConfig } from "../types/store";
 
-import { DEFAULT_STORE_CONFIG } from "../themes/registry";
-import {
-  getProducts,
-  getStoreConfig,
-} from "../services/api";
+import { DEFAULT_STORE_CONFIG } from "../types/themes/registry";
+import { getProducts, getStoreConfig } from "../services/api";
 import { detectMarket } from "../services/market";
 import {
   addToCart,
@@ -92,7 +89,7 @@ const DEMO_PRODUCTS = [
       "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
     category: "Serums",
     inventory: 12,
-   created_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "demo-daily-cream",
@@ -214,7 +211,8 @@ function getImages(product: Product) {
 }
 
 function getDelivery(product: Product) {
-  const value = (product as DemoProduct & { delivery_time?: string }).delivery_time;
+  const value = (product as DemoProduct & { delivery_time?: string })
+    .delivery_time;
   return typeof value === "string" && value.trim() ? value : "3–5 days";
 }
 
@@ -242,15 +240,12 @@ function storeTagline(store: StoreConfig, slug?: string) {
 export default function Store() {
   const { slug } = useParams<{ slug: string }>();
 
-  const [store, setStore] = useState<StoreConfig>(
-    DEFAULT_STORE_CONFIG,
-  );
+  const [store, setStore] = useState<StoreConfig>(DEFAULT_STORE_CONFIG);
   const [products, setProducts] = useState<Product[]>([]);
   const [market, setMarket] = useState<MarketInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<Page>("home");
-  const [selectedProduct, setSelectedProduct] =
-    useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -279,12 +274,11 @@ export default function Store() {
 
     async function loadStore() {
       try {
-        const [storeData, productData, marketData] =
-          await Promise.all([
-            getStoreConfig(),
-            getProducts(),
-            detectMarket(),
-          ]);
+        const [storeData, productData, marketData] = await Promise.all([
+          getStoreConfig(),
+          getProducts(),
+          detectMarket(),
+        ]);
 
         if (!mounted) return;
 
@@ -342,12 +336,7 @@ export default function Store() {
   }, [products]);
 
   const cartSummary = useMemo(
-    () =>
-      getCartSummary(
-        cart,
-        activeCountry,
-        activeCurrency,
-      ),
+    () => getCartSummary(cart, activeCountry, activeCurrency),
     [cart, activeCountry, activeCurrency],
   );
 
@@ -736,19 +725,19 @@ function MobileMenu({
 }
 
 function HomePage({
-products,
-loading,
-tagline,
-onCatalog,
-onProduct,
-onAdd,
+  products,
+  loading,
+  tagline,
+  onCatalog,
+  onProduct,
+  onAdd,
 }: {
-products: Product[];
-loading: boolean;
-tagline: string;
-onCatalog: () => void;
-onProduct: (product: Product) => void;
-onAdd: (product: Product) => void;
+  products: Product[];
+  loading: boolean;
+  tagline: string;
+  onCatalog: () => void;
+  onProduct: (product: Product) => void;
+  onAdd: (product: Product) => void;
 }) {
   return (
     <main>
@@ -928,7 +917,8 @@ onAdd: (product: Product) => void;
               Good ingredients. Clear purpose.
             </h2>
             <p className="mt-5 max-w-md text-base leading-7 text-black/52">
-              Nothing to decode. Each ingredient has a job and each step earns its place.
+              Nothing to decode. Each ingredient has a job and each step earns
+              its place.
             </p>
             <button
               type="button"
@@ -979,7 +969,8 @@ onAdd: (product: Product) => void;
               Less noise. Better rituals.
             </h2>
             <p className="mt-6 max-w-md text-base leading-7 text-white/55">
-              Build a routine you can actually keep. Start with the basics, then add only what your skin needs.
+              Build a routine you can actually keep. Start with the basics, then
+              add only what your skin needs.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
@@ -1009,11 +1000,10 @@ onAdd: (product: Product) => void;
             ))}
           </div>
           <blockquote className="mt-7 max-w-4xl font-serif text-3xl leading-[1.03] tracking-[-0.04em] sm:text-4xl lg:text-5xl">
-            “The whole routine feels considered. Nothing is shouting for attention, and my skin feels better for it.”
+            “The whole routine feels considered. Nothing is shouting for
+            attention, and my skin feels better for it.”
           </blockquote>
-          <p className="mt-5 text-sm text-black/40">
-            Verified customer
-          </p>
+          <p className="mt-5 text-sm text-black/40">Verified customer</p>
         </div>
       </section>
     </main>
@@ -1074,7 +1064,8 @@ function CatalogPage({
               The collection.
             </h1>
             <p className="max-w-md text-base leading-7 text-black/52">
-              A focused edit of everyday skincare, from first cleanse to final step.
+              A focused edit of everyday skincare, from first cleanse to final
+              step.
             </p>
           </div>
         </div>
@@ -1260,9 +1251,7 @@ function ProductPage({
   onAdd: (product: Product) => void;
 }) {
   const images = getImages(product);
-  const related = products
-    .filter((item) => item.id !== product.id)
-    .slice(0, 4);
+  const related = products.filter((item) => item.id !== product.id).slice(0, 4);
   const [imageIndex, setImageIndex] = useState(0);
   const [subscribe, setSubscribe] = useState(false);
   const [openDetails, setOpenDetails] = useState<string | null>(null);
@@ -1283,15 +1272,11 @@ function ProductPage({
   }, []);
 
   function previousImage() {
-    setImageIndex((index) =>
-      index === 0 ? images.length - 1 : index - 1,
-    );
+    setImageIndex((index) => (index === 0 ? images.length - 1 : index - 1));
   }
 
   function nextImage() {
-    setImageIndex((index) =>
-      index === images.length - 1 ? 0 : index + 1,
-    );
+    setImageIndex((index) => (index === images.length - 1 ? 0 : index + 1));
   }
 
   function touchStart(event: TouchEvent<HTMLDivElement>) {
@@ -1417,9 +1402,7 @@ function ProductPage({
                   <Star key={index} size={14} fill="currentColor" />
                 ))}
               </div>
-              <span className="text-xs text-black/40">
-                4.9 · 148 reviews
-              </span>
+              <span className="text-xs text-black/40">4.9 · 148 reviews</span>
             </div>
 
             <div className="mt-6 text-xl font-semibold">
@@ -1437,9 +1420,7 @@ function ProductPage({
                 className="flex min-h-11 w-full items-center justify-between gap-5 text-left"
               >
                 <div>
-                  <p className="text-sm font-semibold">
-                    Subscribe & save 10%
-                  </p>
+                  <p className="text-sm font-semibold">Subscribe & save 10%</p>
                   <p className="mt-1 text-xs leading-5 text-black/42">
                     Flexible delivery. Skip when you need to.
                   </p>
@@ -1493,9 +1474,7 @@ function ProductPage({
                   ? `${getStock(product)} available`
                   : "Currently unavailable"}
               </span>
-              <span>
-                Delivery {getDelivery(product)}
-              </span>
+              <span>Delivery {getDelivery(product)}</span>
             </div>
 
             <div className="mt-5 border-t border-black/10">
@@ -1509,7 +1488,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Ingredient details will appear here as product data is completed.
+                  Ingredient details will appear here as product data is
+                  completed.
                 </p>
               </Accordion>
 
@@ -1523,7 +1503,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  The formula is designed around a clear purpose, with ingredients chosen to fit a consistent daily routine.
+                  The formula is designed around a clear purpose, with
+                  ingredients chosen to fit a consistent daily routine.
                 </p>
               </Accordion>
 
@@ -1537,7 +1518,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Follow the product directions and introduce new actives gradually.
+                  Follow the product directions and introduce new actives
+                  gradually.
                 </p>
               </Accordion>
 
@@ -1551,7 +1533,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Delivery estimates are shown for your detected market. Store policies apply to returns and refunds.
+                  Delivery estimates are shown for your detected market. Store
+                  policies apply to returns and refunds.
                 </p>
               </Accordion>
             </div>
@@ -1636,9 +1619,7 @@ function Accordion({
         />
       </button>
       {open && (
-        <div className="pb-5 text-sm leading-6 text-black/50">
-          {children}
-        </div>
+        <div className="pb-5 text-sm leading-6 text-black/50">{children}</div>
       )}
     </div>
   );
@@ -1744,10 +1725,7 @@ function CartPage({
                     <button
                       type="button"
                       onClick={() =>
-                        onQuantity(
-                          item.product.id,
-                          item.quantity + 1,
-                        )
+                        onQuantity(item.product.id, item.quantity + 1)
                       }
                       className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10"
                       aria-label="Increase quantity"
@@ -1806,9 +1784,7 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className={large ? "font-semibold" : "text-white/45"}>
-        {label}
-      </span>
+      <span className={large ? "font-semibold" : "text-white/45"}>{label}</span>
       <span className={large ? "text-xl font-bold" : "font-semibold"}>
         {value}
       </span>
@@ -1932,10 +1908,7 @@ function CartPanel({
                       <button
                         type="button"
                         onClick={() =>
-                          onQuantity(
-                            item.product.id,
-                            item.quantity + 1,
-                          )
+                          onQuantity(item.product.id, item.quantity + 1)
                         }
                         className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10"
                         aria-label="Increase quantity"
@@ -2022,7 +1995,8 @@ function ContactPage({ brandName }: { brandName: string }) {
             </h1>
           </div>
           <p className="max-w-xl text-base leading-7 text-black/52 lg:justify-self-end">
-            Questions about a product, an order or building your routine? Reach {brandName} here.
+            Questions about a product, an order or building your routine? Reach{" "}
+            {brandName} here.
           </p>
         </div>
       </section>
@@ -2056,7 +2030,8 @@ function ContactPage({ brandName }: { brandName: string }) {
                 Message received.
               </h2>
               <p className="mt-3 max-w-md text-base leading-7 text-black/48">
-                Thanks for reaching out. Your message has been captured for this storefront preview.
+                Thanks for reaching out. Your message has been captured for this
+                storefront preview.
               </p>
               <button
                 type="button"

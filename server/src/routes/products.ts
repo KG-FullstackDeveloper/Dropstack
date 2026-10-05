@@ -11,7 +11,11 @@ import {
   updateProductRecord,
 } from "../data/store";
 import { createId } from "../utils/id";
-import type { CreateProductInput, Product } from "../types/product";
+import type {
+  CreateProductInput,
+  Product,
+  ProductVariant,
+} from "../types/product";
 
 const productsRoute = new Hono();
 
@@ -22,8 +26,49 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   if (value === undefined || value === null) return null;
+
   const valueString = String(value).trim();
+
   return valueString ? valueString : null;
+}
+
+function normalizeImages(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function normalizeVariants(value: unknown): ProductVariant[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((variant) => {
+      if (!variant || typeof variant !== "object") return null;
+
+      const item = variant as Record<string, unknown>;
+
+      return {
+        id: String(item.id || createId("variant")),
+        name: String(item.name || "").trim(),
+        value: String(item.value || "").trim(),
+        price: String(item.price ?? "").trim(),
+        sku: String(item.sku || "").trim(),
+        stock: String(item.stock ?? "0").trim(),
+      };
+    })
+    .filter(
+      (variant): variant is ProductVariant =>
+        Boolean(
+          variant &&
+            (variant.name ||
+              variant.value ||
+              variant.price ||
+              variant.sku ||
+              variant.stock),
+        ),
+    );
 }
 
 function buildProduct(input: CreateProductInput): Product {
@@ -31,36 +76,71 @@ function buildProduct(input: CreateProductInput): Product {
   const supplierCost = numberOrZero(input.supplier_cost);
   const shippingCost = numberOrZero(input.shipping_cost);
   const otherCost = numberOrZero(input.other_cost);
-  const profitPerUnit = price - supplierCost - shippingCost - otherCost;
-  const profitMargin = price > 0 ? (profitPerUnit / price) * 100 : 0;
+
+  const profitPerUnit =
+    price - supplierCost - shippingCost - otherCost;
+
+  const profitMargin =
+    price > 0 ? (profitPerUnit / price) * 100 : 0;
+
   const now = new Date().toISOString();
 
   return {
     id: createId("product"),
     name: String(input.name || "").trim(),
     slug: String(input.slug || input.name || "").trim(),
+    sku: stringOrNull(input.sku),
     description: String(input.description || "").trim(),
     category: String(input.category || "Other").trim(),
     price,
-    currency: String(input.currency || "USD").trim().toUpperCase(),
+    currency: String(input.currency || "USD")
+      .trim()
+      .toUpperCase(),
+
     image_url: stringOrNull(input.image_url),
+    images: normalizeImages(input.images),
+
     video_url: stringOrNull(input.video_url),
+
     supplier_name: stringOrNull(input.supplier_name),
-    supplier_product_id: stringOrNull(input.supplier_product_id),
+    supplier_product_id: stringOrNull(
+      input.supplier_product_id,
+    ),
+
     warehouse_country: input.warehouse_country
-      ? String(input.warehouse_country).trim().toUpperCase()
+      ? String(input.warehouse_country)
+          .trim()
+          .toUpperCase()
       : null,
+
     processing_time: stringOrNull(input.processing_time),
     delivery_time: stringOrNull(input.delivery_time),
+
     supplier_cost: supplierCost,
     shipping_cost: shippingCost,
     other_cost: otherCost,
+
     profit_per_unit: profitPerUnit,
     profit_margin: profitMargin,
+
+    stock: Math.max(0, numberOrZero(input.stock)),
+    low_stock_threshold: Math.max(
+      0,
+      numberOrZero(input.low_stock_threshold),
+    ),
+
+    variants: normalizeVariants(input.variants),
+
     active: 1,
     created_at: now,
   };
 }
+
+/*
+|--------------------------------------------------------------------------
+| PUBLIC PRODUCTS
+|--------------------------------------------------------------------------
+*/
 
 productsRoute.get("/", (c) => {
   return c.json({
@@ -68,6 +148,12 @@ productsRoute.get("/", (c) => {
     data: getActiveProducts(),
   });
 });
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN PRODUCTS
+|--------------------------------------------------------------------------
+*/
 
 productsRoute.get("/all", authMiddleware, (c) => {
   return c.json({
@@ -116,6 +202,12 @@ productsRoute.get("/:id", (c) => {
   });
 });
 
+/*
+|--------------------------------------------------------------------------
+| CREATE PRODUCT
+|--------------------------------------------------------------------------
+*/
+
 productsRoute.post("/", authMiddleware, async (c) => {
   let body: CreateProductInput;
 
@@ -137,33 +229,45 @@ productsRoute.post("/", authMiddleware, async (c) => {
 
   if (!name) {
     return c.json(
-      { success: false, error: "Product name is required." },
+      {
+        success: false,
+        error: "Product name is required.",
+      },
       400,
     );
   }
 
   if (!description) {
     return c.json(
-      { success: false, error: "Product description is required." },
+      {
+        success: false,
+        error: "Product description is required.",
+      },
       400,
     );
   }
 
   if (!Number.isFinite(price) || price <= 0) {
     return c.json(
-      { success: false, error: "Product price must be a valid positive number." },
+      {
+        success: false,
+        error:
+          "Product price must be a valid positive number.",
+      },
       400,
     );
   }
 
   const slug = String(body.slug || name).trim();
+
   const existing = getProductBySlug(slug);
 
   if (existing) {
     return c.json(
       {
         success: false,
-        error: "A product with this slug already exists.",
+        error:
+          "A product with this slug already exists.",
       },
       409,
     );
@@ -181,6 +285,7 @@ productsRoute.post("/", authMiddleware, async (c) => {
     insertProduct(product);
   } catch (error) {
     console.error("Product create error:", error);
+
     return c.json(
       {
         success: false,
@@ -199,160 +304,336 @@ productsRoute.post("/", authMiddleware, async (c) => {
   );
 });
 
-productsRoute.patch("/:id", authMiddleware, async (c) => {
-  const id = c.req.param("id");
-  const current = getProductById(id);
+/*
+|--------------------------------------------------------------------------
+| UPDATE PRODUCT
+|--------------------------------------------------------------------------
+*/
 
-  if (!current) {
-    return c.json(
-      {
-        success: false,
-        error: "Product not found.",
-      },
-      404,
-    );
-  }
+productsRoute.patch(
+  "/:id",
+  authMiddleware,
+  async (c) => {
+    const id = c.req.param("id");
 
-  let body: Partial<CreateProductInput> & { active?: number };
+    const current = getProductById(id);
 
-  try {
-    body = await c.req.json<Partial<CreateProductInput> & { active?: number }>();
-  } catch {
-    return c.json(
-      {
-        success: false,
-        error: "Invalid product update data.",
-      },
-      400,
-    );
-  }
-
-  const updates: Partial<Product> = {};
-
-  if (body.name !== undefined) {
-    const name = String(body.name).trim();
-    if (!name) {
-      return c.json(
-        { success: false, error: "Product name cannot be empty." },
-        400,
-      );
-    }
-    updates.name = name;
-  }
-
-  if (body.slug !== undefined) {
-    const slug = String(body.slug).trim();
-    if (!slug) {
-      return c.json(
-        { success: false, error: "Product slug cannot be empty." },
-        400,
-      );
-    }
-
-    const existing = getProductBySlug(slug);
-    if (existing && existing.id !== id) {
+    if (!current) {
       return c.json(
         {
           success: false,
-          error: "A product with this slug already exists.",
+          error: "Product not found.",
         },
-        409,
+        404,
       );
     }
 
-    updates.slug = slug;
-  }
+    let body: Partial<CreateProductInput> & {
+      active?: number;
+    };
 
-  if (body.description !== undefined) updates.description = String(body.description).trim();
-  if (body.category !== undefined) updates.category = String(body.category).trim();
-  if (body.currency !== undefined) updates.currency = String(body.currency).trim().toUpperCase();
-  if (body.image_url !== undefined) updates.image_url = stringOrNull(body.image_url);
-  if (body.video_url !== undefined) updates.video_url = stringOrNull(body.video_url);
-  if (body.supplier_name !== undefined) updates.supplier_name = stringOrNull(body.supplier_name);
-  if (body.supplier_product_id !== undefined) updates.supplier_product_id = stringOrNull(body.supplier_product_id);
-  if (body.warehouse_country !== undefined) {
-    updates.warehouse_country = stringOrNull(body.warehouse_country)?.toUpperCase() ?? null;
-  }
-  if (body.processing_time !== undefined) updates.processing_time = stringOrNull(body.processing_time);
-  if (body.delivery_time !== undefined) updates.delivery_time = stringOrNull(body.delivery_time);
-
-  if (body.price !== undefined) {
-    const price = Number(body.price);
-    if (!Number.isFinite(price) || price <= 0) {
+    try {
+      body =
+        await c.req.json<
+          Partial<CreateProductInput> & {
+            active?: number;
+          }
+        >();
+    } catch {
       return c.json(
-        { success: false, error: "Product price must be a valid positive number." },
+        {
+          success: false,
+          error: "Invalid product update data.",
+        },
         400,
       );
     }
-    updates.price = price;
-  }
 
-  if (body.supplier_cost !== undefined) updates.supplier_cost = Math.max(0, numberOrZero(body.supplier_cost));
-  if (body.shipping_cost !== undefined) updates.shipping_cost = Math.max(0, numberOrZero(body.shipping_cost));
-  if (body.other_cost !== undefined) updates.other_cost = Math.max(0, numberOrZero(body.other_cost));
-  if (body.active !== undefined) updates.active = Number(body.active) === 1 ? 1 : 0;
+    const updates: Partial<Product> = {};
 
-  const nextPrice = updates.price ?? current.price;
-  const nextSupplierCost = updates.supplier_cost ?? current.supplier_cost;
-  const nextShippingCost = updates.shipping_cost ?? current.shipping_cost;
-  const nextOtherCost = updates.other_cost ?? current.other_cost;
-  const nextProfit = nextPrice - nextSupplierCost - nextShippingCost - nextOtherCost;
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
 
-  updates.profit_per_unit = nextProfit;
-  updates.profit_margin = nextPrice > 0 ? (nextProfit / nextPrice) * 100 : 0;
+      if (!name) {
+        return c.json(
+          {
+            success: false,
+            error: "Product name cannot be empty.",
+          },
+          400,
+        );
+      }
 
-  try {
-    const product = updateProductRecord(id, updates);
+      updates.name = name;
+    }
+
+    if (body.slug !== undefined) {
+      const slug = String(body.slug).trim();
+
+      if (!slug) {
+        return c.json(
+          {
+            success: false,
+            error: "Product slug cannot be empty.",
+          },
+          400,
+        );
+      }
+
+      const existing = getProductBySlug(slug);
+
+      if (existing && existing.id !== id) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "A product with this slug already exists.",
+          },
+          409,
+        );
+      }
+
+      updates.slug = slug;
+    }
+
+    if (body.description !== undefined) {
+      updates.description =
+        String(body.description).trim();
+    }
+
+    if (body.category !== undefined) {
+      updates.category =
+        String(body.category).trim();
+    }
+
+    if (body.currency !== undefined) {
+      updates.currency =
+        String(body.currency)
+          .trim()
+          .toUpperCase();
+    }
+
+    if (body.image_url !== undefined) {
+      updates.image_url =
+        stringOrNull(body.image_url);
+    }
+
+    if (body.images !== undefined) {
+      updates.images =
+        normalizeImages(body.images);
+    }
+
+    if (body.video_url !== undefined) {
+      updates.video_url =
+        stringOrNull(body.video_url);
+    }
+
+    if (body.sku !== undefined) {
+      updates.sku = stringOrNull(body.sku);
+    }
+
+    if (body.supplier_name !== undefined) {
+      updates.supplier_name =
+        stringOrNull(body.supplier_name);
+    }
+
+    if (
+      body.supplier_product_id !== undefined
+    ) {
+      updates.supplier_product_id =
+        stringOrNull(
+          body.supplier_product_id,
+        );
+    }
+
+    if (
+      body.warehouse_country !== undefined
+    ) {
+      updates.warehouse_country =
+        stringOrNull(
+          body.warehouse_country,
+        )?.toUpperCase() ?? null;
+    }
+
+    if (body.processing_time !== undefined) {
+      updates.processing_time =
+        stringOrNull(body.processing_time);
+    }
+
+    if (body.delivery_time !== undefined) {
+      updates.delivery_time =
+        stringOrNull(body.delivery_time);
+    }
+
+    if (body.price !== undefined) {
+      const price = Number(body.price);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product price must be a valid positive number.",
+          },
+          400,
+        );
+      }
+
+      updates.price = price;
+    }
+
+    if (body.supplier_cost !== undefined) {
+      updates.supplier_cost = Math.max(
+        0,
+        numberOrZero(body.supplier_cost),
+      );
+    }
+
+    if (body.shipping_cost !== undefined) {
+      updates.shipping_cost = Math.max(
+        0,
+        numberOrZero(body.shipping_cost),
+      );
+    }
+
+    if (body.other_cost !== undefined) {
+      updates.other_cost = Math.max(
+        0,
+        numberOrZero(body.other_cost),
+      );
+    }
+
+    if (body.stock !== undefined) {
+      updates.stock = Math.max(
+        0,
+        numberOrZero(body.stock),
+      );
+    }
+
+    if (
+      body.low_stock_threshold !== undefined
+    ) {
+      updates.low_stock_threshold = Math.max(
+        0,
+        numberOrZero(
+          body.low_stock_threshold,
+        ),
+      );
+    }
+
+    if (body.variants !== undefined) {
+      updates.variants =
+        normalizeVariants(body.variants);
+    }
+
+    if (body.active !== undefined) {
+      updates.active =
+        Number(body.active) === 1 ? 1 : 0;
+    }
+
+    const nextPrice =
+      updates.price ?? current.price;
+
+    const nextSupplierCost =
+      updates.supplier_cost ??
+      current.supplier_cost;
+
+    const nextShippingCost =
+      updates.shipping_cost ??
+      current.shipping_cost;
+
+    const nextOtherCost =
+      updates.other_cost ??
+      current.other_cost;
+
+    const nextProfit =
+      nextPrice -
+      nextSupplierCost -
+      nextShippingCost -
+      nextOtherCost;
+
+    updates.profit_per_unit = nextProfit;
+
+    updates.profit_margin =
+      nextPrice > 0
+        ? (nextProfit / nextPrice) * 100
+        : 0;
+
+    try {
+      const product =
+        updateProductRecord(id, updates);
+
+      return c.json({
+        success: true,
+        data: product,
+      });
+    } catch (error) {
+      console.error(
+        "Product update error:",
+        error,
+      );
+
+      return c.json(
+        {
+          success: false,
+          error: "Unable to update product.",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/*
+|--------------------------------------------------------------------------
+| DELETE PRODUCT
+|--------------------------------------------------------------------------
+*/
+
+productsRoute.delete(
+  "/:id",
+  authMiddleware,
+  (c) => {
+    const id = c.req.param("id");
+
+    const exists = getProductById(id);
+
+    if (!exists) {
+      return c.json(
+        {
+          success: false,
+          error: "Product not found.",
+        },
+        404,
+      );
+    }
+
+    try {
+      deleteProductRecord(id);
+    } catch (error) {
+      console.error(
+        "Product delete error:",
+        error,
+      );
+
+      return c.json(
+        {
+          success: false,
+          error:
+            "Unable to delete product.",
+        },
+        500,
+      );
+    }
 
     return c.json({
       success: true,
-      data: product,
+      data: {
+        message:
+          "Product deleted successfully.",
+      },
     });
-  } catch (error) {
-    console.error("Product update error:", error);
-    return c.json(
-      {
-        success: false,
-        error: "Unable to update product.",
-      },
-      500,
-    );
-  }
-});
-
-productsRoute.delete("/:id", authMiddleware, (c) => {
-  const id = c.req.param("id");
-  const exists = getProductById(id);
-
-  if (!exists) {
-    return c.json(
-      {
-        success: false,
-        error: "Product not found.",
-      },
-      404,
-    );
-  }
-
-  try {
-    deleteProductRecord(id);
-  } catch (error) {
-    console.error("Product delete error:", error);
-    return c.json(
-      {
-        success: false,
-        error: "Unable to delete product.",
-      },
-      500,
-    );
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      message: "Product deleted successfully.",
-    },
-  });
-});
+  },
+);
 
 export default productsRoute;

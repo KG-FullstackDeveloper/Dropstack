@@ -11,15 +11,12 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { FulfillmentMode, PaymentMethod } from "../../types/fulfillment";
+import { apiGet } from "../../services/adminApi";
 import {
   getFulfillmentLabel,
   getFulfillmentLane,
   getPaymentMethodLabel,
 } from "../../types/fulfillment";
-
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000";
 
 type OrderStatus =
   | "payment_pending"
@@ -149,19 +146,10 @@ export default function FulfillmentCenter() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(`${API_URL}/api/admin/orders`);
-        const result = (await response.json()) as {
-          success?: boolean;
-          data?: AdminOrder[];
-          error?: string;
-        };
-
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || "Unable to load orders.");
-        }
+        const result = await apiGet<AdminOrder[]>("/admin/orders");
 
         if (active) {
-          setOrders(Array.isArray(result.data) ? result.data : []);
+          setOrders(Array.isArray(result) ? result : []);
         }
       } catch (requestError) {
         console.error("Failed to load fulfillment orders:", requestError);
