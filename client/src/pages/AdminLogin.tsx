@@ -43,7 +43,6 @@ export default function AdminLogin() {
     loading,
     admin,
     login,
-    logout,
   } = useAuth();
 
   const navigate = useNavigate();
@@ -59,6 +58,11 @@ export default function AdminLogin() {
     recoveryStep,
     setRecoveryStep,
   ] = useState<RecoveryStep>("email");
+
+  const [
+    recoveryMode,
+    setRecoveryMode,
+  ] = useState(false);
 
   const [recoveryCode, setRecoveryCode] =
     useState("");
@@ -180,6 +184,14 @@ export default function AdminLogin() {
     event.preventDefault();
 
     clearMessages();
+
+    if (!email.trim()) {
+      setError(
+        "Enter your administrator email."
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -270,6 +282,13 @@ export default function AdminLogin() {
       return;
     }
 
+    if (!resetToken) {
+      setError(
+        "Your password reset session has expired. Please start again."
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -278,10 +297,12 @@ export default function AdminLogin() {
         newPassword
       );
 
+      setRecoveryMode(true);
       setRecoveryStep("success");
       setPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setResetToken("");
     } catch (err) {
       setError(
         err instanceof Error
@@ -296,6 +317,7 @@ export default function AdminLogin() {
   function returnToLogin() {
     clearMessages();
 
+    setRecoveryMode(false);
     setRecoveryStep("email");
     setRecoveryCode("");
     setNewPassword("");
@@ -349,9 +371,10 @@ export default function AdminLogin() {
     );
   }
 
- const isRecovery =
-  recoveryStep !== "email" ||
-  recoveryMessage.length > 0;
+  const isRecovery =
+    recoveryMode ||
+    recoveryStep !== "email" ||
+    recoveryMessage.length > 0;
 
   return (
     <main
@@ -594,12 +617,10 @@ export default function AdminLogin() {
                       type="button"
                       onClick={() => {
                         clearMessages();
-                        setRecoveryStep(
-                          "email"
-                        );
-                        setRecoveryMessage(
-                          ""
-                        );
+                        setRecoveryMode(true);
+                        setRecoveryStep("email");
+                        setRecoveryCode("");
+                        setResetToken("");
                       }}
                       className="text-xs font-semibold text-blue-300 transition hover:text-blue-200"
                     >

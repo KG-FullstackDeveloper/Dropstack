@@ -9,7 +9,6 @@ import {
 import {
   login as apiLogin,
   logout as apiLogout,
-  getMe,
   type AdminUser,
 } from "../services/adminApi";
 
@@ -45,49 +44,15 @@ export function AuthProvider({
     useState(true);
 
   useEffect(() => {
-    let mounted = true;
+    // Admin authentication must always begin from the login page
+    // when the application is opened/refreshed.
+    //
+    // Remove any previously stored authentication token so that
+    // an old session cannot automatically bypass the login page.
+    localStorage.removeItem("admin_token");
 
-    const token =
-      localStorage.getItem(
-        "admin_token"
-      );
-
-    if (!token) {
-      if (mounted) {
-        setLoading(false);
-      }
-
-      return () => {
-        mounted = false;
-      };
-    }
-
-    getMe()
-      .then((user) => {
-        if (!mounted) {
-          return;
-        }
-
-        setAdmin(user);
-      })
-      .catch(() => {
-        localStorage.removeItem(
-          "admin_token"
-        );
-
-        if (mounted) {
-          setAdmin(null);
-        }
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
+    setAdmin(null);
+    setLoading(false);
   }, []);
 
   async function login(

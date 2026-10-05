@@ -14,6 +14,7 @@ import NigeriaAdmin from "./pages/NigeriaAdmin";
 import MEOAI from "./pages/MEOAI";
 import AdminLogin from "./pages/AdminLogin";
 import ProtectedRoute from "./components/admin/ProtectedRoute";
+import Profile from "./pages/Profile";
 
 export default function App() {
   return (
@@ -47,6 +48,26 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MEOAI />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Global account profile */}
+        <Route
+          path="/admin/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Nigeria account profile */}
+        <Route
+          path="/nigeria-admin/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />

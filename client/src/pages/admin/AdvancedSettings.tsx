@@ -18,8 +18,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import DashboardPageShell from "../../components/dasboard/DashboardPageShell";
-import DashboardSettingsSidebar from "../../components/settings/DashboardSettingsSidebar";
-
 import type {
   DashboardSettingsData,
   SettingsSection,
@@ -29,6 +27,7 @@ interface AdvancedSettingsProps {
   workspaceKey: "global" | "nigeria";
   initialSettings: DashboardSettingsData;
   onSave: (settings: DashboardSettingsData) => void;
+  initialSection?: SettingsSection;
 }
 
 const sectionMeta: Record<
@@ -313,18 +312,23 @@ export default function AdvancedSettings({
   workspaceKey,
   initialSettings,
   onSave,
+  initialSection = "General",
 }: AdvancedSettingsProps) {
   const [settings, setSettings] =
     useState<DashboardSettingsData>(initialSettings);
 
   const [activeSection, setActiveSection] =
-    useState<SettingsSection>("General");
+    useState<SettingsSection>(initialSection);
 
   const [saved, setSaved] = useState(true);
 
   useEffect(() => {
     setSettings(initialSettings);
   }, [initialSettings]);
+
+  useEffect(() => {
+    setActiveSection(initialSection);
+  }, [initialSection]);
 
   const meta = sectionMeta[activeSection];
 
@@ -1008,38 +1012,11 @@ export default function AdvancedSettings({
               </p>
             </div>
 
-            <div className="relative min-w-[250px] lg:hidden">
-              <select
-                value={activeSection}
-                onChange={(event) =>
-                  setActiveSection(
-                    event.target.value as SettingsSection
-                  )
-                }
-                className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-10 text-sm font-semibold text-slate-900"
-              >
-                {sectionOptions.map((section) => (
-                  <option key={section} value={section}>
-                    {sectionMeta[section].title}
-                  </option>
-                ))}
-              </select>
-
-              <ChevronDown
-                size={17}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-            </div>
           </div>
         </div>
 
-        <div className="flex items-start gap-6">
-          <DashboardSettingsSidebar
-            activeSection={activeSection}
-            onChange={setActiveSection}
-          />
-
-          <main className="min-w-0 flex-1">
+        <div>
+          <main className="min-w-0">
             <div className="mb-5 flex items-start gap-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
                 {meta.icon}

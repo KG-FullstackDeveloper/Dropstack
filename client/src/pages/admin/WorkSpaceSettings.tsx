@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { SettingsSection } from "../../components/settings/DashboardSettingsTypes";
 
 import AdvancedSettings from "./AdvancedSettings";
 
@@ -18,11 +19,13 @@ import {
 interface WorkspaceSettingsProps {
   workspaceKey: "global" | "nigeria";
   workspaceName: string;
+  initialSection?: SettingsSection;
 }
 
 export default function WorkspaceSettings({
   workspaceKey,
   workspaceName,
+  initialSection = "General",
 }: WorkspaceSettingsProps) {
   const [settings, setSettings] =
     useState<DashboardSettingsData>(() =>
@@ -54,6 +57,7 @@ export default function WorkspaceSettings({
       workspaceKey={workspaceKey}
       initialSettings={settings}
       onSave={handleSave}
+      initialSection={initialSection}
     />
   );
 }

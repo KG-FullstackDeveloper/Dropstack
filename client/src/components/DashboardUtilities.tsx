@@ -111,8 +111,13 @@ export function DashboardAccountTools({
   return (
     <div className="flex items-center gap-2">
       {workspace === "global" && (
-        <Link
-          to="/admin/ai"
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent("meo:open-assistant"),
+            )
+          }
           aria-label="Open MEO AI"
           className="flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:shadow-md"
         >
@@ -120,7 +125,7 @@ export function DashboardAccountTools({
           <span className="hidden sm:inline">
             MEO AI
           </span>
-        </Link>
+        </button>
       )}
 
       <div ref={ref} className="relative">
@@ -247,16 +252,19 @@ export function DashboardFAB({
           </p>
 
           {workspace === "global" && (
-            <Link
-              to="/admin/ai"
-              onClick={() =>
-                setOpen(false)
-              }
-              className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                window.dispatchEvent(
+                  new CustomEvent("meo:open-assistant"),
+                );
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               <Sparkles size={17} />
               MEO AI
-            </Link>
+            </button>
           )}
 
           <Link

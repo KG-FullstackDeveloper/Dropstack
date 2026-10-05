@@ -59,6 +59,50 @@ function loadMessages(): Message[] {
   }
 }
 
+
+function renderAssistantContent(content: string) {
+  const pattern = /\[([^\]]+)\]\((\/admin(?:\?[^)\s]+)?)\)/g;
+  const parts: Array<{ type: "text" | "link"; value: string; label?: string }> = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: content.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: "link", value: match[2], label: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push({ type: "text", value: content.slice(lastIndex) });
+  }
+
+  if (parts.length === 0) {
+    return <span>{content}</span>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {parts.map((part, index) =>
+        part.type === "link" ? (
+          <a
+            key={`${part.value}-${index}`}
+            href={part.value}
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm hover:bg-slate-50"
+          >
+            {part.label}
+          </a>
+        ) : (
+          <span key={`text-${index}`} className="whitespace-pre-wrap">
+            {part.value}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
 export default function MEOAI() {
   const [messages, setMessages] =
     useState<Message[]>(loadMessages);
@@ -439,7 +483,9 @@ export default function MEOAI() {
                             : "text-slate-700"
                         }`}
                       >
-                        {message.content}
+                        {message.role === "assistant"
+                          ? renderAssistantContent(message.content)
+                          : message.content}
                       </div>
 
                       <div
