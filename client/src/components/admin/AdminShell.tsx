@@ -3,6 +3,7 @@ import {
   Bell,
   Box,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CreditCard,
   ExternalLink,
@@ -14,14 +15,22 @@ import {
   Palette,
   Search,
   Settings,
+  ShieldCheck,
+  ShoppingCart,
   Store,
   Truck,
   User,
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
+import { Link, useLocation } from "react-router-dom";
 import type { SettingsSection } from "../settings/DashboardSettingsTypes";
 
 export type AdminPageKey =
@@ -41,56 +50,21 @@ export type AdminPageKey =
 
 export type AdminWorkspace = "global" | "nigeria";
 
-type IconType = ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+type IconType = ComponentType<{
+  size?: number;
+  className?: string;
+  strokeWidth?: number;
+}>;
 
-const primaryNavigation: { label: AdminPageKey; icon: IconType }[] = [
-  { label: "Overview", icon: LayoutDashboard },
-  { label: "Orders", icon: ShoppingCartIcon },
-  { label: "Products", icon: Package },
-  { label: "Customers", icon: Users },
-  { label: "Inventory", icon: Box },
-  { label: "Analytics", icon: BarChart3 },
-];
-
-const operationsNavigation: { label: AdminPageKey; icon: IconType }[] = [
-  { label: "Fulfillment", icon: PackageCheck },
-  { label: "Shipping", icon: Truck },
-  { label: "Payments", icon: CreditCard },
-];
-
-const storeNavigation: { label: AdminPageKey; icon: IconType }[] = [
-  { label: "Stores", icon: Store },
-  { label: "Storefront", icon: ExternalLink },
-  { label: "Theme Editor", icon: Palette },
-];
-
-const settingsNavigation: { id: SettingsSection; label: string; description: string }[] = [
-  { id: "General", label: "General", description: "Store information and preferences" },
-  { id: "Checkout", label: "Checkout", description: "Checkout and customer experience" },
-  { id: "Shipping", label: "Shipping & delivery", description: "Shipping zones and delivery" },
-  { id: "Policies", label: "Policies", description: "Refund, return and store policies" },
-  { id: "Payments", label: "Payment settings", description: "Payment configuration" },
-  { id: "Account", label: "Profile", description: "Owner and account information" },
-  { id: "Security", label: "Security", description: "Password and account security" },
-  { id: "Users", label: "Staff & permissions", description: "Team access and permissions" },
-  { id: "Notifications", label: "Notifications", description: "Order and customer notifications" },
-  { id: "Domains", label: "Domains", description: "Store URL and domain configuration" },
-  { id: "Data", label: "Data & integrations", description: "Exports, API and integrations" },
-  { id: "Advanced", label: "Store status", description: "Availability and advanced controls" },
-];
-
-function ShoppingCartIcon(props: { size?: number; className?: string; strokeWidth?: number }) {
-  return <ShoppingCart {...props} />;
+interface NavigationItem {
+  label: AdminPageKey;
+  icon: IconType;
 }
 
-function ShoppingCart(props: { size?: number; className?: string; strokeWidth?: number }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth ?? 2} width={props.size ?? 24} height={props.size ?? 24} className={props.className} aria-hidden="true">
-      <circle cx="9" cy="20" r="1" />
-      <circle cx="19" cy="20" r="1" />
-      <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6" />
-    </svg>
-  );
+interface SettingsItem {
+  id: SettingsSection;
+  label: string;
+  description: string;
 }
 
 interface AdminShellProps {
@@ -103,6 +77,128 @@ interface AdminShellProps {
   children: ReactNode;
 }
 
+const salesNavigation: NavigationItem[] = [
+  { label: "Overview", icon: LayoutDashboard },
+  { label: "Orders", icon: ShoppingCart },
+  { label: "Products", icon: Package },
+  { label: "Customers", icon: Users },
+  { label: "Inventory", icon: Box },
+  { label: "Analytics", icon: BarChart3 },
+];
+
+const operationsNavigation: NavigationItem[] = [
+  { label: "Fulfillment", icon: PackageCheck },
+  { label: "Shipping", icon: Truck },
+  { label: "Payments", icon: CreditCard },
+];
+
+const storeNavigation: NavigationItem[] = [
+  { label: "Stores", icon: Store },
+  { label: "Storefront", icon: ExternalLink },
+  { label: "Theme Editor", icon: Palette },
+];
+
+const settingsNavigation: SettingsItem[] = [
+  {
+    id: "General",
+    label: "General",
+    description: "Store information and preferences",
+  },
+  {
+    id: "Checkout",
+    label: "Checkout",
+    description: "Checkout and customer experience",
+  },
+  {
+    id: "Shipping",
+    label: "Shipping & delivery",
+    description: "Shipping zones and delivery",
+  },
+  {
+    id: "Taxes",
+    label: "Taxes",
+    description: "Tax and pricing configuration",
+  },
+  {
+    id: "Policies",
+    label: "Policies",
+    description: "Refund, return and store policies",
+  },
+  {
+    id: "Payments",
+    label: "Payments",
+    description: "Payment configuration",
+  },
+  {
+    id: "Account",
+    label: "Profile",
+    description: "Owner and account information",
+  },
+  {
+    id: "Security",
+    label: "Security",
+    description: "Password and account security",
+  },
+  {
+    id: "Users",
+    label: "Staff & permissions",
+    description: "Team access and permissions",
+  },
+  {
+    id: "Notifications",
+    label: "Notifications",
+    description: "Order and customer notifications",
+  },
+  {
+    id: "Domains",
+    label: "Domains",
+    description: "Store URL and domain configuration",
+  },
+  {
+    id: "Storefront",
+    label: "Storefront",
+    description: "Online store preferences",
+  },
+  {
+    id: "Privacy",
+    label: "Privacy",
+    description: "Privacy and customer data",
+  },
+  {
+    id: "Data",
+    label: "Data & exports",
+    description: "Store data and exports",
+  },
+  {
+    id: "Integrations",
+    label: "Integrations",
+    description: "Connected services and tools",
+  },
+  {
+    id: "Advanced",
+    label: "Store status",
+    description: "Availability and advanced controls",
+  },
+];
+
+const searchablePages: AdminPageKey[] = [
+  ...salesNavigation.map((item) => item.label),
+  ...operationsNavigation.map((item) => item.label),
+  ...storeNavigation.map((item) => item.label),
+  "Settings",
+];
+
+function getInitials(name: string) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
+  return initials || "SO";
+}
+
 export default function AdminShell({
   workspace,
   active,
@@ -112,52 +208,194 @@ export default function AdminShell({
   profileName = "Store Owner",
   children,
 }: AdminShellProps) {
+  const location = useLocation();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(active === "Settings");
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const workspaceName = workspace === "nigeria" ? "Nigeria Ecommerce" : "Global Ecommerce";
-  const storefrontPath = workspace === "nigeria" ? "/nigeria-store" : "/store";
-  const profilePath = workspace === "nigeria" ? "/nigeria-admin/profile" : "/admin/profile";
+  const isNigeria = workspace === "nigeria";
+
+  const workspaceName = isNigeria
+    ? "Nigeria Ecommerce"
+    : "Global Ecommerce";
+
+  const workspaceDescription = isNigeria
+    ? "Nigeria operations"
+    : "Global operations";
+
+  const storefrontPath = isNigeria
+    ? "/nigeria-store"
+    : "/store";
+
+  const profilePath = isNigeria
+    ? "/nigeria-admin/profile"
+    : "/admin/profile";
+
+  const otherWorkspacePath = isNigeria
+    ? "/admin"
+    : "/nigeria-admin";
+
+  const otherWorkspaceName = isNigeria
+    ? "Global Ecommerce"
+    : "Nigeria Ecommerce";
 
   const initials = useMemo(
-    () => profileName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "SO",
+    () => getInitials(profileName),
     [profileName],
   );
 
-  const allSearchItems = useMemo(
-    () => [...primaryNavigation, ...operationsNavigation, ...storeNavigation].map((item) => item.label).concat("Settings"),
-    [],
-  );
+  const filteredSearch = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-  const filteredSearch = allSearchItems.filter((item) => item.toLowerCase().includes(search.trim().toLowerCase()));
+    if (!query) {
+      return [];
+    }
+
+    return searchablePages.filter((item) =>
+      item.toLowerCase().includes(query),
+    );
+  }, [search]);
+
+  useEffect(() => {
+    if (active === "Settings") {
+      setSettingsOpen(true);
+    }
+  }, [active]);
+
+  useEffect(() => {
+    function handleKeyboard(event: KeyboardEvent) {
+      const modifier = event.ctrlKey || event.metaKey;
+
+      if (modifier && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        setSearch("");
+        setProfileOpen(false);
+        setSidebarOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyboard);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyboard);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleAssistantRequest() {
+      window.dispatchEvent(
+        new CustomEvent("meo:open-assistant", {
+          detail: {
+            workspace,
+            currentPage: active,
+            pathname: location.pathname,
+          },
+        }),
+      );
+    }
+
+    window.addEventListener(
+      "meo:open-assistant-request",
+      handleAssistantRequest,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "meo:open-assistant-request",
+        handleAssistantRequest,
+      );
+    };
+  }, [active, location.pathname, workspace]);
 
   function navigate(page: AdminPageKey) {
     onNavigate(page);
+
     setSidebarOpen(false);
     setProfileOpen(false);
-    if (page === "Settings") setSettingsOpen(true);
-    else setSettingsOpen(false);
+
+    if (page === "Settings") {
+      setSettingsOpen(true);
+    }
+  }
+
+  function navigateToSettings(section: SettingsSection) {
+    onSettingsSectionChange(section);
+    onNavigate("Settings");
+
+    setSettingsOpen(true);
+    setSidebarOpen(false);
+    setProfileOpen(false);
   }
 
   function openAssistant() {
-    window.dispatchEvent(new CustomEvent("meo:open-assistant", { detail: { workspace } }));
+    window.dispatchEvent(
+      new CustomEvent("meo:open-assistant", {
+        detail: {
+          workspace,
+          currentPage: active,
+          pathname: location.pathname,
+        },
+      }),
+    );
   }
 
-  function renderNavGroup(title: string, items: { label: AdminPageKey; icon: IconType }[]) {
+  function renderNavigationGroup(
+    title: string,
+    items: NavigationItem[],
+  ) {
     return (
       <div className="mb-6">
-        <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{title}</p>
-        <div className="space-y-0.5">
+        {!sidebarCollapsed && (
+          <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+            {title}
+          </p>
+        )}
+
+        <div className="space-y-1">
           {items.map((item) => {
             const Icon = item.icon;
             const selected = active === item.label;
+
             return (
-              <button key={item.label} type="button" onClick={() => navigate(item.label)} className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${selected ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>
-                <Icon size={17} strokeWidth={selected ? 2.2 : 1.9} />
-                <span className="flex-1">{item.label}</span>
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => navigate(item.label)}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={[
+                  "group flex w-full items-center rounded-xl transition",
+                  sidebarCollapsed
+                    ? "justify-center px-2 py-3"
+                    : "gap-3 px-3 py-2.5",
+                  selected
+                    ? "bg-slate-950 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                ].join(" ")}
+              >
+                <Icon
+                  size={18}
+                  strokeWidth={selected ? 2.25 : 1.9}
+                  className={
+                    selected
+                      ? "text-white"
+                      : "text-slate-400 group-hover:text-slate-700"
+                  }
+                />
+
+                {!sidebarCollapsed && (
+                  <span className="flex-1 text-left text-sm font-semibold">
+                    {item.label}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -168,113 +406,519 @@ export default function AdminShell({
 
   return (
     <div className="min-h-screen bg-[#f6f6f7] text-slate-950">
-      {sidebarOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[276px] flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="border-b border-slate-200 px-4 py-4">
-          <div className="flex items-center gap-3 px-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-white">M</div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-black tracking-tight text-slate-950">MEO Commerce</p>
-              <p className="text-[11px] text-slate-400">Admin workspace</p>
+      <aside
+        className={[
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200 bg-white transition-all duration-200",
+          sidebarCollapsed ? "w-[76px]" : "w-[276px]",
+          sidebarOpen
+            ? "translate-x-0"
+            : "-translate-x-full lg:translate-x-0",
+        ].join(" ")}
+      >
+        <div className="border-b border-slate-200 px-3 py-4">
+          <div
+            className={[
+              "flex items-center",
+              sidebarCollapsed
+                ? "justify-center"
+                : "gap-3 px-2",
+            ].join(" ")}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-white">
+              M
             </div>
-            <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={18} /></button>
+
+            {!sidebarCollapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-black tracking-tight text-slate-950">
+                    MEO Commerce
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Admin workspace
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Close navigation"
+                >
+                  <X size={18} />
+                </button>
+              </>
+            )}
           </div>
 
-          <button type="button" className="mt-4 flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-left hover:bg-slate-100">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-900 shadow-sm"><Store size={17} /></div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-slate-900">My Store</p>
-              <p className="truncate text-[11px] text-slate-500">{workspaceName}</p>
-            </div>
-            <ChevronDown size={16} className="text-slate-400" />
-          </button>
+          <div className="mt-4">
+            <Link
+              to={otherWorkspacePath}
+              className={[
+                "flex items-center rounded-xl border border-slate-200 bg-slate-50 transition hover:bg-slate-100",
+                sidebarCollapsed
+                  ? "justify-center p-2.5"
+                  : "gap-3 p-2.5",
+              ].join(" ")}
+              title={
+                sidebarCollapsed
+                  ? `Switch to ${otherWorkspaceName}`
+                  : undefined
+              }
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-900 shadow-sm">
+                <Store size={17} />
+              </div>
+
+              {!sidebarCollapsed && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-slate-900">
+                      {workspaceName}
+                    </p>
+                    <p className="truncate text-[11px] text-slate-500">
+                      {workspaceDescription}
+                    </p>
+                  </div>
+
+                  <ChevronRight
+                    size={15}
+                    className="text-slate-400"
+                  />
+                </>
+              )}
+            </Link>
+          </div>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
-          {renderNavGroup("Sales", primaryNavigation)}
-          {renderNavGroup("Operations", operationsNavigation)}
-          {renderNavGroup("Online store", storeNavigation)}
+          {renderNavigationGroup(
+            "Sales",
+            salesNavigation,
+          )}
 
-          <div className="mb-3">
-            <button type="button" onClick={() => { setSettingsOpen((value) => !value); onNavigate("Settings"); }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${active === "Settings" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}>
-              <Settings size={17} />
-              <span className="flex-1">Settings</span>
-              <ChevronRight size={16} className={`transition ${settingsOpen ? "rotate-90" : ""}`} />
+          {renderNavigationGroup(
+            "Operations",
+            operationsNavigation,
+          )}
+
+          {renderNavigationGroup(
+            "Online store",
+            storeNavigation,
+          )}
+
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsOpen((value) => !value);
+                onNavigate("Settings");
+              }}
+              title={sidebarCollapsed ? "Settings" : undefined}
+              className={[
+                "group flex w-full items-center rounded-xl transition",
+                sidebarCollapsed
+                  ? "justify-center px-2 py-3"
+                  : "gap-3 px-3 py-2.5",
+                active === "Settings"
+                  ? "bg-slate-950 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+              ].join(" ")}
+            >
+              <Settings
+                size={18}
+                strokeWidth={active === "Settings" ? 2.25 : 1.9}
+              />
+
+              {!sidebarCollapsed && (
+                <>
+                  <span className="flex-1 text-left text-sm font-semibold">
+                    Settings
+                  </span>
+
+                  <ChevronRight
+                    size={16}
+                    className={[
+                      "transition-transform",
+                      settingsOpen ? "rotate-90" : "",
+                    ].join(" ")}
+                  />
+                </>
+              )}
             </button>
 
-            {settingsOpen && (
-              <div className="ml-5 mt-1 border-l border-slate-200 pl-2">
-                {settingsNavigation.map((item, index) => (
-                  <button key={item.id} type="button" onClick={() => { onSettingsSectionChange(item.id); onNavigate("Settings"); setSidebarOpen(false); }} className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left ${settingsSection === item.id && active === "Settings" ? "bg-slate-50" : "hover:bg-slate-50"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${index === 0 ? "bg-slate-900" : "bg-slate-300 group-hover:bg-slate-500"}`} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-slate-700">{item.label}</span>
-                      <span className="hidden text-[10px] text-slate-400 xl:block">{item.description}</span>
-                    </span>
-                  </button>
-                ))}
+            {!sidebarCollapsed && settingsOpen && (
+              <div className="ml-5 mt-2 border-l border-slate-200 pl-2">
+                {settingsNavigation.map((item) => {
+                  const selected =
+                    active === "Settings" &&
+                    settingsSection === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() =>
+                        navigateToSettings(item.id)
+                      }
+                      className={[
+                        "group flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition",
+                        selected
+                          ? "bg-slate-50"
+                          : "hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                          selected
+                            ? "bg-slate-950"
+                            : "bg-slate-300 group-hover:bg-slate-500",
+                        ].join(" ")}
+                      />
+
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={[
+                            "block text-xs font-semibold",
+                            selected
+                              ? "text-slate-950"
+                              : "text-slate-700",
+                          ].join(" ")}
+                        >
+                          {item.label}
+                        </span>
+
+                        <span className="mt-0.5 block text-[10px] leading-4 text-slate-400">
+                          {item.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </nav>
 
         <div className="border-t border-slate-200 p-3">
-          <Link to={profilePath} className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-slate-50">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-black text-white">{initials}</div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-slate-900">{profileName}</p>
-              <p className="truncate text-[11px] text-slate-400">Store Owner</p>
+          <Link
+            to={profilePath}
+            className={[
+              "flex items-center rounded-xl transition hover:bg-slate-50",
+              sidebarCollapsed
+                ? "justify-center p-2"
+                : "gap-3 p-2.5",
+            ].join(" ")}
+            title={sidebarCollapsed ? "Profile" : undefined}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-black text-white">
+              {initials}
             </div>
-            <User size={16} className="text-slate-400" />
+
+            {!sidebarCollapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-slate-900">
+                    {profileName}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-400">
+                    Store Owner
+                  </p>
+                </div>
+
+                <User
+                  size={16}
+                  className="text-slate-400"
+                />
+              </>
+            )}
           </Link>
         </div>
       </aside>
 
-      <div className="min-h-screen lg:pl-[276px]">
+      <div
+        className={[
+          "min-h-screen transition-[padding] duration-200",
+          sidebarCollapsed
+            ? "lg:pl-[76px]"
+            : "lg:pl-[276px]",
+        ].join(" ")}
+      >
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
-            <button type="button" onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-lg p-2 hover:bg-slate-100 lg:hidden"
+              aria-label="Open navigation"
+            >
+              <Menu size={20} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSidebarCollapsed(
+                  (value) => !value,
+                )
+              }
+              className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-950 lg:block"
+              aria-label={
+                sidebarCollapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+              }
+              title={
+                sidebarCollapsed
+                  ? "Expand sidebar"
+                  : "Collapse sidebar"
+              }
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight size={19} />
+              ) : (
+                <ChevronLeft size={19} />
+              )}
+            </button>
+
             <div className="min-w-0 flex-1">
-              <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex"><span>{workspaceName}</span><ChevronRight size={13} /><span className="font-semibold text-slate-600">{active}</span></div>
-              <h1 className="truncate text-sm font-bold sm:hidden">{active}</h1>
+              <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
+                <span>{workspaceName}</span>
+                <ChevronRight size={13} />
+                <span className="font-semibold text-slate-700">
+                  {active}
+                </span>
+              </div>
+
+              <h1 className="truncate text-sm font-bold sm:hidden">
+                {active}
+              </h1>
             </div>
 
             <div className="hidden items-center gap-1 md:flex">
-              <button type="button" onClick={() => setSearchOpen((value) => !value)} className="rounded-lg p-2.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label="Search"><Search size={18} /></button>
-              <button type="button" onClick={openAssistant} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"><MessageCircle size={17} /> AI assistant</button>
-              <button type="button" className="relative rounded-lg p-2.5 text-slate-500 hover:bg-slate-100" aria-label="Notifications"><Bell size={18} /><span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-slate-900" /></button>
-              <Link to={storefrontPath} target="_blank" className="rounded-lg p-2.5 text-slate-500 hover:bg-slate-100" aria-label="View storefront"><ExternalLink size={18} /></Link>
+              <button
+                type="button"
+                onClick={() =>
+                  setSearchOpen(
+                    (value) => !value,
+                  )
+                }
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                aria-label="Search"
+              >
+                <Search size={18} />
+                <span className="hidden lg:inline text-xs font-semibold">
+                  Search
+                </span>
+                <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 lg:inline">
+                  Ctrl K
+                </kbd>
+              </button>
+
+              <button
+                type="button"
+                onClick={openAssistant}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <MessageCircle size={17} />
+                <span className="hidden lg:inline">
+                  MEO AI
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="relative rounded-lg p-2.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-slate-950" />
+              </button>
+
+              <Link
+                to={storefrontPath}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg p-2.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                aria-label="View storefront"
+                title="View storefront"
+              >
+                <ExternalLink size={18} />
+              </Link>
             </div>
 
             <div className="relative">
-              <button type="button" onClick={() => setProfileOpen((value) => !value)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 pr-2 hover:bg-slate-50" aria-expanded={profileOpen}>
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950 text-xs font-black text-white">{initials}</span>
-                <ChevronDown size={15} className={`hidden text-slate-400 sm:block ${profileOpen ? "rotate-180" : ""}`} />
+              <button
+                type="button"
+                onClick={() =>
+                  setProfileOpen(
+                    (value) => !value,
+                  )
+                }
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 pr-2 hover:bg-slate-50"
+                aria-expanded={profileOpen}
+                aria-label="Open account menu"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950 text-xs font-black text-white">
+                  {initials}
+                </span>
+
+                <ChevronDown
+                  size={15}
+                  className={[
+                    "hidden text-slate-400 transition-transform sm:block",
+                    profileOpen
+                      ? "rotate-180"
+                      : "",
+                  ].join(" ")}
+                />
               </button>
+
               {profileOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
-                  <div className="border-b border-slate-100 px-3 py-3"><p className="text-sm font-bold">{profileName}</p><p className="mt-0.5 text-xs text-slate-400">Store Owner · Administrator</p></div>
-                  <Link to={profilePath} onClick={() => setProfileOpen(false)} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"><User size={17} /> Profile</Link>
-                  <button type="button" onClick={() => { onNavigate("Settings"); setSettingsOpen(true); onSettingsSectionChange("General"); setProfileOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"><Settings size={17} /> Settings</button>
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+                  <div className="border-b border-slate-100 px-3 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-xs font-black text-white">
+                        {initials}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-950">
+                          {profileName}
+                        </p>
+
+                        <p className="truncate text-xs text-slate-400">
+                          Store Owner · Administrator
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1">
+                    <Link
+                      to={profilePath}
+                      onClick={() =>
+                        setProfileOpen(false)
+                      }
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <User size={17} />
+                      Profile
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigateToSettings(
+                          "General",
+                        );
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <Settings size={17} />
+                      Settings
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigateToSettings(
+                          "Security",
+                        );
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <ShieldCheck size={17} />
+                      Security
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           {searchOpen && (
-            <div className="border-t border-slate-100 px-4 py-3 sm:px-6">
-              <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <Search size={17} className="text-slate-400" />
-                <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products, orders, customers, settings..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
-                <button type="button" onClick={() => { setSearch(""); setSearchOpen(false); }} className="text-xs font-semibold text-slate-400 hover:text-slate-700">Esc</button>
+            <div className="border-t border-slate-100 bg-white px-4 py-3 sm:px-6">
+              <div className="mx-auto max-w-3xl">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <Search
+                    size={17}
+                    className="shrink-0 text-slate-400"
+                  />
+
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={(event) =>
+                      setSearch(event.target.value)
+                    }
+                    placeholder="Search products, orders, customers, settings..."
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setSearchOpen(false);
+                    }}
+                    className="rounded-md px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-white hover:text-slate-700"
+                  >
+                    Esc
+                  </button>
+                </div>
+
+                {search.trim() && (
+                  <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+                    {filteredSearch.length > 0 ? (
+                      filteredSearch.map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => {
+                            navigate(item);
+                            setSearch("");
+                            setSearchOpen(false);
+                          }}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Search
+                            size={15}
+                            className="text-slate-400"
+                          />
+                          {item}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-5 text-center">
+                        <p className="text-sm font-semibold text-slate-700">
+                          No results
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Try another search term.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {search.trim() && <div className="mx-auto mt-2 max-w-3xl rounded-xl border border-slate-200 bg-white p-2 shadow-sm">{filteredSearch.map((item) => <button key={item} type="button" onClick={() => { navigate(item as AdminPageKey); setSearchOpen(false); setSearch(""); }} className="flex w-full rounded-lg px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50">{item}</button>)}</div>}
             </div>
           )}
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {children}
+        </main>
       </div>
     </div>
   );

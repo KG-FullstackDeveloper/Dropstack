@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../middleware/auth";
-
 import {
   deleteProductRecord,
   getActiveProducts,
@@ -10,315 +8,52 @@ import {
   insertProduct,
   updateProductRecord,
 } from "../data/store";
+import { db } from "../database/db";
 import { createId } from "../utils/id";
-import type {
-  CreateProductInput,
-  Product,
-  ProductVariant,
-} from "../types/product";
+import type { Product, ProductVariant } from "../types/product";
+import { authMiddleware } from "../middleware/auth";
 
-const productsRoute = new Hono();
+const products = new Hono();
 
-function numberOrZero(value: unknown): number {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function stringOrNull(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-
-  const valueString = String(value).trim();
-
-  return valueString ? valueString : null;
-}
-
-function normalizeImages(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => String(item ?? "").trim())
-    .filter(Boolean);
-}
-
-function normalizeVariants(value: unknown): ProductVariant[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((variant) => {
-      if (!variant || typeof variant !== "object") return null;
-
-      const item = variant as Record<string, unknown>;
-
-      return {
-        id: String(item.id || createId("variant")),
-        name: String(item.name || "").trim(),
-        value: String(item.value || "").trim(),
-        price: String(item.price ?? "").trim(),
-        sku: String(item.sku || "").trim(),
-        stock: String(item.stock ?? "0").trim(),
-      };
-    })
-    .filter(
-      (variant): variant is ProductVariant =>
-        Boolean(
-          variant &&
-            (variant.name ||
-              variant.value ||
-              variant.price ||
-              variant.sku ||
-              variant.stock),
-        ),
-    );
-}
-
-function buildProduct(input: CreateProductInput): Product {
-  const price = numberOrZero(input.price);
-  const supplierCost = numberOrZero(input.supplier_cost);
-  const shippingCost = numberOrZero(input.shipping_cost);
-  const otherCost = numberOrZero(input.other_cost);
-
-  const profitPerUnit =
-    price - supplierCost - shippingCost - otherCost;
-
-  const profitMargin =
-    price > 0 ? (profitPerUnit / price) * 100 : 0;
-
-  const now = new Date().toISOString();
-
-  return {
-    id: createId("product"),
-    name: String(input.name || "").trim(),
-    slug: String(input.slug || input.name || "").trim(),
-    sku: stringOrNull(input.sku),
-    description: String(input.description || "").trim(),
-    category: String(input.category || "Other").trim(),
-    price,
-    currency: String(input.currency || "USD")
-      .trim()
-      .toUpperCase(),
-
-    image_url: stringOrNull(input.image_url),
-    images: normalizeImages(input.images),
-
-    video_url: stringOrNull(input.video_url),
-
-    supplier_name: stringOrNull(input.supplier_name),
-    supplier_product_id: stringOrNull(
-      input.supplier_product_id,
-    ),
-
-    warehouse_country: input.warehouse_country
-      ? String(input.warehouse_country)
-          .trim()
-          .toUpperCase()
-      : null,
-
-    processing_time: stringOrNull(input.processing_time),
-    delivery_time: stringOrNull(input.delivery_time),
-
-    supplier_cost: supplierCost,
-    shipping_cost: shippingCost,
-    other_cost: otherCost,
-
-    profit_per_unit: profitPerUnit,
-    profit_margin: profitMargin,
-
-    stock: Math.max(0, numberOrZero(input.stock)),
-    low_stock_threshold: Math.max(
-      0,
-      numberOrZero(input.low_stock_threshold),
-    ),
-
-    variants: normalizeVariants(input.variants),
-
-    active: 1,
-    created_at: now,
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| PUBLIC PRODUCTS
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.get("/", (c) => {
-  return c.json({
-    success: true,
-    data: getActiveProducts(),
-  });
-});
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN PRODUCTS
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.get("/all", authMiddleware, (c) => {
-  return c.json({
-    success: true,
-    data: getAllProducts(),
-  });
-});
-
-productsRoute.get("/slug/:slug", (c) => {
-  const slug = c.req.param("slug");
-  const product = getProductBySlug(slug);
-
-  if (!product) {
-    return c.json(
-      {
-        success: false,
-        error: "Product not found.",
-      },
-      404,
-    );
-  }
-
-  return c.json({
-    success: true,
-    data: product,
-  });
-});
-
-productsRoute.get("/:id", (c) => {
-  const id = c.req.param("id");
-  const product = getProductById(id);
-
-  if (!product) {
-    return c.json(
-      {
-        success: false,
-        error: "Product not found.",
-      },
-      404,
-    );
-  }
-
-  return c.json({
-    success: true,
-    data: product,
-  });
-});
-
-/*
-|--------------------------------------------------------------------------
-| CREATE PRODUCT
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.post("/", authMiddleware, async (c) => {
-  let body: CreateProductInput;
-
+products.get("/", async (c) => {
   try {
-    body = await c.req.json<CreateProductInput>();
-  } catch {
-    return c.json(
-      {
-        success: false,
-        error: "Invalid product data.",
-      },
-      400,
-    );
-  }
-
-  const name = String(body.name || "").trim();
-  const description = String(body.description || "").trim();
-  const price = Number(body.price);
-
-  if (!name) {
-    return c.json(
-      {
-        success: false,
-        error: "Product name is required.",
-      },
-      400,
-    );
-  }
-
-  if (!description) {
-    return c.json(
-      {
-        success: false,
-        error: "Product description is required.",
-      },
-      400,
-    );
-  }
-
-  if (!Number.isFinite(price) || price <= 0) {
-    return c.json(
-      {
-        success: false,
-        error:
-          "Product price must be a valid positive number.",
-      },
-      400,
-    );
-  }
-
-  const slug = String(body.slug || name).trim();
-
-  const existing = getProductBySlug(slug);
-
-  if (existing) {
-    return c.json(
-      {
-        success: false,
-        error:
-          "A product with this slug already exists.",
-      },
-      409,
-    );
-  }
-
-  const product = buildProduct({
-    ...body,
-    name,
-    slug,
-    description,
-    price,
-  });
-
-  try {
-    insertProduct(product);
+    const items = await getActiveProducts();
+    return c.json({ success: true, data: items });
   } catch (error) {
-    console.error("Product create error:", error);
-
+    console.error("Get active products error:", error);
     return c.json(
       {
         success: false,
-        error: "Unable to create product.",
+        error: "Unable to load products.",
       },
       500,
     );
   }
-
-  return c.json(
-    {
-      success: true,
-      data: product,
-    },
-    201,
-  );
 });
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE PRODUCT
-|--------------------------------------------------------------------------
-*/
+products.get("/all", authMiddleware, async (c) => {
+  try {
+    const items = await getAllProducts();
+    return c.json({ success: true, data: items });
+  } catch (error) {
+    console.error("Get all products error:", error);
+    return c.json(
+      {
+        success: false,
+        error: "Unable to load products.",
+      },
+      500,
+    );
+  }
+});
 
-productsRoute.patch(
-  "/:id",
-  authMiddleware,
-  async (c) => {
-    const id = c.req.param("id");
+products.get("/id/:id", async (c) => {
+  const id = c.req.param("id");
 
-    const current = getProductById(id);
+  try {
+    const product = await getProductById(id);
 
-    if (!current) {
+    if (!product) {
       return c.json(
         {
           success: false,
@@ -328,255 +63,633 @@ productsRoute.patch(
       );
     }
 
-    let body: Partial<CreateProductInput> & {
-      active?: number;
-    };
+    return c.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error("Get product error:", error);
 
-    try {
-      body =
-        await c.req.json<
-          Partial<CreateProductInput> & {
-            active?: number;
-          }
-        >();
-    } catch {
+    return c.json(
+      {
+        success: false,
+        error: "Unable to load product.",
+      },
+      500,
+    );
+  }
+});
+
+products.get("/slug/:slug", async (c) => {
+  const slug = c.req.param("slug");
+
+  try {
+    const product = await getProductBySlug(slug);
+
+    if (!product) {
       return c.json(
         {
           success: false,
-          error: "Invalid product update data.",
+          error: "Product not found.",
         },
-        400,
+        404,
       );
     }
 
-    const updates: Partial<Product> = {};
+    return c.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error("Get product by slug error:", error);
 
-    if (body.name !== undefined) {
-      const name = String(body.name).trim();
+    return c.json(
+      {
+        success: false,
+        error: "Unable to load product.",
+      },
+      500,
+    );
+  }
+});
+
+function cleanString(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function nullableString(value: unknown): string | null {
+  const result = cleanString(value);
+  return result.length > 0 ? result : null;
+}
+
+function numberValue(
+  value: unknown,
+  fallback = 0,
+): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const text = cleanString(value);
+
+  if (!text) {
+    return fallback;
+  }
+
+  const cleaned = text
+    .replace(/,/g, "")
+    .replace(/[^\d.-]/g, "");
+
+  const parsed = Number(cleaned);
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function integerValue(
+  value: unknown,
+  fallback = 0,
+): number {
+  const result = numberValue(value, fallback);
+  return Math.max(0, Math.round(result));
+}
+
+function booleanValue(
+  value: unknown,
+  fallback = true,
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  const text = cleanString(value).toLowerCase();
+
+  if (!text) {
+    return fallback;
+  }
+
+  if (
+    [
+      "false",
+      "0",
+      "no",
+      "off",
+      "inactive",
+      "disabled",
+      "draft",
+      "archived",
+    ].includes(text)
+  ) {
+    return false;
+  }
+
+  if (
+    [
+      "true",
+      "1",
+      "yes",
+      "on",
+      "active",
+      "enabled",
+      "published",
+    ].includes(text)
+  ) {
+    return true;
+  }
+
+  return fallback;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 180);
+}
+
+async function createUniqueSlug(
+  name: string,
+  requestedSlug?: string | null,
+  ignoreId?: string,
+): Promise<string> {
+  const base = slugify(requestedSlug || name) || `product-${Date.now()}`;
+
+  let slug = base;
+  let counter = 2;
+
+  while (true) {
+    const existing = await getProductBySlug(slug);
+
+    if (!existing || existing.id === ignoreId) {
+      return slug;
+    }
+
+    slug = `${base}-${counter}`;
+    counter += 1;
+  }
+}
+
+function calculateFinancials(
+  price: number,
+  supplierCost: number,
+  shippingCost: number,
+  otherCost: number,
+) {
+  const totalCost =
+    supplierCost +
+    shippingCost +
+    otherCost;
+
+  const profit = price - totalCost;
+
+  const margin =
+    price > 0
+      ? (profit / price) * 100
+      : 0;
+
+  return {
+    profit,
+    margin,
+  };
+}
+
+function normalizeImages(
+  value: unknown,
+): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cleanString(item))
+      .filter(Boolean);
+  }
+
+  const text = cleanString(value);
+
+  if (!text) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => cleanString(item))
+        .filter(Boolean);
+    }
+  } catch {
+    // Continue with delimiter parsing.
+  }
+
+  return text
+    .split(/[|;\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeVariants(
+  value: unknown,
+): ProductVariant[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((variant, index) => {
+      if (!variant || typeof variant !== "object") {
+        return null;
+      }
+
+      const item = variant as Record<string, unknown>;
+
+      const name =
+        cleanString(item.name) ||
+        cleanString(item.optionName) ||
+        "Default";
+
+      const variantValue =
+        cleanString(item.value) ||
+        cleanString(item.optionValue) ||
+        "Default";
+
+      return {
+        id:
+          cleanString(item.id) ||
+          createId(),
+        name,
+        value: variantValue,
+        price:
+          item.price === undefined ||
+          item.price === null ||
+          item.price === ""
+            ? undefined
+            : numberValue(item.price, 0),
+        sku:
+          nullableString(item.sku),
+        stock:
+          integerValue(item.stock, 0),
+        ...(item.id
+          ? {}
+          : {
+              sortOrder: index,
+            }),
+      } as ProductVariant;
+    })
+    .filter(
+      (variant): variant is ProductVariant =>
+        variant !== null,
+    );
+}
+
+function buildProduct(
+  input: Record<string, unknown>,
+  existing?: Product,
+): Product {
+  const name =
+    cleanString(input.name) ||
+    cleanString(input.title) ||
+    existing?.name ||
+    "";
+
+  const description =
+    cleanString(input.description) ||
+    cleanString(input.bodyHtml) ||
+    cleanString(input.body) ||
+    existing?.description ||
+    "";
+
+  const category =
+    cleanString(input.category) ||
+    cleanString(input.type) ||
+    existing?.category ||
+    "General";
+
+  const price =
+    input.price !== undefined
+      ? numberValue(input.price, 0)
+      : input.retail_price !== undefined
+        ? numberValue(input.retail_price, 0)
+        : existing?.price ?? 0;
+
+  const supplierCost =
+    input.supplier_cost !== undefined
+      ? numberValue(input.supplier_cost, 0)
+      : input.wholesale_cost !== undefined
+        ? numberValue(input.wholesale_cost, 0)
+        : existing?.supplierCost ?? 0;
+
+  const shippingCost =
+    input.shipping_cost !== undefined
+      ? numberValue(input.shipping_cost, 0)
+      : existing?.shippingCost ?? 0;
+
+  const otherCost =
+    input.other_cost !== undefined
+      ? numberValue(input.other_cost, 0)
+      : existing?.otherCost ?? 0;
+
+  const financials =
+    calculateFinancials(
+      price,
+      supplierCost,
+      shippingCost,
+      otherCost,
+    );
+
+  const images =
+    input.images !== undefined
+      ? normalizeImages(input.images)
+      : input.image_url !== undefined
+        ? normalizeImages(input.image_url)
+        : existing?.images ?? [];
+
+  const imageUrl =
+    cleanString(input.image_url) ||
+    cleanString(input.imageUrl) ||
+    images[0] ||
+    existing?.imageUrl ||
+    null;
+
+  const variants =
+    input.variants !== undefined
+      ? normalizeVariants(input.variants)
+      : existing?.variants ?? [];
+
+  const stock =
+    input.stock !== undefined
+      ? integerValue(input.stock, 0)
+      : input.inventory_quantity !== undefined
+        ? integerValue(input.inventory_quantity, 0)
+        : existing?.stock ?? 0;
+
+  const lowStockThreshold =
+    input.low_stock_threshold !== undefined
+      ? integerValue(
+          input.low_stock_threshold,
+          0,
+        )
+      : existing?.lowStockThreshold ?? 0;
+
+  const active =
+    input.active !== undefined
+      ? booleanValue(input.active, true)
+      : input.status !== undefined
+        ? booleanValue(input.status, true)
+        : existing?.active ?? true;
+
+  return {
+    id:
+      existing?.id ||
+      cleanString(input.id) ||
+      createId(),
+
+    name,
+
+    slug:
+      existing?.slug ||
+      cleanString(input.slug) ||
+      cleanString(input.handle) ||
+      slugify(name),
+
+    sku:
+      nullableString(input.sku) ||
+      nullableString(input.variant_sku) ||
+      existing?.sku ||
+      null,
+
+    description,
+
+    category,
+
+    price,
+
+    currency:
+      cleanString(input.currency) ||
+      existing?.currency ||
+      "USD",
+
+    imageUrl,
+
+    images,
+
+    videoUrl:
+      nullableString(input.video_url) ||
+      nullableString(input.videoUrl) ||
+      existing?.videoUrl ||
+      null,
+
+    supplierName:
+      nullableString(input.supplier_name) ||
+      nullableString(input.vendor) ||
+      existing?.supplierName ||
+      null,
+
+    supplierProductId:
+      nullableString(
+        input.supplier_product_id,
+      ) ||
+      existing?.supplierProductId ||
+      null,
+
+    warehouseCountry:
+      nullableString(
+        input.warehouse_country,
+      ) ||
+      existing?.warehouseCountry ||
+      null,
+
+    processingTime:
+      nullableString(
+        input.processing_time,
+      ) ||
+      existing?.processingTime ||
+      null,
+
+    deliveryTime:
+      nullableString(
+        input.delivery_time,
+      ) ||
+      existing?.deliveryTime ||
+      null,
+
+    supplierCost,
+
+    shippingCost,
+
+    otherCost,
+
+    profitPerUnit:
+      financials.profit,
+
+    profitMargin:
+      financials.margin,
+
+    stock,
+
+    lowStockThreshold,
+
+    variants,
+
+    active,
+
+    createdAt:
+      existing?.createdAt ||
+      new Date().toISOString(),
+  };
+}
+
+function getDatabaseErrorMessage(
+  error: unknown,
+): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error
+  ) {
+    return String(
+      (error as { message: unknown }).message,
+    );
+  }
+
+  return String(error);
+}
+
+products.post(
+  "/",
+  authMiddleware,
+  async (c) => {
+    try {
+      const body =
+        (await c.req.json()) as Record<
+          string,
+          unknown
+        >;
+
+      const name =
+        cleanString(body.name) ||
+        cleanString(body.title);
+
+      const description =
+        cleanString(body.description) ||
+        cleanString(body.bodyHtml) ||
+        cleanString(body.body);
+
+      const price = numberValue(
+        body.price ??
+          body.retail_price ??
+          body.variant_price,
+        0,
+      );
 
       if (!name) {
         return c.json(
           {
             success: false,
-            error: "Product name cannot be empty.",
+            error:
+              "Product name/title is required.",
           },
           400,
         );
       }
 
-      updates.name = name;
-    }
-
-    if (body.slug !== undefined) {
-      const slug = String(body.slug).trim();
-
-      if (!slug) {
-        return c.json(
-          {
-            success: false,
-            error: "Product slug cannot be empty.",
-          },
-          400,
-        );
-      }
-
-      const existing = getProductBySlug(slug);
-
-      if (existing && existing.id !== id) {
+      if (!description) {
         return c.json(
           {
             success: false,
             error:
-              "A product with this slug already exists.",
-          },
-          409,
-        );
-      }
-
-      updates.slug = slug;
-    }
-
-    if (body.description !== undefined) {
-      updates.description =
-        String(body.description).trim();
-    }
-
-    if (body.category !== undefined) {
-      updates.category =
-        String(body.category).trim();
-    }
-
-    if (body.currency !== undefined) {
-      updates.currency =
-        String(body.currency)
-          .trim()
-          .toUpperCase();
-    }
-
-    if (body.image_url !== undefined) {
-      updates.image_url =
-        stringOrNull(body.image_url);
-    }
-
-    if (body.images !== undefined) {
-      updates.images =
-        normalizeImages(body.images);
-    }
-
-    if (body.video_url !== undefined) {
-      updates.video_url =
-        stringOrNull(body.video_url);
-    }
-
-    if (body.sku !== undefined) {
-      updates.sku = stringOrNull(body.sku);
-    }
-
-    if (body.supplier_name !== undefined) {
-      updates.supplier_name =
-        stringOrNull(body.supplier_name);
-    }
-
-    if (
-      body.supplier_product_id !== undefined
-    ) {
-      updates.supplier_product_id =
-        stringOrNull(
-          body.supplier_product_id,
-        );
-    }
-
-    if (
-      body.warehouse_country !== undefined
-    ) {
-      updates.warehouse_country =
-        stringOrNull(
-          body.warehouse_country,
-        )?.toUpperCase() ?? null;
-    }
-
-    if (body.processing_time !== undefined) {
-      updates.processing_time =
-        stringOrNull(body.processing_time);
-    }
-
-    if (body.delivery_time !== undefined) {
-      updates.delivery_time =
-        stringOrNull(body.delivery_time);
-    }
-
-    if (body.price !== undefined) {
-      const price = Number(body.price);
-
-      if (!Number.isFinite(price) || price <= 0) {
-        return c.json(
-          {
-            success: false,
-            error:
-              "Product price must be a valid positive number.",
+              "Product description is required.",
           },
           400,
         );
       }
 
-      updates.price = price;
-    }
+      if (price <= 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product price must be greater than 0.",
+          },
+          400,
+        );
+      }
 
-    if (body.supplier_cost !== undefined) {
-      updates.supplier_cost = Math.max(
-        0,
-        numberOrZero(body.supplier_cost),
-      );
-    }
+      const sku =
+        nullableString(body.sku) ||
+        nullableString(body.variant_sku);
 
-    if (body.shipping_cost !== undefined) {
-      updates.shipping_cost = Math.max(
-        0,
-        numberOrZero(body.shipping_cost),
-      );
-    }
+      if (sku) {
+        const duplicate = db
+          .prepare(
+            `SELECT id FROM products
+             WHERE sku = ?
+             LIMIT 1`,
+          )
+          .get(sku) as
+          | { id: string }
+          | undefined;
 
-    if (body.other_cost !== undefined) {
-      updates.other_cost = Math.max(
-        0,
-        numberOrZero(body.other_cost),
-      );
-    }
+        if (duplicate) {
+          return c.json(
+            {
+              success: false,
+              error:
+                "A product with this SKU already exists.",
+              details: `SKU "${sku}" already belongs to product ${duplicate.id}.`,
+            },
+            409,
+          );
+        }
+      }
 
-    if (body.stock !== undefined) {
-      updates.stock = Math.max(
-        0,
-        numberOrZero(body.stock),
-      );
-    }
+      const slug =
+        await createUniqueSlug(
+          name,
+          nullableString(body.slug) ||
+            nullableString(body.handle),
+        );
 
-    if (
-      body.low_stock_threshold !== undefined
-    ) {
-      updates.low_stock_threshold = Math.max(
-        0,
-        numberOrZero(
-          body.low_stock_threshold,
-        ),
-      );
-    }
-
-    if (body.variants !== undefined) {
-      updates.variants =
-        normalizeVariants(body.variants);
-    }
-
-    if (body.active !== undefined) {
-      updates.active =
-        Number(body.active) === 1 ? 1 : 0;
-    }
-
-    const nextPrice =
-      updates.price ?? current.price;
-
-    const nextSupplierCost =
-      updates.supplier_cost ??
-      current.supplier_cost;
-
-    const nextShippingCost =
-      updates.shipping_cost ??
-      current.shipping_cost;
-
-    const nextOtherCost =
-      updates.other_cost ??
-      current.other_cost;
-
-    const nextProfit =
-      nextPrice -
-      nextSupplierCost -
-      nextShippingCost -
-      nextOtherCost;
-
-    updates.profit_per_unit = nextProfit;
-
-    updates.profit_margin =
-      nextPrice > 0
-        ? (nextProfit / nextPrice) * 100
-        : 0;
-
-    try {
       const product =
-        updateProductRecord(id, updates);
+        buildProduct({
+          ...body,
+          name,
+          description,
+          price,
+          slug,
+        });
 
-      return c.json({
-        success: true,
-        data: product,
-      });
+      const saved =
+        await insertProduct(product);
+
+      return c.json(
+        {
+          success: true,
+          data: saved,
+          message:
+            "Product created successfully.",
+        },
+        201,
+      );
     } catch (error) {
       console.error(
-        "Product update error:",
+        "Product create error:",
         error,
       );
+
+      const message =
+        getDatabaseErrorMessage(error);
 
       return c.json(
         {
           success: false,
-          error: "Unable to update product.",
+          error:
+            "Unable to create product.",
+          details: message,
         },
         500,
       );
@@ -584,32 +697,210 @@ productsRoute.patch(
   },
 );
 
-/*
-|--------------------------------------------------------------------------
-| DELETE PRODUCT
-|--------------------------------------------------------------------------
-*/
-
-productsRoute.delete(
+products.patch(
   "/:id",
   authMiddleware,
-  (c) => {
+  async (c) => {
     const id = c.req.param("id");
 
-    const exists = getProductById(id);
+    try {
+      const existing =
+        await getProductById(id);
 
-    if (!exists) {
+      if (!existing) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product not found.",
+          },
+          404,
+        );
+      }
+
+      const body =
+        (await c.req.json()) as Record<
+          string,
+          unknown
+        >;
+
+      const merged = {
+        ...existing,
+        ...body,
+      };
+
+      const name =
+        cleanString(body.name) ||
+        cleanString(body.title) ||
+        existing.name;
+
+      const description =
+        cleanString(body.description) ||
+        cleanString(body.bodyHtml) ||
+        cleanString(body.body) ||
+        existing.description;
+
+      if (!name) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product name/title is required.",
+          },
+          400,
+        );
+      }
+
+      if (!description) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product description is required.",
+          },
+          400,
+        );
+      }
+
+      const price =
+        body.price !== undefined
+          ? numberValue(body.price, 0)
+          : existing.price;
+
+      if (price <= 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product price must be greater than 0.",
+          },
+          400,
+        );
+      }
+
+      const sku =
+        nullableString(body.sku) ||
+        nullableString(body.variant_sku) ||
+        existing.sku;
+
+      if (sku) {
+        const duplicate =
+          db.prepare(
+            `SELECT id FROM products
+             WHERE sku = ?
+             AND id != ?
+             LIMIT 1`,
+          ).get(sku, id) as
+            | { id: string }
+            | undefined;
+
+        if (duplicate) {
+          return c.json(
+            {
+              success: false,
+              error:
+                "Another product already uses this SKU.",
+              details: `SKU "${sku}" belongs to product ${duplicate.id}.`,
+            },
+            409,
+          );
+        }
+      }
+
+      let slug =
+        cleanString(body.slug) ||
+        cleanString(body.handle) ||
+        existing.slug;
+
+      if (
+        cleanString(body.name) ||
+        cleanString(body.title) ||
+        cleanString(body.handle) ||
+        cleanString(body.slug)
+      ) {
+        slug =
+          await createUniqueSlug(
+            name,
+            slug,
+            id,
+          );
+      }
+
+      const product =
+        buildProduct(
+          {
+            ...merged,
+            id,
+            name,
+            description,
+            price,
+            slug,
+          },
+          existing,
+        );
+
+      const saved =
+        await updateProductRecord(
+          id,
+          product,
+        );
+
+      return c.json({
+        success: true,
+        data: saved,
+        message:
+          "Product updated successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "Product update error:",
+        error,
+      );
+
+      const message =
+        getDatabaseErrorMessage(error);
+
       return c.json(
         {
           success: false,
-          error: "Product not found.",
+          error:
+            "Unable to update product.",
+          details: message,
         },
-        404,
+        500,
       );
     }
+  },
+);
+
+products.delete(
+  "/:id",
+  authMiddleware,
+  async (c) => {
+    const id = c.req.param("id");
 
     try {
-      deleteProductRecord(id);
+      const existing =
+        await getProductById(id);
+
+      if (!existing) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product not found.",
+          },
+          404,
+        );
+      }
+
+      await deleteProductRecord(id);
+
+      return c.json({
+        success: true,
+        message:
+          "Product deleted successfully.",
+      });
     } catch (error) {
       console.error(
         "Product delete error:",
@@ -621,19 +912,13 @@ productsRoute.delete(
           success: false,
           error:
             "Unable to delete product.",
+          details:
+            getDatabaseErrorMessage(error),
         },
         500,
       );
     }
-
-    return c.json({
-      success: true,
-      data: {
-        message:
-          "Product deleted successfully.",
-      },
-    });
   },
 );
 
-export default productsRoute;
+export default products;

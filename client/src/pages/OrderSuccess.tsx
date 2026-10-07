@@ -9,7 +9,7 @@ import { formatCurrency } from "../utils/currency";
 interface OrderState {
 product?: {
 name: string;
-image_url: string | null;
+image_url?: string | null;
 price: number;
 };
 country?: string;
@@ -46,11 +46,9 @@ orderState,
 onContinueShopping,
 onBackHome,
 }: OrderSuccessProps) {
-const currency =
-orderState?.currency || "NGN";
+const currency = orderState?.currency || "NGN";
 
-const total =
-orderState?.total || 0;
+const total = orderState?.total || 0;
 
 return (
 <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -106,12 +104,8 @@ return (
             <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
               {orderState.product.image_url ? (
                 <img
-                  src={
-                    orderState.product.image_url
-                  }
-                  alt={
-                    orderState.product.name
-                  }
+                  src={orderState.product.image_url}
+                  alt={orderState.product.name}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -170,10 +164,7 @@ return (
             </span>
 
             <span className="text-lg font-bold text-slate-950">
-              {formatCurrency(
-                total,
-                currency,
-              )}
+              {formatCurrency(total, currency)}
             </span>
           </div>
         </div>
@@ -213,56 +204,57 @@ return (
             <Info
               label="Name"
               value={
-                orderState.customer
-                  .customer_name || "—"
+                orderState.customer.customer_name ||
+                orderState.customer.name ||
+                "—"
               }
             />
 
             <Info
               label="Email"
               value={
-                orderState.customer
-                  .customer_email || "—"
+                orderState.customer.customer_email ||
+                orderState.customer.email ||
+                "—"
               }
             />
 
             <Info
               label="Phone"
               value={
-                orderState.customer
-                  .customer_phone || "—"
+                orderState.customer.customer_phone ||
+                orderState.customer.phone ||
+                "—"
               }
             />
 
             <Info
               label="Address"
               value={
-                orderState.customer
-                  .shipping_address || "—"
+                orderState.customer.shipping_address ||
+                orderState.customer.address ||
+                "—"
               }
             />
 
             <Info
               label="City"
-              value={
-                orderState.customer.city || "—"
-              }
+              value={orderState.customer.city || "—"}
             />
 
             <Info
               label="State"
-              value={
-                orderState.customer.state || "—"
-              }
+              value={orderState.customer.state || "—"}
             />
 
-            {orderState.customer
-              .postal_code && (
+            {(orderState.customer.postal_code ||
+              orderState.customer.postalCode) && (
               <Info
                 label="Postal code"
                 value={
-                  orderState.customer
-                    .postal_code || "—"
+                  orderState.customer.postal_code ||
+                  orderState.customer.postalCode ||
+                  "—"
                 }
               />
             )}
@@ -270,9 +262,7 @@ return (
             {orderState.country && (
               <Info
                 label="Country"
-                value={
-                  orderState.country
-                }
+                value={orderState.country}
               />
             )}
           </div>
@@ -283,9 +273,7 @@ return (
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <button
           type="button"
-          onClick={
-            onContinueShopping
-          }
+          onClick={onContinueShopping}
           className="inline-flex items-center justify-center rounded-full bg-slate-950 px-7 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           Continue shopping

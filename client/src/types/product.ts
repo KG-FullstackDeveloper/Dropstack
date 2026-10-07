@@ -1,3 +1,12 @@
+export interface ProductVariant {
+  id: string;
+  name: string;
+  value: string;
+  price: string;
+  sku: string;
+  stock: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -11,9 +20,13 @@ export interface Product {
   currency: string;
 
   image_url?: string | null;
+  video_url?: string | null;
   images?: string[];
 
   supplier_name?: string | null;
+  supplier_product_id?: string | null;
+  warehouse_country?: string | null;
+
   supplier_cost: number;
   shipping_cost: number;
   other_cost: number;
@@ -27,19 +40,12 @@ export interface Product {
   stock?: number;
   low_stock_threshold?: number;
 
+  variants?: ProductVariant[];
+
   active: number;
 
   created_at?: string;
   updated_at?: string;
-}
-
-export interface ProductVariant {
-  id: string;
-  name: string;
-  value: string;
-  price: string;
-  sku: string;
-  stock: string;
 }
 
 export interface CreateProductInput {
@@ -52,9 +58,13 @@ export interface CreateProductInput {
   currency: string;
 
   image_url?: string;
+  video_url?: string;
   images?: string[];
 
   supplier_name?: string;
+  supplier_product_id?: string;
+  warehouse_country?: string;
+
   supplier_cost: number;
   shipping_cost: number;
   other_cost: number;

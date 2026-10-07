@@ -1,11 +1,14 @@
 import {
   CalendarDays,
+  ChevronDown,
   ChevronRight,
+  Filter,
   PackageCheck,
   RefreshCw,
   Search,
   ShoppingBag,
   DollarSign,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminOrder } from "../../types/admin";
@@ -85,7 +88,20 @@ function formatLabel(value: string) {
 function formatDate(dateStr: string) {
   try {
     return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatShortDate(dateStr: string) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
     }).format(new Date(dateStr));
   } catch {
     return dateStr;
@@ -102,6 +118,8 @@ export default function Orders() {
     useState<StatusFilter>("all");
   const [selectedOrder, setSelectedOrder] =
     useState<AdminOrder | null>(null);
+
+  const [showFilters, setShowFilters] = useState(false);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -158,6 +176,11 @@ export default function Orders() {
         order.order_status === "delivered",
     ).length;
 
+    const cancelled = orders.filter(
+      (order) =>
+        order.order_status === "cancelled",
+    ).length;
+
     return {
       total: orders.length,
       totalRevenue,
@@ -165,6 +188,7 @@ export default function Orders() {
       processing,
       shipped,
       delivered,
+      cancelled,
     };
   }, [orders]);
 
@@ -190,23 +214,38 @@ export default function Orders() {
     });
   }, [orders, search, statusFilter]);
 
+  const hasFilters =
+    Boolean(search.trim()) ||
+    statusFilter !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
-      <div className="mx-auto max-w-[1600px]">
+      <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header */}
-        <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               Fulfillment
             </p>
 
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">
-              Orders
-            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">
+                Orders
+              </h1>
 
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              Manage customer orders, payments, and
-              fulfillment.
+              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {orders.length.toLocaleString()}
+              </span>
+            </div>
+
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              Manage orders, payments, fulfillment, and
+              customer delivery status.
             </p>
           </div>
 
@@ -214,7 +253,7 @@ export default function Orders() {
             type="button"
             onClick={loadOrders}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <RefreshCw
               size={16}
@@ -227,7 +266,7 @@ export default function Orders() {
           </button>
         </div>
 
-        {/* Stats */}
+        {/* KPI cards */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             icon={ShoppingBag}
@@ -261,79 +300,143 @@ export default function Orders() {
             icon={PackageCheck}
             title="Delivered"
             value={stats.delivered.toLocaleString()}
+            success
           />
         </div>
 
-        {/* Orders */}
-        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        {/* Status overview */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MiniStatus
+            label="Pending payment"
+            value={stats.pending}
+            className="text-amber-600 dark:text-amber-400"
+          />
+
+          <MiniStatus
+            label="Processing"
+            value={stats.processing}
+            className="text-purple-600 dark:text-purple-400"
+          />
+
+          <MiniStatus
+            label="Shipped"
+            value={stats.shipped}
+            className="text-indigo-600 dark:text-indigo-400"
+          />
+
+          <MiniStatus
+            label="Cancelled"
+            value={stats.cancelled}
+            className="text-red-600 dark:text-red-400"
+          />
+        </div>
+
+        {/* Order directory */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           {/* Toolbar */}
-          <div className="flex flex-col gap-4 border-b border-slate-200 p-5 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="font-semibold">
-                Order directory
-              </h2>
+          <div className="border-b border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-semibold">
+                  Order directory
+                </h2>
 
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {loading
-                  ? "Loading orders..."
-                  : `${filteredOrders.length} order${
-                      filteredOrders.length === 1
-                        ? ""
-                        : "s"
-                    } shown`}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="relative sm:w-[340px]">
-                <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-
-                <input
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search name, email, or order ID..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-500"
-                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {loading
+                    ? "Loading orders..."
+                    : `${filteredOrders.length.toLocaleString()} of ${orders.length.toLocaleString()} orders shown`}
+                </p>
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value)
-                }
-                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-950"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option
-                    key={option.value}
-                    value={option.value}
-                  >
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative sm:w-[360px]">
+                  <Search
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+
+                  <input
+                    value={search}
+                    onChange={(event) =>
+                      setSearch(event.target.value)
+                    }
+                    placeholder="Search orders, customers, email..."
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowFilters((value) => !value)
+                  }
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                    showFilters || statusFilter !== "all"
+                      ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Filter size={16} />
+                  Filters
+
+                  <ChevronDown
+                    size={15}
+                    className={
+                      showFilters
+                        ? "rotate-180 transition"
+                        : "transition"
+                    }
+                  />
+                </button>
+              </div>
             </div>
+
+            {/* Filters */}
+            {showFilters && (
+              <div className="flex flex-col gap-4 bg-slate-50 px-5 py-4 dark:bg-slate-950/60 md:flex-row md:items-center">
+                <div className="flex-1">
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Order status
+                  </label>
+
+                  <select
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(event.target.value)
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-900 md:max-w-[320px]"
+                  >
+                    {STATUS_OPTIONS.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-2 self-end rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-900"
+                  >
+                    <X size={15} />
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {loading ? (
-            <div className="flex min-h-[350px] items-center justify-center">
-              <div className="text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900 dark:border-slate-700 dark:border-t-white" />
-
-                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                  Loading orders...
-                </p>
-              </div>
-            </div>
+            <OrdersLoading />
           ) : filteredOrders.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-left">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
+              <table className="w-full min-w-[1100px] text-left">
+                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
                   <tr>
                     <th className="px-6 py-4">
                       Order
@@ -359,7 +462,9 @@ export default function Orders() {
                       Status
                     </th>
 
-                    <th className="px-6 py-4" />
+                    <th className="px-6 py-4 text-right">
+                      View
+                    </th>
                   </tr>
                 </thead>
 
@@ -370,43 +475,69 @@ export default function Orders() {
                       onClick={() =>
                         setSelectedOrder(order)
                       }
-                      className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                      className="group cursor-pointer border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                     >
                       <td className="px-6 py-5">
-                        <span className="font-semibold">
-                          #
-                          {order.id
-                            .slice(0, 8)
-                            .toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            #
+                          </div>
+
+                          <div>
+                            <p className="font-semibold">
+                              #
+                              {order.id
+                                .slice(0, 8)
+                                .toUpperCase()}
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              Order ID
+                            </p>
+                          </div>
+                        </div>
                       </td>
 
                       <td className="px-6 py-5">
-                        <p className="max-w-[220px] truncate text-sm font-medium">
+                        <p className="max-w-[230px] truncate text-sm font-medium">
                           {order.customer_name}
                         </p>
 
-                        <p className="mt-1 max-w-[240px] truncate text-xs text-slate-500 dark:text-slate-400">
+                        <p className="mt-1 max-w-[250px] truncate text-xs text-slate-500 dark:text-slate-400">
                           {order.customer_email}
                         </p>
                       </td>
 
-                      <td className="px-6 py-5 text-sm text-slate-500 dark:text-slate-400">
-                        {formatDate(
-                          order.created_at,
-                        )}
+                      <td className="px-6 py-5">
+                        <p className="text-sm font-medium">
+                          {formatShortDate(
+                            order.created_at,
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-400">
+                          {formatDate(
+                            order.created_at,
+                          )}
+                        </p>
                       </td>
 
-                      <td className="px-6 py-5 text-sm font-semibold">
-                        {formatCurrency(
-                          order.total,
-                          order.currency,
-                        )}
+                      <td className="px-6 py-5">
+                        <p className="text-sm font-bold">
+                          {formatCurrency(
+                            order.total,
+                            order.currency,
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-xs uppercase text-slate-400">
+                          {order.currency}
+                        </p>
                       </td>
 
                       <td className="px-6 py-5">
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${paymentBadge(
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${paymentBadge(
                             order.payment_status,
                           )}`}
                         >
@@ -418,7 +549,7 @@ export default function Orders() {
 
                       <td className="px-6 py-5">
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadge(
                             order.order_status,
                           )}`}
                         >
@@ -429,10 +560,9 @@ export default function Orders() {
                       </td>
 
                       <td className="px-6 py-5 text-right">
-                        <ChevronRight
-                          size={18}
-                          className="ml-auto text-slate-400"
-                        />
+                        <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition group-hover:bg-slate-200 group-hover:text-slate-700 dark:group-hover:bg-slate-700 dark:group-hover:text-white">
+                          <ChevronRight size={18} />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -440,34 +570,30 @@ export default function Orders() {
               </table>
             </div>
           ) : (
-            <div className="p-14 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+            <div className="p-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
                 <PackageCheck
-                  size={28}
+                  size={30}
                   className="text-slate-400"
                 />
               </div>
 
-              <h3 className="mt-4 font-semibold">
+              <h3 className="mt-5 text-lg font-semibold">
                 {orders.length === 0
                   ? "No customer orders yet"
                   : "No orders match your filters"}
               </h3>
 
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
                 {orders.length === 0
-                  ? "New orders will appear here automatically."
-                  : "Try adjusting your search or status filter."}
+                  ? "New orders will automatically appear here when customers place them."
+                  : "Try changing your search or status filter."}
               </p>
 
-              {(search ||
-                statusFilter !== "all") && (
+              {hasFilters && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setStatusFilter("all");
-                  }}
+                  onClick={clearFilters}
                   className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
                 >
                   Clear filters
@@ -475,7 +601,7 @@ export default function Orders() {
               )}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       {selectedOrder && (
@@ -491,16 +617,70 @@ export default function Orders() {
   );
 }
 
+function OrdersLoading() {
+  return (
+    <div className="min-h-[420px] p-6">
+      <div className="space-y-3">
+        {Array.from({ length: 7 }).map(
+          (_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-7 gap-5 rounded-xl border border-slate-100 p-5 dark:border-slate-800"
+            >
+              {Array.from({ length: 7 }).map(
+                (_, cell) => (
+                  <div
+                    key={cell}
+                    className="h-5 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
+                  />
+                ),
+              )}
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MiniStatus({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: number;
+  className: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm text-slate-500 dark:text-slate-400">
+          {label}
+        </span>
+
+        <span
+          className={`text-lg font-bold ${className}`}
+        >
+          {value.toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   icon: Icon,
   title,
   value,
   warning = false,
+  success = false,
 }: {
   icon: typeof DollarSign;
   title: string;
   value: string;
   warning?: boolean;
+  success?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -508,7 +688,9 @@ function StatCard({
         className={`flex h-10 w-10 items-center justify-center rounded-xl ${
           warning
             ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            : success
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
         }`}
       >
         <Icon size={20} />
@@ -518,7 +700,7 @@ function StatCard({
         {title}
       </p>
 
-      <p className="mt-2 text-2xl font-bold">
+      <p className="mt-2 text-2xl font-bold tracking-tight">
         {value}
       </p>
     </div>

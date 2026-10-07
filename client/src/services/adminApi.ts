@@ -17,6 +17,7 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+  details?: string;
 }
 
 export interface LoginSuccess {
@@ -27,7 +28,7 @@ export interface LoginSuccess {
 /*
  * Kept for compatibility with existing code.
  *
- * Normal login no longer requires this.
+ * Normal login does NOT require this.
  * Two-factor authentication can be enabled later
  * as an optional account-security feature.
  */
@@ -77,6 +78,99 @@ export interface ResetForgotPasswordResult {
   message: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Product types                                                              */
+/* -------------------------------------------------------------------------- */
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  value: string;
+  price?: number;
+  sku?: string | null;
+  stock?: number;
+}
+
+export interface AdminProduct {
+  id: string;
+  name: string;
+  title?: string;
+  slug: string;
+  handle?: string;
+
+  sku?: string | null;
+
+  description: string;
+  bodyHtml?: string;
+
+  category: string;
+
+  price: number;
+  currency: string;
+
+  imageUrl?: string | null;
+  image_url?: string | null;
+
+  images: string[];
+
+  videoUrl?: string | null;
+
+  supplierName?: string | null;
+  supplierProductId?: string | null;
+
+  warehouseCountry?: string | null;
+
+  processingTime?: string | null;
+  deliveryTime?: string | null;
+
+  supplierCost: number;
+  shippingCost: number;
+  otherCost: number;
+
+  profitPerUnit: number;
+  profitMargin: number;
+
+  stock: number;
+  lowStockThreshold: number;
+
+  variants: ProductVariant[];
+
+  active: boolean;
+
+  createdAt?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Product CSV import types                                                   */
+/* -------------------------------------------------------------------------- */
+
+export interface ProductImportError {
+  row: number;
+  message: string;
+  field?: string;
+  value?: string;
+}
+
+export interface ProductImportResult {
+  imported?: number;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+
+  total?: number;
+
+  errors?: ProductImportError[];
+
+  products?: AdminProduct[];
+
+  message?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Authentication                                                             */
+/* -------------------------------------------------------------------------- */
+
 function getToken(): string | null {
   return localStorage.getItem(
     "admin_token"
@@ -93,8 +187,14 @@ async function request<T>(
     options.headers
   );
 
+  /*
+   * Do not force JSON for FormData.
+   *
+   * This is important for CSV/image uploads.
+   */
   if (
     options.body &&
+    !(options.body instanceof FormData) &&
     !headers.has("Content-Type")
   ) {
     headers.set(
@@ -140,6 +240,8 @@ async function request<T>(
     let errorMessage =
       `Request failed with status ${response.status}.`;
 
+    let details = "";
+
     if (
       result &&
       typeof result === "object"
@@ -153,6 +255,13 @@ async function request<T>(
         errorMessage =
           body.message;
       }
+
+      if (
+        typeof body.details === "string"
+      ) {
+        details =
+          body.details.trim();
+      }
     }
 
     /*
@@ -164,8 +273,10 @@ async function request<T>(
       path === "/auth/login/verify" ||
       path === "/auth/login/resend" ||
       path === "/auth/forgot-password" ||
-      path === "/auth/forgot-password/verify" ||
-      path === "/auth/forgot-password/reset";
+      path ===
+        "/auth/forgot-password/verify" ||
+      path ===
+        "/auth/forgot-password/reset";
 
     if (
       response.status === 401 &&
@@ -176,8 +287,17 @@ async function request<T>(
       );
     }
 
+    /*
+     * Include backend details when available.
+     *
+     * This fixes the old situation where the UI only
+     * showed "Unable to create product." while the
+     * server had the real SQLite error in `details`.
+     */
     throw new Error(
-      errorMessage
+      details
+        ? `${errorMessage} ${details}`
+        : errorMessage
     );
   }
 
@@ -189,10 +309,20 @@ async function request<T>(
       result as ApiResponse<T>;
 
     if (body.success === false) {
-      throw new Error(
+      const message =
         body.error ||
-          body.message ||
-          "Request failed."
+        body.message ||
+        "Request failed.";
+
+      const details =
+        typeof body.details === "string"
+          ? body.details.trim()
+          : "";
+
+      throw new Error(
+        details
+          ? `${message} ${details}`
+          : message
       );
     }
 
@@ -236,11 +366,10 @@ export async function login(
     );
 
   /*
-   * This is retained as a defensive compatibility
-   * check in case an older backend is still running.
+   * Compatibility check for an older backend.
    *
-   * The new backend does not return this during
-   * normal login.
+   * The current backend should return token + admin
+   * directly during normal login.
    */
   if (
     result.requiresTwoFactor &&
@@ -414,14 +543,6 @@ export async function changeEmail(
 /* Forgot Password                                                            */
 /* -------------------------------------------------------------------------- */
 
-/*
- * Step 1:
- *
- * User enters their administrator email.
- *
- * The server responds generically so that an attacker
- * cannot determine whether an email belongs to the owner.
- */
 export async function forgotPassword(
   email: string,
 ): Promise<ForgotPasswordResult> {
@@ -436,15 +557,6 @@ export async function forgotPassword(
   );
 }
 
-/*
- * Step 2:
- *
- * User enters the 6-digit code received by email.
- *
- * Successful verification returns a short-lived
- * reset token. This token is required for the
- * next step.
- */
 export async function verifyForgotPassword(
   email: string,
   code: string,
@@ -472,29 +584,20 @@ export async function verifyForgotPassword(
   return result;
 }
 
-/*
- * Step 3:
- *
- * User creates the new password using
- * the short-lived reset token.
- */
 export async function resetForgotPassword(
   resetToken: string,
   newPassword: string,
 ): Promise<ResetForgotPasswordResult> {
-  const result =
-    await request<ResetForgotPasswordResult>(
-      "/auth/forgot-password/reset",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          resetToken,
-          newPassword,
-        }),
-      }
-    );
-
-  return result;
+  return request<ResetForgotPasswordResult>(
+    "/auth/forgot-password/reset",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        resetToken,
+        newPassword,
+      }),
+    }
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -567,6 +670,34 @@ export async function apiDelete<T>(
     path,
     {
       method: "DELETE",
+    }
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Multipart / File API                                                       */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Used for CSV imports and future media uploads.
+ *
+ * FormData must NOT have a manually assigned
+ * Content-Type header because the browser needs
+ * to generate the multipart boundary itself.
+ */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  method:
+    | "POST"
+    | "PUT"
+    | "PATCH" = "POST",
+): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method,
+      body: formData,
     }
   );
 }
@@ -665,14 +796,14 @@ export async function getAdminStats(): Promise<any> {
 /* Products                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export async function getProducts(): Promise<any[]> {
+export async function getProducts(): Promise<AdminProduct[]> {
   const result =
     await apiGet<unknown>(
       "/products/all"
     );
 
   if (Array.isArray(result)) {
-    return result;
+    return result as AdminProduct[];
   }
 
   if (
@@ -690,21 +821,29 @@ export async function getProducts(): Promise<any[]> {
         data.products
       )
     ) {
-      return data.products;
+      return data.products as AdminProduct[];
+    }
+
+    if (
+      Array.isArray(
+        data.data
+      )
+    ) {
+      return data.data as AdminProduct[];
     }
   }
 
   return [];
 }
 
-export async function getAdminProducts(): Promise<any[]> {
+export async function getAdminProducts(): Promise<AdminProduct[]> {
   return getProducts();
 }
 
 export async function createProduct(
   product: unknown,
-): Promise<any> {
-  return apiPost(
+): Promise<AdminProduct> {
+  return apiPost<AdminProduct>(
     "/products",
     product
   );
@@ -713,8 +852,8 @@ export async function createProduct(
 export async function updateProduct(
   productId: string,
   product: unknown,
-): Promise<any> {
-  return apiPatch(
+): Promise<AdminProduct> {
+  return apiPatch<AdminProduct>(
     `/products/${encodeURIComponent(
       productId
     )}`,
@@ -729,6 +868,127 @@ export async function deleteProduct(
     `/products/${encodeURIComponent(
       productId
     )}`
+  );
+}
+
+/*
+ * Find an existing product by SKU.
+ *
+ * Useful for Shopify-style CSV importing where
+ * a SKU can identify an existing product.
+ */
+export async function findProductBySku(
+  sku: string,
+): Promise<AdminProduct | null> {
+  const normalizedSku =
+    sku.trim().toLowerCase();
+
+  if (!normalizedSku) {
+    return null;
+  }
+
+  const products =
+    await getAdminProducts();
+
+  return (
+    products.find(
+      (product) =>
+        String(
+          product.sku || ""
+        )
+          .trim()
+          .toLowerCase() ===
+        normalizedSku
+    ) || null
+  );
+}
+
+/*
+ * Find an existing product by handle/slug.
+ *
+ * Shopify CSV files normally use Handle.
+ */
+export async function findProductByHandle(
+  handle: string,
+): Promise<AdminProduct | null> {
+  const normalizedHandle =
+    handle.trim().toLowerCase();
+
+  if (!normalizedHandle) {
+    return null;
+  }
+
+  const products =
+    await getAdminProducts();
+
+  return (
+    products.find(
+      (product) =>
+        String(
+          product.slug ||
+            product.handle ||
+            ""
+        )
+          .trim()
+          .toLowerCase() ===
+        normalizedHandle
+    ) || null
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Product CSV Import                                                         */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Upload a CSV file to the backend.
+ *
+ * The backend can parse Shopify-style CSV files,
+ * dropshipping CSV files, and your custom template.
+ */
+export async function importProductsCsv(
+  file: File,
+  options?: {
+    updateExisting?: boolean;
+    skipExisting?: boolean;
+  },
+): Promise<ProductImportResult> {
+  const formData =
+    new FormData();
+
+  formData.append(
+    "file",
+    file
+  );
+
+  if (
+    options?.updateExisting !==
+    undefined
+  ) {
+    formData.append(
+      "updateExisting",
+      String(
+        options.updateExisting
+      )
+    );
+  }
+
+  if (
+    options?.skipExisting !==
+    undefined
+  ) {
+    formData.append(
+      "skipExisting",
+      String(
+        options.skipExisting
+      )
+    );
+  }
+
+  return apiUpload<ProductImportResult>(
+    "/products/import-csv",
+    formData,
+    "POST"
   );
 }
 
