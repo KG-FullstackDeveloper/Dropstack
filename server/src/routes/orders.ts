@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../middleware/auth";
-
 import {
   getAllOrders,
   getOrderById,
@@ -8,6 +7,7 @@ import {
 } from "../data/store";
 
 const ordersRoute = new Hono();
+
 ordersRoute.use("*", authMiddleware);
 
 const ORDER_STATUSES = new Set([
@@ -34,6 +34,7 @@ const SETTLEMENT_STATUSES = new Set([
   "settled",
 ]);
 
+// List Global Ecommerce orders.
 ordersRoute.get("/", (c) => {
   return c.json({
     success: true,
@@ -41,16 +42,22 @@ ordersRoute.get("/", (c) => {
   });
 });
 
+// Retrieve one order by ID.
 ordersRoute.get("/:id", (c) => {
   const id = c.req.param("id");
+
+  if (!id) {
+    return c.json(
+      { success: false, error: "Order ID is required." },
+      400,
+    );
+  }
+
   const order = getOrderById(id);
 
   if (!order) {
     return c.json(
-      {
-        success: false,
-        error: "Order not found.",
-      },
+      { success: false, error: "Order not found." },
       404,
     );
   }
@@ -61,16 +68,22 @@ ordersRoute.get("/:id", (c) => {
   });
 });
 
+// Update permitted order fields.
 ordersRoute.patch("/:id", async (c) => {
   const id = c.req.param("id");
+
+  if (!id) {
+    return c.json(
+      { success: false, error: "Order ID is required." },
+      400,
+    );
+  }
+
   const current = getOrderById(id);
 
   if (!current) {
     return c.json(
-      {
-        success: false,
-        error: "Order not found.",
-      },
+      { success: false, error: "Order not found." },
       404,
     );
   }
@@ -91,10 +104,18 @@ ordersRoute.patch("/:id", async (c) => {
     body = await c.req.json();
   } catch {
     return c.json(
-      {
-        success: false,
-        error: "Invalid order update data.",
-      },
+      { success: false, error: "Invalid order update data." },
+      400,
+    );
+  }
+
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body)
+  ) {
+    return c.json(
+      { success: false, error: "Invalid order update data." },
       400,
     );
   }
@@ -103,79 +124,225 @@ ordersRoute.patch("/:id", async (c) => {
   const requestedOrderStatus = body.order_status ?? body.status;
 
   if (requestedOrderStatus !== undefined) {
-    const nextStatus = String(requestedOrderStatus);
-    if (!ORDER_STATUSES.has(nextStatus)) {
+    if (
+      typeof requestedOrderStatus !== "string" ||
+      !ORDER_STATUSES.has(requestedOrderStatus)
+    ) {
       return c.json(
-        {
-          success: false,
-          error: "Invalid order status.",
-        },
+        { success: false, error: "Invalid order status." },
         400,
       );
     }
-    updates.order_status = nextStatus as NonNullable<typeof current.order_status>;
+
+    updates.order_status = requestedOrderStatus as NonNullable<
+      typeof current.order_status
+    >;
   }
 
   if (body.payment_status !== undefined) {
-    const nextPaymentStatus = String(body.payment_status);
-    if (!PAYMENT_STATUSES.has(nextPaymentStatus)) {
+    if (
+      typeof body.payment_status !== "string" ||
+      !PAYMENT_STATUSES.has(body.payment_status)
+    ) {
       return c.json(
-        {
-          success: false,
-          error: "Invalid payment status.",
-        },
+        { success: false, error: "Invalid payment status." },
         400,
       );
     }
-    updates.payment_status = nextPaymentStatus as NonNullable<typeof current.payment_status>;
+
+    if (
+      body.payment_status === "confirmed" &&
+      current.payment_status !== "confirmed"
+    ) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Payment confirmation must come from verified payment-provider processing.",
+        },
+        403,
+      );
+    }
+
+    if (
+      body.payment_status === "refunded" &&
+      current.payment_status !== "refunded"
+    ) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Refund status can only be changed after a refund has been verified.",
+        },
+        403,
+      );
+    }
+
+    updates.payment_status = body.payment_status as NonNullable<
+      typeof current.payment_status
+    >;
   }
 
   if (body.settlement_status !== undefined) {
-    const nextSettlementStatus = String(body.settlement_status);
-    if (!SETTLEMENT_STATUSES.has(nextSettlementStatus)) {
+    if (
+      typeof body.settlement_status !== "string" ||
+      !SETTLEMENT_STATUSES.has(body.settlement_status)
+    ) {
+      return c.json(
+        { success: false, error: "Invalid settlement status." },
+        400,
+      );
+    }
+
+    if (
+      body.settlement_status !== current.settlement_status &&
+      body.settlement_status !== "pending"
+    ) {
       return c.json(
         {
           success: false,
-          error: "Invalid settlement status.",
+          error:
+            "Settlement changes must come from verified settlement processing.",
+        },
+        403,
+      );
+    }
+
+    updates.settlement_status = body.settlement_status as NonNullable<
+      typeof current.settlement_status
+    >;
+  }
+
+  if (body.tracking_number !== undefined) {
+    if (
+      body.tracking_number !== null &&
+      typeof body.tracking_number !== "string"
+    ) {
+      return c.json(
+        { success: false, error: "Tracking number must be text." },
+        400,
+      );
+    }
+
+    const trackingNumber =
+      typeof body.tracking_number === "string"
+        ? body.tracking_number.trim()
+        : "";
+
+    updates.tracking_number = trackingNumber || null;
+  }
+
+  if (body.supplier_name !== undefined) {
+    if (
+      body.supplier_name !== null &&
+      typeof body.supplier_name !== "string"
+    ) {
+      return c.json(
+        { success: false, error: "Supplier name must be text." },
+        400,
+      );
+    }
+
+    const supplierName =
+      typeof body.supplier_name === "string"
+        ? body.supplier_name.trim()
+        : "";
+
+    updates.supplier_name = supplierName || null;
+  }
+
+  if (body.supplier_order_reference !== undefined) {
+    if (
+      body.supplier_order_reference !== null &&
+      typeof body.supplier_order_reference !== "string"
+    ) {
+      return c.json(
+        {
+          success: false,
+          error: "Supplier order reference must be text.",
         },
         400,
       );
     }
-    updates.settlement_status = nextSettlementStatus as NonNullable<typeof current.settlement_status>;
-  }
 
-  if (body.tracking_number !== undefined) {
-    updates.tracking_number = body.tracking_number
-      ? String(body.tracking_number).trim()
-      : null;
-  }
+    const supplierReference =
+      typeof body.supplier_order_reference === "string"
+        ? body.supplier_order_reference.trim()
+        : "";
 
-  if (body.supplier_name !== undefined) {
-    updates.supplier_name = body.supplier_name
-      ? String(body.supplier_name).trim()
-      : null;
-  }
-
-  if (body.supplier_order_reference !== undefined) {
-    updates.supplier_order_reference = body.supplier_order_reference
-      ? String(body.supplier_order_reference).trim()
-      : null;
+    updates.supplier_order_reference = supplierReference || null;
   }
 
   if (body.flutterwave_transaction_id !== undefined) {
-    updates.flutterwave_transaction_id = body.flutterwave_transaction_id
-      ? String(body.flutterwave_transaction_id).trim()
-      : null;
+    return c.json(
+      {
+        success: false,
+        error:
+          "Transaction IDs can only be recorded by verified payment processing.",
+      },
+      403,
+    );
   }
 
   if (body.flutterwave_reference !== undefined) {
-    updates.flutterwave_reference = body.flutterwave_reference
-      ? String(body.flutterwave_reference).trim()
-      : null;
+    return c.json(
+      {
+        success: false,
+        error:
+          "Payment references can only be recorded by verified payment processing.",
+      },
+      403,
+    );
+  }
+
+  const nextOrderStatus =
+    updates.order_status ?? current.order_status;
+
+  const nextPaymentStatus =
+    updates.payment_status ?? current.payment_status;
+
+  const nextTrackingNumber =
+    updates.tracking_number !== undefined
+      ? updates.tracking_number
+      : current.tracking_number;
+
+  if (
+    nextOrderStatus === "shipped" &&
+    !String(nextTrackingNumber ?? "").trim()
+  ) {
+    return c.json(
+      {
+        success: false,
+        error:
+          "A tracking number is required before an order can be marked as shipped.",
+      },
+      400,
+    );
+  }
+
+  if (
+    nextOrderStatus === "delivered" &&
+    nextPaymentStatus !== "confirmed"
+  ) {
+    return c.json(
+      {
+        success: false,
+        error:
+          "An order cannot be marked as delivered until its payment is confirmed.",
+      },
+      400,
+    );
   }
 
   try {
     const order = updateOrderRecord(id, updates);
+
+    if (!order) {
+      return c.json(
+        { success: false, error: "Order not found." },
+        404,
+      );
+    }
 
     return c.json({
       success: true,
@@ -185,10 +352,7 @@ ordersRoute.patch("/:id", async (c) => {
     console.error("Order update error:", error);
 
     return c.json(
-      {
-        success: false,
-        error: "Unable to update order.",
-      },
+      { success: false, error: "Unable to update order." },
       500,
     );
   }

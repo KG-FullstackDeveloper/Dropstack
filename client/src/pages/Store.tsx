@@ -34,7 +34,10 @@ import type { CartItem } from "../types/cart";
 import type { StoreConfig } from "../types/store";
 
 import { DEFAULT_STORE_CONFIG } from "../types/themes/registry";
-import { getProducts, getStoreConfig } from "../services/api";
+import {
+  getPublicStore,
+  getStoreProducts,
+} from "../services/api";
 import { detectMarket } from "../services/market";
 import {
   addToCart,
@@ -63,87 +66,6 @@ type DemoProduct = Product & {
   inventory?: number;
   active?: number;
 };
-
-const DEMO_PRODUCTS = [
-  {
-    id: "demo-gel-cleanser",
-    storeId: "skincare-store",
-    name: "Cloud Cleanser",
-    description: "A soft, low-foam cleanser for a calm daily reset.",
-    price: 28,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=1100&q=82",
-    category: "Cleansers",
-    inventory: 18,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-barrier-serum",
-    storeId: "skincare-store",
-    name: "Barrier Serum",
-    description: "A silky serum built around hydration and barrier care.",
-    price: 42,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
-    category: "Serums",
-    inventory: 12,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-daily-cream",
-    storeId: "skincare-store",
-    name: "Daily Veil Cream",
-    description: "A weightless cream that leaves skin soft, plush and fresh.",
-    price: 36,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=1100&q=82",
-    category: "Moisturisers",
-    inventory: 24,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-vitamin-c",
-    storeId: "skincare-store",
-    name: "Morning C Drops",
-    description: "A brightening step for a clear, luminous-looking routine.",
-    price: 48,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1100&q=82",
-    category: "Treatments",
-    inventory: 9,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-spf",
-    storeId: "skincare-store",
-    name: "Daily Screen SPF 40",
-    description: "An easy final step with a clean, comfortable finish.",
-    price: 31,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1556229010-aa3e9850f4e1?auto=format&fit=crop&w=1100&q=82",
-    category: "SPF",
-    inventory: 16,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-night-oil",
-    storeId: "skincare-store",
-    name: "Night Recovery Oil",
-    description: "A richer evening ritual for skin that likes comfort.",
-    price: 46,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1100&q=82",
-    category: "Treatments",
-    inventory: 7,
-    created_at: new Date().toISOString(),
-  },
-] as unknown as DemoProduct[];
 
 const CONCERNS = [
   {
@@ -179,35 +101,34 @@ const INGREDIENTS = [
   ["Vitamin C", "Brighten"],
 ];
 
-function getImage(product: Product, fallbackIndex = 0) {
-  const candidate = product as DemoProduct;
+function getImage(product?: Product, _fallbackIndex = 0) {
+  if (!product) return "";
 
-  if (candidate.image_url) {
-    return candidate.image_url;
-  }
+  const candidate = product as DemoProduct & {
+    images?: string[];
+    image_urls?: string[];
+  };
 
-  const fallbacks = [
-    "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=1100&q=82",
-    "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
-    "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=1100&q=82",
-  ];
-
-  return fallbacks[fallbackIndex % fallbacks.length];
+  return (
+    candidate.image_url ||
+    candidate.images?.find(Boolean) ||
+    candidate.image_urls?.find(Boolean) ||
+    ""
+  );
 }
-
 function getImages(product: Product) {
   const candidate = product as DemoProduct & {
     images?: string[];
     image_urls?: string[];
   };
 
-  const all = [
-    ...(candidate.images ?? []),
-    ...(candidate.image_urls ?? []),
-    candidate.image_url ?? getImage(product),
-  ];
-
-  return Array.from(new Set(all.filter(Boolean)));
+  return Array.from(
+    new Set([
+      ...(candidate.images ?? []),
+      ...(candidate.image_urls ?? []),
+      candidate.image_url ?? "",
+    ].filter(Boolean)),
+  );
 }
 
 function getDelivery(product: Product) {
@@ -221,22 +142,13 @@ function getStock(product: Product) {
   return typeof value === "number" ? value : 12;
 }
 
-function storeBrand(store: StoreConfig, slug?: string) {
-  if ((slug ?? "").toLowerCase() === "skincare-store") {
-    return "Luma Skin";
-  }
-
-  return store.name || "Luma Skin";
+function storeBrand(store: StoreConfig) {
+  return store.name || "Store";
 }
 
-function storeTagline(store: StoreConfig, slug?: string) {
-  if ((slug ?? "").toLowerCase() === "skincare-store") {
-    return "Skincare for skin, not trends.";
-  }
-
-  return store.description || "Considered skincare for everyday skin.";
+function storeTagline(store: StoreConfig) {
+  return store.description || "Welcome to our store.";
 }
-
 export default function Store() {
   const { slug } = useParams<{ slug: string }>();
 
@@ -270,47 +182,58 @@ export default function Store() {
   } | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    async function loadStore() {
-      try {
-        const [storeData, productData, marketData] = await Promise.all([
-          getStoreConfig(),
-          getProducts(),
+  async function loadStore() {
+    try {
+      if (!slug) {
+        throw new Error("A store URL slug is required.");
+      }
+
+      const [storeData, productData, marketData] =
+        await Promise.all([
+          getPublicStore(slug),
+          getStoreProducts(slug),
           detectMarket(),
         ]);
 
-        if (!mounted) return;
+      if (!mounted) return;
 
-        setStore(storeData || DEFAULT_STORE_CONFIG);
-        setProducts(productData || []);
-        setMarket(marketData);
-      } catch (error) {
-        console.error("Unable to load storefront:", error);
+      setStore({
+        ...DEFAULT_STORE_CONFIG,
+        name: storeData.name,
+        description: storeData.description || "",
+      });
 
-        if (mounted) {
-          setStore(DEFAULT_STORE_CONFIG);
-          setProducts([]);
-          try {
-            setMarket(await detectMarket());
-          } catch {
-            setMarket(null);
-          }
-        }
-      } finally {
-        if (mounted) {
-          setCart(getCart());
-          setLoading(false);
+      setProducts(productData || []);
+      setMarket(marketData);
+    } catch (error) {
+      console.error("Unable to load storefront:", error);
+
+      if (mounted) {
+        setProducts([]);
+        setLoading(false);
+
+        try {
+          setMarket(await detectMarket());
+        } catch {
+          setMarket(null);
         }
       }
+    } finally {
+      if (mounted) {
+        setCart(getCart());
+        setLoading(false);
+      }
     }
+  }
 
-    void loadStore();
+  void loadStore();
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  return () => {
+    mounted = false;
+  };
+}, [slug]);
 
   useEffect(() => {
     const syncCart = () => setCart(getCart());
@@ -321,19 +244,17 @@ export default function Store() {
     };
   }, []);
 
-  const brandName = storeBrand(store, slug);
-  const tagline = storeTagline(store, slug);
+  const brandName = storeBrand(store);
+  const tagline = storeTagline(store);
   const activeCurrency = market?.currency || "USD";
   const activeCountry = market?.countryCode || "US";
 
   const displayProducts = useMemo<Product[]>(() => {
-    const active = products.filter((product) => {
-      const candidate = product as DemoProduct;
-      return candidate.active === undefined || Boolean(candidate.active);
-    });
-
-    return active.length ? active : DEMO_PRODUCTS;
-  }, [products]);
+  return products.filter((product) => {
+    const candidate = product as DemoProduct;
+    return candidate.active === undefined || Boolean(candidate.active);
+  });
+}, [products]);
 
   const cartSummary = useMemo(
     () => getCartSummary(cart, activeCountry, activeCurrency),

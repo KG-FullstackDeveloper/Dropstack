@@ -151,6 +151,27 @@ CREATE TABLE IF NOT EXISTS login_events (
   created_at TEXT NOT NULL,
   FOREIGN KEY (admin_id) REFERENCES admin_users(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+id TEXT PRIMARY KEY,
+product_id TEXT NOT NULL,
+previous_stock INTEGER NOT NULL DEFAULT 0,
+change_amount INTEGER NOT NULL DEFAULT 0,
+new_stock INTEGER NOT NULL DEFAULT 0,
+reason TEXT NOT NULL DEFAULT 'Correction',
+note TEXT,
+admin_id TEXT,
+created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_id
+ON inventory_movements(product_id
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_created_at
+ON inventory_movements(created_at
+);
+
 `);
 
 /*
@@ -252,6 +273,51 @@ function ensureProductColumn(
     `);
   }
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* MULTI-STORE FOUNDATION                                                     */
+/* -------------------------------------------------------------------------- */
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS stores (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    niche TEXT NOT NULL DEFAULT 'Other',
+    status TEXT NOT NULL DEFAULT 'Draft'
+      CHECK (status IN ('Active', 'Draft')),
+    description TEXT,
+    logo_url TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+function ensureStoreColumn(
+  columnName: string,
+  definition: string,
+): void {
+  const columns = db
+    .prepare("PRAGMA table_info(products)")
+    .all() as Array<{ name: string }>;
+
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(
+      `ALTER TABLE products ADD COLUMN ${columnName} ${definition}`,
+    );
+  }
+}
+
+ensureStoreColumn("store_id", "TEXT");
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_store_id
+  ON products(store_id);
+
+  CREATE INDEX IF NOT EXISTS idx_stores_status
+  ON stores(status);
+`);
 
 ensureProductColumn("sku", "TEXT");
 ensureProductColumn("images", "TEXT DEFAULT '[]'");

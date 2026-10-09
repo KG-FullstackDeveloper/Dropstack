@@ -5,7 +5,10 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ChangeEvent } from "react";
+import type {
+  ChangeEvent,
+  FormEvent,
+} from "react";
 import {
   Check,
   Edit3,
@@ -62,6 +65,12 @@ interface ProductFormState {
 
 interface CsvRow {
   [key: string]: string;
+}
+
+interface CsvGroup {
+  rows: CsvRow[];
+  firstRowIndex: number;
+  handle: string;
 }
 
 interface ImportResult {
@@ -122,7 +131,9 @@ function money(value: number, currency = "USD") {
   }
 }
 
-function numberValue(value: string | number | null | undefined) {
+function numberValue(
+  value: string | number | null | undefined,
+) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
@@ -131,21 +142,13 @@ function numberValue(value: string | number | null | undefined) {
     .replace(/,/g, "")
     .replace(/[^\d.-]/g, "");
 
-  if (!text || text === "-" || text === ".") return 0;
+  if (!text || text === "-" || text === ".") {
+    return 0;
+  }
 
   const parsed = Number(text);
 
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function optionalNumber(
-  value: string | number | null | undefined,
-) {
-  const text = String(value ?? "").trim();
-
-  if (!text) return undefined;
-
-  return numberValue(text);
 }
 
 function calculateRecommendedPrice(
@@ -158,10 +161,14 @@ function calculateRecommendedPrice(
     numberValue(shippingCost) +
     numberValue(otherCost);
 
-  return total > 0 ? Number((total * 2.5).toFixed(2)) : 0;
+  return total > 0
+    ? Number((total * 2.5).toFixed(2))
+    : 0;
 }
 
-function productToForm(product: Product): ProductFormState {
+function productToForm(
+  product: Product,
+): ProductFormState {
   return {
     name: product.name || "",
     slug: product.slug || "",
@@ -170,14 +177,25 @@ function productToForm(product: Product): ProductFormState {
     description: product.description || "",
     price: String(product.price ?? ""),
     currency: product.currency || "USD",
-    supplierName: product.supplier_name || "",
-    supplierProductId: product.supplier_product_id || "",
-    warehouseCountry: product.warehouse_country || "",
-    supplierCost: String(product.supplier_cost ?? ""),
-    shippingCost: String(product.shipping_cost ?? ""),
-    otherCost: String(product.other_cost ?? 0),
-    processingTime: product.processing_time || "",
-    deliveryTime: product.delivery_time || "",
+    supplierName:
+      product.supplier_name || "",
+    supplierProductId:
+      product.supplier_product_id || "",
+    warehouseCountry:
+      product.warehouse_country || "",
+    supplierCost: String(
+      product.supplier_cost ?? "",
+    ),
+    shippingCost: String(
+      product.shipping_cost ?? "",
+    ),
+    otherCost: String(
+      product.other_cost ?? 0,
+    ),
+    processingTime:
+      product.processing_time || "",
+    deliveryTime:
+      product.delivery_time || "",
     stock:
       product.stock == null
         ? ""
@@ -211,7 +229,7 @@ function getStockState(product: Product) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* CSV ENGINE                                                                 */
+/* CSV                                                                         */
 /* -------------------------------------------------------------------------- */
 
 function normalizeCsvHeader(value: string) {
@@ -234,7 +252,11 @@ function parseCsvRecords(text: string): string[][] {
   let cell = "";
   let quoted = false;
 
-  for (let index = 0; index < input.length; index += 1) {
+  for (
+    let index = 0;
+    index < input.length;
+    index += 1
+  ) {
     const char = input[index];
     const next = input[index + 1];
 
@@ -255,7 +277,10 @@ function parseCsvRecords(text: string): string[][] {
       continue;
     }
 
-    if ((char === "\n" || char === "\r") && !quoted) {
+    if (
+      (char === "\n" || char === "\r") &&
+      !quoted
+    ) {
       if (char === "\r" && next === "\n") {
         index += 1;
       }
@@ -298,7 +323,9 @@ function parseCsv(text: string): CsvRow[] {
 
   if (records.length < 2) return [];
 
-  const headers = records[0].map(normalizeCsvHeader);
+  const headers = records[0].map(
+    normalizeCsvHeader,
+  );
 
   return records
     .slice(1)
@@ -306,8 +333,11 @@ function parseCsv(text: string): CsvRow[] {
       const row: CsvRow = {};
 
       headers.forEach((header, index) => {
-        row[header] =
-          String(values[index] ?? "").trim();
+        if (!header) return;
+
+        row[header] = String(
+          values[index] ?? "",
+        ).trim();
       });
 
       return row;
@@ -324,9 +354,13 @@ function firstValue(
   aliases: string[],
 ) {
   for (const alias of aliases) {
-    const value = row[normalizeCsvHeader(alias)];
+    const key = normalizeCsvHeader(alias);
+    const value = row[key];
 
-    if (value != null && value.trim() !== "") {
+    if (
+      value != null &&
+      value.trim() !== ""
+    ) {
       return value.trim();
     }
   }
@@ -390,6 +424,7 @@ function parseBoolean(
 function parseProductStatus(
   status: string,
   published: string,
+  fallback = true,
 ) {
   const normalized = status
     .trim()
@@ -406,7 +441,14 @@ function parseProductStatus(
     return true;
   }
 
-  return parseBoolean(published, true);
+  if (published.trim()) {
+    return parseBoolean(
+      published,
+      fallback,
+    );
+  }
+
+  return fallback;
 }
 
 function getRowImages(row: CsvRow) {
@@ -526,18 +568,22 @@ function buildVariantFromCsvRow(
   fallbackPrice: number,
 ) {
   const sku = getRowSku(row);
+
   const price =
     numberValue(getRowPrice(row)) ||
     fallbackPrice;
 
   const stockText = getRowStock(row);
+
   const stock = stockText
     ? numberValue(stockText)
     : 0;
 
   const optionParts: string[] = [];
 
-  for (const optionIndex of [1, 2, 3] as const) {
+  for (
+    const optionIndex of [1, 2, 3] as const
+  ) {
     const name = getRowOptionName(
       row,
       optionIndex,
@@ -577,16 +623,50 @@ function buildVariantFromCsvRow(
   } satisfies ProductVariant;
 }
 
-function buildCsvProduct(
-  row: CsvRow,
-  rowIndex: number,
-): {
+interface CsvProductBuild {
   payload: CreateProductInput;
   handle: string;
   variant: ProductVariant | null;
   images: string[];
-} {
-  const name = getRowName(row);
+  active: boolean;
+  supplied: {
+    name: boolean;
+    slug: boolean;
+    sku: boolean;
+    category: boolean;
+    description: boolean;
+    price: boolean;
+    currency: boolean;
+    supplierName: boolean;
+    supplierProductId: boolean;
+    warehouseCountry: boolean;
+    supplierCost: boolean;
+    shippingCost: boolean;
+    otherCost: boolean;
+    processingTime: boolean;
+    deliveryTime: boolean;
+    stock: boolean;
+    lowStockThreshold: boolean;
+    images: boolean;
+    videoUrl: boolean;
+    active: boolean;
+  };
+}
+
+function buildCsvProduct(
+  row: CsvRow,
+  rowIndex: number,
+  inherited?: {
+    name?: string;
+    handle?: string;
+  },
+): CsvProductBuild {
+  const rawName = getRowName(row);
+
+  const name =
+    rawName ||
+    inherited?.name ||
+    "";
 
   if (!name) {
     throw new Error(
@@ -594,7 +674,21 @@ function buildCsvProduct(
     );
   }
 
-  const supplierCost = numberValue(
+  const rawHandle = getRowHandle(row);
+
+  const handle = slugify(
+    rawHandle ||
+      inherited?.handle ||
+      name,
+  );
+
+  if (!handle) {
+    throw new Error(
+      "Product handle/slug is missing.",
+    );
+  }
+
+  const supplierCostText =
     firstValue(row, [
       "wholesale_cost",
       "supplier_cost",
@@ -602,30 +696,38 @@ function buildCsvProduct(
       "unit_cost",
       "purchase_price",
       "supplier_price",
-    ]),
-  );
+    ]);
 
-  const shippingCost = numberValue(
+  const shippingCostText =
     firstValue(row, [
       "shipping_cost",
       "supplier_shipping_cost",
       "shipping",
       "freight_cost",
-    ]),
-  );
+    ]);
 
-  const otherCost = numberValue(
+  const otherCostText =
     firstValue(row, [
       "other_cost",
       "additional_cost",
       "fees",
       "fee",
-    ]),
-  );
+    ]);
 
-  const price = numberValue(
-    getRowPrice(row),
-  );
+  const priceText =
+    getRowPrice(row);
+
+  const supplierCost =
+    numberValue(supplierCostText);
+
+  const shippingCost =
+    numberValue(shippingCostText);
+
+  const otherCost =
+    numberValue(otherCostText);
+
+  const price =
+    numberValue(priceText);
 
   const recommendedPrice =
     calculateRecommendedPrice(
@@ -645,22 +747,19 @@ function buildCsvProduct(
     );
   }
 
-  const handle =
-    getRowHandle(row) ||
-    slugify(name);
-
   const sku =
     getRowSku(row) || undefined;
 
   const images = getRowImages(row);
 
-  const description = firstValue(row, [
-    "body_html",
-    "body",
-    "description",
-    "product_description",
-    "short_description",
-  ]);
+  const description =
+    firstValue(row, [
+      "body_html",
+      "body",
+      "description",
+      "product_description",
+      "short_description",
+    ]);
 
   const category =
     firstValue(row, [
@@ -668,25 +767,23 @@ function buildCsvProduct(
       "category",
       "product_type",
       "product_category",
-    ]) || "Uncategorized";
+    ]);
 
   const supplierName =
     firstValue(row, [
       "vendor",
       "supplier_name",
       "supplier",
-      "supplier",
       "brand",
-    ]) || undefined;
+    ]);
 
   const supplierProductId =
     firstValue(row, [
       "supplier_product_id",
       "supplier_product",
       "spu",
-      "product_id",
       "supplier_id",
-    ]) || undefined;
+    ]);
 
   const warehouseCountry =
     firstValue(row, [
@@ -695,7 +792,7 @@ function buildCsvProduct(
       "warehouse_location",
       "ship_from",
       "country_of_origin",
-    ]) || undefined;
+    ]);
 
   const deliveryTime =
     firstValue(row, [
@@ -704,14 +801,14 @@ function buildCsvProduct(
       "shipping_time",
       "estimated_delivery",
       "delivery",
-    ]) || undefined;
+    ]);
 
   const processingTime =
     firstValue(row, [
       "processing_time",
       "processing",
       "handling_time",
-    ]) || undefined;
+    ]);
 
   const stockText = getRowStock(row);
 
@@ -720,56 +817,63 @@ function buildCsvProduct(
       ? numberValue(stockText)
       : undefined;
 
-  const lowStockText = firstValue(row, [
-    "low_stock_threshold",
-    "low_stock",
-    "inventory_threshold",
-  ]);
+  const lowStockText =
+    firstValue(row, [
+      "low_stock_threshold",
+      "low_stock",
+      "inventory_threshold",
+    ]);
 
   const lowStockThreshold =
     lowStockText !== ""
       ? numberValue(lowStockText)
       : undefined;
 
-  const currency = getRowCurrency(row);
+  const currency =
+    getRowCurrency(row);
 
-  const variant = buildVariantFromCsvRow(
-    row,
-    rowIndex,
-    finalPrice,
-  );
+  const variant =
+    buildVariantFromCsvRow(
+      row,
+      rowIndex,
+      finalPrice,
+    );
 
-  const published = firstValue(row, [
-    "published",
-    "published_at",
-    "visible",
-  ]);
+  const published =
+    firstValue(row, [
+      "published",
+      "published_at",
+      "visible",
+    ]);
 
-  const status = firstValue(row, [
-    "status",
-    "product_status",
-  ]);
+  const status =
+    firstValue(row, [
+      "status",
+      "product_status",
+    ]);
 
-  const active = parseProductStatus(
-    status,
-    published,
-  );
+  const activeProvided =
+    Boolean(published || status);
+
+  const active = activeProvided
+    ? parseProductStatus(
+        status,
+        published,
+        true,
+      )
+    : true;
 
   const payload: CreateProductInput = {
     name: name.trim(),
     slug: handle,
     sku,
-    category,
+    category:
+      category || "Uncategorized",
     description,
     price: finalPrice,
     currency,
     image_url:
-      images[0] ||
-      firstValue(row, [
-        "image_url",
-        "image_src",
-      ]) ||
-      undefined,
+      images[0] || undefined,
     images,
     video_url:
       firstValue(row, [
@@ -777,25 +881,25 @@ function buildCsvProduct(
         "video",
         "product_video",
       ]) || undefined,
-    supplier_name: supplierName,
+    supplier_name:
+      supplierName || undefined,
     supplier_product_id:
-      supplierProductId,
+      supplierProductId || undefined,
     warehouse_country:
-      warehouseCountry,
+      warehouseCountry || undefined,
     supplier_cost: supplierCost,
     shipping_cost: shippingCost,
     other_cost: otherCost,
     processing_time:
-      processingTime,
+      processingTime || undefined,
     delivery_time:
-      deliveryTime,
+      deliveryTime || undefined,
     stock,
     low_stock_threshold:
       lowStockThreshold,
     variants: variant
       ? [variant]
       : [],
-    active: active ? 1 : 0,
   };
 
   return {
@@ -803,7 +907,71 @@ function buildCsvProduct(
     handle,
     variant,
     images,
+    active,
+    supplied: {
+      name: Boolean(rawName || inherited?.name),
+      slug: Boolean(rawHandle),
+      sku: Boolean(sku),
+      category: Boolean(category),
+      description: Boolean(description),
+      price: Boolean(priceText),
+      currency: Boolean(
+        firstValue(row, [
+          "currency",
+          "variant_currency",
+          "price_currency",
+        ]),
+      ),
+      supplierName: Boolean(supplierName),
+      supplierProductId:
+        Boolean(supplierProductId),
+      warehouseCountry:
+        Boolean(warehouseCountry),
+      supplierCost:
+        supplierCostText !== "",
+      shippingCost:
+        shippingCostText !== "",
+      otherCost:
+        otherCostText !== "",
+      processingTime:
+        Boolean(processingTime),
+      deliveryTime:
+        Boolean(deliveryTime),
+      stock: stockText !== "",
+      lowStockThreshold:
+        lowStockText !== "",
+      images: images.length > 0,
+      videoUrl: Boolean(
+        firstValue(row, [
+          "video_url",
+          "video",
+          "product_video",
+        ]),
+      ),
+      active: activeProvided,
+    },
   };
+}
+
+function variantKey(
+  variant: ProductVariant,
+) {
+  const sku =
+    variant.sku?.trim().toLowerCase();
+
+  if (sku) {
+    return `sku:${sku}`;
+  }
+
+  return `option:${(
+    variant.name || ""
+  )
+    .trim()
+    .toLowerCase()}:${(
+    variant.value || ""
+  )
+    .trim()
+    .toLowerCase()}`;
 }
 
 function mergeVariants(
@@ -812,15 +980,13 @@ function mergeVariants(
 ) {
   if (!incoming) return existing;
 
-  const key =
-    incoming.sku ||
-    `${incoming.name}:${incoming.value}`;
+  const key = variantKey(incoming);
 
-  const existingIndex = existing.findIndex(
-    (variant) =>
-      (variant.sku || "") === key ||
-      `${variant.name}:${variant.value}` === key,
-  );
+  const existingIndex =
+    existing.findIndex(
+      (variant) =>
+        variantKey(variant) === key,
+    );
 
   if (existingIndex === -1) {
     return [...existing, incoming];
@@ -832,6 +998,9 @@ function mergeVariants(
         ? {
             ...variant,
             ...incoming,
+            id:
+              variant.id ||
+              incoming.id,
           }
         : variant,
   );
@@ -847,6 +1016,26 @@ function mergeImages(
       ...incoming,
     ]),
   ).filter(Boolean);
+}
+
+function makeUniqueSlug(
+  base: string,
+  used: Set<string>,
+) {
+  const cleanBase =
+    slugify(base) || "product";
+
+  let candidate = cleanBase;
+  let counter = 2;
+
+  while (used.has(candidate)) {
+    candidate = `${cleanBase}-${counter}`;
+    counter += 1;
+  }
+
+  used.add(candidate);
+
+  return candidate;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -936,8 +1125,11 @@ function downloadCsvTemplate() {
     type: "text/csv;charset=utf-8;",
   });
 
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+  const url =
+    URL.createObjectURL(blob);
+
+  const anchor =
+    document.createElement("a");
 
   anchor.href = url;
   anchor.download =
@@ -971,11 +1163,15 @@ function ProductModal({
     useState<ProductFormState>(() =>
       product
         ? productToForm(product)
-        : emptyForm,
+        : { ...emptyForm },
     );
 
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
   const [imageInput, setImageInput] =
     useState("");
 
@@ -985,7 +1181,8 @@ function ProductModal({
   const objectUrlsRef =
     useRef<Set<string>>(new Set());
 
-  const isEditing = Boolean(product);
+  const isEditing =
+    Boolean(product);
 
   const totalCost = useMemo(
     () =>
@@ -1036,7 +1233,9 @@ function ProductModal({
     };
   }, []);
 
-  function setField<K extends keyof ProductFormState>(
+  function setField<
+    K extends keyof ProductFormState,
+  >(
     field: K,
     value: ProductFormState[K],
   ) {
@@ -1046,7 +1245,9 @@ function ProductModal({
     }));
   }
 
-  function handleNameChange(value: string) {
+  function handleNameChange(
+    value: string,
+  ) {
     setForm((current) => ({
       ...current,
       name: value,
@@ -1079,41 +1280,49 @@ function ProductModal({
   }
 
   function addImageUrl() {
-    const value = imageInput.trim();
+    const value =
+      imageInput.trim();
 
     if (!value) return;
 
     setForm((current) => {
-      const images = current.images.includes(
-        value,
-      )
-        ? current.images
-        : [
-            ...current.images,
-            value,
-          ];
+      const images =
+        current.images.includes(value)
+          ? current.images
+          : [
+              ...current.images,
+              value,
+            ];
 
       return {
         ...current,
         images,
         imageUrl:
-          current.imageUrl || value,
+          current.imageUrl ||
+          value,
       };
     });
 
     setImageInput("");
   }
 
-  function removeImage(index: number) {
+  function removeImage(
+    index: number,
+  ) {
     setForm((current) => {
       const removed =
         current.images[index];
 
       if (
         removed &&
-        objectUrlsRef.current.has(removed)
+        objectUrlsRef.current.has(
+          removed,
+        )
       ) {
-        URL.revokeObjectURL(removed);
+        URL.revokeObjectURL(
+          removed,
+        );
+
         objectUrlsRef.current.delete(
           removed,
         );
@@ -1136,7 +1345,9 @@ function ProductModal({
     });
   }
 
-  function makeMainImage(image: string) {
+  function makeMainImage(
+    image: string,
+  ) {
     setForm((current) => ({
       ...current,
       imageUrl: image,
@@ -1187,7 +1398,7 @@ function ProductModal({
   }
 
   async function handleSubmit(
-    event: React.FormEvent,
+    event: FormEvent,
   ) {
     event.preventDefault();
 
@@ -1219,8 +1430,7 @@ function ProductModal({
         0 ||
       numberValue(form.shippingCost) <
         0 ||
-      numberValue(form.otherCost) <
-        0
+      numberValue(form.otherCost) < 0
     ) {
       setError(
         "Product costs cannot be negative.",
@@ -1337,7 +1547,9 @@ function ProductModal({
         );
       } else {
         const created =
-          await createProduct(payload);
+          await createProduct(
+            payload,
+          );
 
         if (
           !form.active &&
@@ -1388,8 +1600,9 @@ function ProductModal({
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Add your supplier information,
-              images, costs and selling price.
+              Add supplier information,
+              images, costs and selling
+              price.
             </p>
           </div>
 
@@ -1504,9 +1717,8 @@ function ProductModal({
                     </h3>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Upload images or add image URLs.
-                      The first/main image is used as
-                      the storefront thumbnail.
+                      Upload images or add
+                      image URLs.
                     </p>
                   </div>
 
@@ -1647,123 +1859,64 @@ function ProductModal({
                 </h3>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Supplier
-                    </span>
+                  {[
+                    [
+                      "supplierName",
+                      "Supplier",
+                      "TeemDrop",
+                    ],
+                    [
+                      "supplierProductId",
+                      "Supplier product ID / SPU",
+                      "SUPEHDF00178",
+                    ],
+                    [
+                      "warehouseCountry",
+                      "Warehouse country",
+                      "China / CN",
+                    ],
+                    [
+                      "deliveryTime",
+                      "Delivery time",
+                      "7–15 business days",
+                    ],
+                    [
+                      "processingTime",
+                      "Processing time",
+                      "1–3 business days",
+                    ],
+                    [
+                      "videoUrl",
+                      "Video URL",
+                      "Optional product video URL",
+                    ],
+                  ].map(
+                    ([field, label, placeholder]) => (
+                      <label key={field}>
+                        <span className="mb-1.5 block text-sm font-medium">
+                          {label}
+                        </span>
 
-                    <input
-                      value={
-                        form.supplierName
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "supplierName",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="TeemDrop"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Supplier product ID / SPU
-                    </span>
-
-                    <input
-                      value={
-                        form.supplierProductId
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "supplierProductId",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="SUPEHDF00178"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Warehouse country
-                    </span>
-
-                    <input
-                      value={
-                        form.warehouseCountry
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "warehouseCountry",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="China / CN"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Delivery time
-                    </span>
-
-                    <input
-                      value={
-                        form.deliveryTime
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "deliveryTime",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="7–15 business days"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Processing time
-                    </span>
-
-                    <input
-                      value={
-                        form.processingTime
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "processingTime",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="1–3 business days"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Video URL
-                    </span>
-
-                    <input
-                      value={form.videoUrl}
-                      onChange={(event) =>
-                        setField(
-                          "videoUrl",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="Optional product video URL"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
+                        <input
+                          value={
+                            form[
+                              field as keyof ProductFormState
+                            ] as string
+                          }
+                          onChange={(event) =>
+                            setField(
+                              field as keyof ProductFormState,
+                              event.target.value as never,
+                            )
+                          }
+                          placeholder={
+                            placeholder
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
+                    ),
+                  )}
                 </div>
               </section>
             </div>
@@ -1775,73 +1928,52 @@ function ProductModal({
                 </h3>
 
                 <div className="space-y-4">
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Supplier cost
-                    </span>
+                  {[
+                    [
+                      "supplierCost",
+                      "Supplier cost",
+                      "1.72",
+                    ],
+                    [
+                      "shippingCost",
+                      "Supplier shipping cost",
+                      "13.61",
+                    ],
+                    [
+                      "otherCost",
+                      "Other cost",
+                      "0",
+                    ],
+                  ].map(
+                    ([field, label, placeholder]) => (
+                      <label key={field}>
+                        <span className="mb-1.5 block text-sm font-medium">
+                          {label}
+                        </span>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        form.supplierCost
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "supplierCost",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="1.72"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Supplier shipping cost
-                    </span>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        form.shippingCost
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "shippingCost",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="13.61"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-
-                  <label>
-                    <span className="mb-1.5 block text-sm font-medium">
-                      Other cost
-                    </span>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        form.otherCost
-                      }
-                      onChange={(event) =>
-                        setField(
-                          "otherCost",
-                          event.target.value,
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            form[
+                              field as keyof ProductFormState
+                            ] as string
+                          }
+                          onChange={(event) =>
+                            setField(
+                              field as keyof ProductFormState,
+                              event.target.value as never,
+                            )
+                          }
+                          placeholder={
+                            placeholder
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
+                    ),
+                  )}
 
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
                     <div className="flex justify-between text-sm">
@@ -2034,8 +2166,8 @@ function ProductModal({
                     </h3>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Active products can appear on
-                      the storefront.
+                      Active products can appear
+                      on the storefront.
                     </p>
                   </div>
 
@@ -2142,10 +2274,8 @@ export default function Products() {
     setShowModal,
   ] = useState(false);
 
-  const [
-    menuId,
-    setMenuId,
-  ] = useState<string | null>(null);
+  const [menuId, setMenuId] =
+    useState<string | null>(null);
 
   const csvInputRef =
     useRef<HTMLInputElement | null>(null);
@@ -2204,6 +2334,11 @@ export default function Products() {
           ? result
           : [],
       );
+    } catch (error) {
+      console.error(
+        "Failed to refresh products:",
+        error,
+      );
     } finally {
       setRefreshing(false);
     }
@@ -2213,13 +2348,6 @@ export default function Products() {
     void loadProducts();
   }, [loadProducts]);
 
-  /*
-   * Safer menu handling:
-   * - closes on Escape
-   * - closes when clicking outside
-   * - cleans up listeners
-   * - does not manipulate DOM manually
-   */
   useEffect(() => {
     if (!menuId) return;
 
@@ -2272,14 +2400,15 @@ export default function Products() {
   }, [menuId]);
 
   const categories = useMemo(() => {
-    const values = products
-      .map(
-        (product) => product.category,
-      )
-      .filter(Boolean);
-
     return Array.from(
-      new Set(values),
+      new Set(
+        products
+          .map(
+            (product) =>
+              product.category,
+          )
+          .filter(Boolean),
+      ),
     ).sort();
   }, [products]);
 
@@ -2463,44 +2592,55 @@ export default function Products() {
   async function bulkUpdateActive(
     active: number,
   ) {
-    if (!selectedIds.length)
-      return;
+    if (!selectedIds.length) return;
 
-    try {
-      await Promise.all(
-        selectedIds.map((id) =>
+    const ids = [...selectedIds];
+
+    const results =
+      await Promise.allSettled(
+        ids.map((id) =>
           updateProduct(id, {
             active,
           }),
         ),
       );
 
-      setProducts((current) =>
-        current.map((product) =>
-          selectedIds.includes(
-            product.id,
-          )
-            ? {
-                ...product,
-                active,
-              }
-            : product,
-        ),
-      );
+    const failed = results.filter(
+      (result) =>
+        result.status === "rejected",
+    ).length;
 
-      setSelectedIds([]);
-    } catch (error) {
+    setProducts((current) =>
+      current.map((product) => {
+        const index =
+          ids.indexOf(product.id);
+
+        if (
+          index === -1 ||
+          results[index]?.status !==
+            "fulfilled"
+        ) {
+          return product;
+        }
+
+        return {
+          ...product,
+          active,
+        };
+      }),
+    );
+
+    setSelectedIds([]);
+
+    if (failed > 0) {
       window.alert(
-        error instanceof Error
-          ? error.message
-          : "Unable to update products.",
+        `${failed} product(s) failed to update.`,
       );
     }
   }
 
   async function bulkDelete() {
-    if (!selectedIds.length)
-      return;
+    if (!selectedIds.length) return;
 
     const confirmed =
       window.confirm(
@@ -2509,34 +2649,47 @@ export default function Products() {
 
     if (!confirmed) return;
 
-    try {
-      await Promise.all(
-        selectedIds.map((id) =>
+    const ids = [...selectedIds];
+
+    const results =
+      await Promise.allSettled(
+        ids.map((id) =>
           deleteProduct(id),
         ),
       );
 
-      setProducts((current) =>
-        current.filter(
-          (product) =>
-            !selectedIds.includes(
-              product.id,
-            ),
-        ),
+    const failed = results.filter(
+      (result) =>
+        result.status === "rejected",
+    ).length;
+
+    const successfulIds =
+      ids.filter(
+        (_, index) =>
+          results[index].status ===
+          "fulfilled",
       );
 
-      setSelectedIds([]);
-    } catch (error) {
+    setProducts((current) =>
+      current.filter(
+        (product) =>
+          !successfulIds.includes(
+            product.id,
+          ),
+      ),
+    );
+
+    setSelectedIds([]);
+
+    if (failed > 0) {
       window.alert(
-        error instanceof Error
-          ? error.message
-          : "Unable to delete selected products.",
+        `${failed} product(s) failed to delete.`,
       );
     }
   }
 
   /* ---------------------------------------------------------------------- */
-  /* UPGRADED CSV IMPORT                                                    */
+  /* CSV IMPORT                                                             */
   /* ---------------------------------------------------------------------- */
 
   async function handleCsvImport(
@@ -2573,21 +2726,8 @@ export default function Products() {
         );
       }
 
-      /*
-       * Existing products are loaded once.
-       *
-       * Matching priority:
-       * 1. Handle/slug
-       * 2. SKU
-       * 3. Supplier product ID
-       *
-       * This makes repeated Shopify-style rows
-       * behave much better than simply POSTing
-       * every row as a new product.
-       */
       const existingProducts =
-        Array.isArray(products) &&
-        products.length
+        products.length > 0
           ? products
           : await getAdminProducts();
 
@@ -2604,9 +2744,7 @@ export default function Products() {
         (product) => {
           if (product.slug) {
             byHandle.set(
-              product.slug
-                .toLowerCase()
-                .trim(),
+              slugify(product.slug),
               product,
             );
           }
@@ -2614,8 +2752,8 @@ export default function Products() {
           if (product.sku) {
             bySku.set(
               product.sku
-                .toLowerCase()
-                .trim(),
+                .trim()
+                .toLowerCase(),
               product,
             );
           }
@@ -2626,13 +2764,22 @@ export default function Products() {
             bySupplierId.set(
               product
                 .supplier_product_id
-                .toLowerCase()
-                .trim(),
+                .trim()
+                .toLowerCase(),
               product,
             );
           }
         },
       );
+
+      const usedSlugs =
+        new Set<string>(
+          existingProducts
+            .map((product) =>
+              slugify(product.slug),
+            )
+            .filter(Boolean),
+        );
 
       const result: ImportResult = {
         created: 0,
@@ -2642,45 +2789,68 @@ export default function Products() {
         errors: [],
       };
 
-      /*
-       * Products are grouped by Handle/slug.
-       *
-       * Shopify-style CSV files commonly use
-       * multiple rows for variants/images.
-       */
       const groups =
-        new Map<
-          string,
-          {
-            rows: CsvRow[];
-            firstRowIndex: number;
-          }
-        >();
+        new Map<string, CsvGroup>();
+
+      let currentGroup:
+        | CsvGroup
+        | null = null;
 
       rows.forEach(
         (row, index) => {
+          const explicitHandle =
+            getRowHandle(row);
+
           const name =
             getRowName(row);
 
-          const handle =
-            getRowHandle(row) ||
-            slugify(name);
+          if (
+            explicitHandle ||
+            name
+          ) {
+            const handle = slugify(
+              explicitHandle ||
+                name,
+            );
 
-          const key =
-            handle ||
-            `row-${index}`;
+            if (!handle) {
+              return;
+            }
 
-          const existing =
-            groups.get(key);
+            const existing =
+              groups.get(handle);
 
-          if (existing) {
-            existing.rows.push(row);
-          } else {
-            groups.set(key, {
-              rows: [row],
-              firstRowIndex:
-                index,
-            });
+            if (existing) {
+              existing.rows.push(
+                row,
+              );
+
+              currentGroup =
+                existing;
+            } else {
+              const group: CsvGroup =
+                {
+                  rows: [row],
+                  firstRowIndex:
+                    index,
+                  handle,
+                };
+
+              groups.set(
+                handle,
+                group,
+              );
+
+              currentGroup = group;
+            }
+
+            return;
+          }
+
+          if (currentGroup) {
+            currentGroup.rows.push(
+              row,
+            );
           }
         },
       );
@@ -2692,8 +2862,7 @@ export default function Products() {
           group.rows[0];
 
         const rowNumber =
-          group.firstRowIndex +
-          2;
+          group.firstRowIndex + 2;
 
         try {
           const firstBuilt =
@@ -2711,16 +2880,21 @@ export default function Products() {
           let variants =
             payload.variants || [];
 
-          /*
-           * Merge additional rows.
-           *
-           * Repeated Shopify rows can contain:
-           * - another variant
-           * - another image
-           * - variant-specific SKU
-           * - variant-specific price
-           * - variant inventory
-           */
+          let totalVariantStock = 0;
+          let hasVariantStock = false;
+
+          if (
+            firstBuilt.variant &&
+            getRowStock(firstRow)
+          ) {
+            totalVariantStock +=
+              numberValue(
+                getRowStock(firstRow),
+              );
+
+            hasVariantStock = true;
+          }
+
           for (
             let index = 1;
             index < group.rows.length;
@@ -2734,6 +2908,10 @@ export default function Products() {
                 additionalRow,
                 group.firstRowIndex +
                   index,
+                {
+                  name: payload.name,
+                  handle: group.handle,
+                },
               );
 
             allImages =
@@ -2749,6 +2927,22 @@ export default function Products() {
               );
 
             if (
+              built.variant &&
+              getRowStock(
+                additionalRow,
+              )
+            ) {
+              totalVariantStock +=
+                numberValue(
+                  getRowStock(
+                    additionalRow,
+                  ),
+                );
+
+              hasVariantStock = true;
+            }
+
+            if (
               !payload.description &&
               built.payload.description
             ) {
@@ -2761,8 +2955,11 @@ export default function Products() {
             }
 
             if (
-              !payload.category &&
-              built.payload.category
+              payload.category ===
+                "Uncategorized" &&
+              built.payload.category &&
+              built.payload.category !==
+                "Uncategorized"
             ) {
               payload = {
                 ...payload,
@@ -2785,7 +2982,8 @@ export default function Products() {
             }
 
             if (
-              !payload.supplier_product_id &&
+              !payload
+                .supplier_product_id &&
               built.payload
                 .supplier_product_id
             ) {
@@ -2809,6 +3007,17 @@ export default function Products() {
             }
           }
 
+          if (
+            payload.stock == null &&
+            hasVariantStock
+          ) {
+            payload = {
+              ...payload,
+              stock:
+                totalVariantStock,
+            };
+          }
+
           payload = {
             ...payload,
             images: allImages,
@@ -2819,20 +3028,20 @@ export default function Products() {
           };
 
           const normalizedHandle =
-            firstBuilt.handle
-              .toLowerCase()
-              .trim();
+            slugify(
+              firstBuilt.handle,
+            );
 
           const sku =
             payload.sku
-              ?.toLowerCase()
-              .trim();
+              ?.trim()
+              .toLowerCase();
 
           const supplierId =
             payload
               .supplier_product_id
-              ?.toLowerCase()
-              .trim();
+              ?.trim()
+              .toLowerCase();
 
           const existing =
             byHandle.get(
@@ -2848,19 +3057,137 @@ export default function Products() {
               : undefined);
 
           if (existing) {
-            /*
-             * Update existing product instead of
-             * failing with duplicate SKU/slug.
-             */
+            const supplied =
+              firstBuilt.supplied;
+
             const updatedPayload: Partial<
               CreateProductInput
             > & {
               active?: number;
-            } = {
-              ...payload,
-              active:
-                payload.active ?? 1,
-            };
+            } = {};
+
+            if (supplied.name) {
+              updatedPayload.name =
+                payload.name;
+            }
+
+            if (supplied.slug) {
+              updatedPayload.slug =
+                payload.slug;
+            }
+
+            if (supplied.sku) {
+              updatedPayload.sku =
+                payload.sku;
+            }
+
+            if (supplied.category) {
+              updatedPayload.category =
+                payload.category;
+            }
+
+            if (supplied.description) {
+              updatedPayload.description =
+                payload.description;
+            }
+
+            if (supplied.price) {
+              updatedPayload.price =
+                payload.price;
+            }
+
+            if (supplied.currency) {
+              updatedPayload.currency =
+                payload.currency;
+            }
+
+            if (supplied.supplierName) {
+              updatedPayload.supplier_name =
+                payload.supplier_name;
+            }
+
+            if (
+              supplied.supplierProductId
+            ) {
+              updatedPayload.supplier_product_id =
+                payload.supplier_product_id;
+            }
+
+            if (
+              supplied.warehouseCountry
+            ) {
+              updatedPayload.warehouse_country =
+                payload.warehouse_country;
+            }
+
+            if (supplied.supplierCost) {
+              updatedPayload.supplier_cost =
+                payload.supplier_cost;
+            }
+
+            if (supplied.shippingCost) {
+              updatedPayload.shipping_cost =
+                payload.shipping_cost;
+            }
+
+            if (supplied.otherCost) {
+              updatedPayload.other_cost =
+                payload.other_cost;
+            }
+
+            if (supplied.processingTime) {
+              updatedPayload.processing_time =
+                payload.processing_time;
+            }
+
+            if (supplied.deliveryTime) {
+              updatedPayload.delivery_time =
+                payload.delivery_time;
+            }
+
+            if (supplied.stock) {
+              updatedPayload.stock =
+                payload.stock;
+            }
+
+            if (
+              supplied.lowStockThreshold
+            ) {
+              updatedPayload.low_stock_threshold =
+                payload.low_stock_threshold;
+            }
+
+            if (supplied.images) {
+              updatedPayload.images =
+                mergeImages(
+                  existing.images || [],
+                  allImages,
+                );
+
+              updatedPayload.image_url =
+                updatedPayload.images[0] ||
+                existing.image_url ||
+                undefined;
+            }
+
+            if (supplied.videoUrl) {
+              updatedPayload.video_url =
+                payload.video_url;
+            }
+
+            if (
+              variants.length > 0
+            ) {
+              updatedPayload.variants =
+                variants;
+            }
+
+            if (supplied.active) {
+              updatedPayload.active =
+                firstBuilt.active
+                  ? 1
+                  : 0;
+            }
 
             const updated =
               await updateProduct(
@@ -2871,19 +3198,22 @@ export default function Products() {
             const finalProduct =
               updated || {
                 ...existing,
-                ...payload,
+                ...updatedPayload,
               };
 
             byHandle.set(
-              normalizedHandle,
+              slugify(
+                finalProduct.slug ||
+                  existing.slug,
+              ),
               finalProduct,
             );
 
             if (finalProduct.sku) {
               bySku.set(
                 finalProduct.sku
-                  .toLowerCase()
-                  .trim(),
+                  .trim()
+                  .toLowerCase(),
                 finalProduct,
               );
             }
@@ -2895,46 +3225,88 @@ export default function Products() {
               bySupplierId.set(
                 finalProduct
                   .supplier_product_id
-                  .toLowerCase()
-                  .trim(),
+                  .trim()
+                  .toLowerCase(),
                 finalProduct,
               );
             }
 
             result.updated += 1;
           } else {
+            const uniqueSlug =
+              makeUniqueSlug(
+                normalizedHandle,
+                usedSlugs,
+              );
+
+            const createPayload: CreateProductInput =
+              {
+                ...payload,
+                slug: uniqueSlug,
+              };
+
             const created =
               await createProduct(
-                payload,
+                createPayload,
               );
 
             result.created += 1;
 
+            /*
+             * CreateProductInput intentionally does
+             * not contain `active`. The product is
+             * created first, then its visibility is
+             * updated separately when the CSV says it
+             * should be inactive.
+             */
+            if (
+              created?.id &&
+              !firstBuilt.active
+            ) {
+              await updateProduct(
+                created.id,
+                {
+                  active: 0,
+                },
+              );
+            }
+
             if (created) {
+              const finalCreated =
+                !firstBuilt.active
+                  ? {
+                      ...created,
+                      active: 0,
+                    }
+                  : created;
+
               byHandle.set(
-                normalizedHandle,
-                created,
+                slugify(
+                  finalCreated.slug ||
+                    uniqueSlug,
+                ),
+                finalCreated,
               );
 
-              if (created.sku) {
+              if (finalCreated.sku) {
                 bySku.set(
-                  created.sku
-                    .toLowerCase()
-                    .trim(),
-                  created,
+                  finalCreated.sku
+                    .trim()
+                    .toLowerCase(),
+                  finalCreated,
                 );
               }
 
               if (
-                created
+                finalCreated
                   .supplier_product_id
               ) {
                 bySupplierId.set(
-                  created
+                  finalCreated
                     .supplier_product_id
-                    .toLowerCase()
-                    .trim(),
-                  created,
+                    .trim()
+                    .toLowerCase(),
+                  finalCreated,
                 );
               }
             }
@@ -2957,17 +3329,8 @@ export default function Products() {
 
       setImportResult(result);
 
-      const summaryParts = [
-        `Created ${result.created}`,
-        `updated ${result.updated}`,
-        `skipped ${result.skipped}`,
-        `failed ${result.failed}`,
-      ];
-
       setCsvMessage(
-        `Import complete — ${summaryParts.join(
-          ", ",
-        )}.`,
+        `Import complete — Created ${result.created}, updated ${result.updated}, skipped ${result.skipped}, failed ${result.failed}.`,
       );
     } catch (error) {
       const message =
@@ -3102,13 +3465,13 @@ export default function Products() {
                 <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-red-600">
                   {importResult.errors.map(
                     (
-                      error,
+                      importError,
                       index,
                     ) => (
                       <div
-                        key={`${error}-${index}`}
+                        key={`${importError}-${index}`}
                       >
-                        {error}
+                        {importError}
                       </div>
                     ),
                   )}
@@ -3337,11 +3700,10 @@ export default function Products() {
             </h3>
 
             <p className="mt-2 max-w-md text-sm text-slate-500">
-              Your Products page is
-              connected to the real product
-              database. Add your first
-              product or import your Master
-              Inventory CSV.
+              Your Products page is connected
+              to the real product database. Add
+              your first product or import your
+              Master Inventory CSV.
             </p>
 
             <button
@@ -3454,9 +3816,7 @@ export default function Products() {
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
                               {image ? (
                                 <img
-                                  src={
-                                    image
-                                  }
+                                  src={image}
                                   alt={
                                     product.name
                                   }
@@ -3643,7 +4003,6 @@ export default function Products() {
                                     15
                                   }
                                 />
-
                                 Edit product
                               </button>
 
