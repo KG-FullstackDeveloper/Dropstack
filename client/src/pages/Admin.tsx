@@ -16,6 +16,7 @@
   Palette,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   Store,
@@ -241,7 +242,7 @@ export default function Admin() {
     return (
       <div className="mb-5">
         {!sidebarCollapsed && (
-          <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{title}</p>
+          <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">{title}</p>
         )}
         <div className="space-y-0.5">
           {items.map((item) => {
@@ -254,7 +255,7 @@ export default function Admin() {
                 title={sidebarCollapsed ? item.label : undefined}
                 onClick={() => navigate(item.label as PageKey)}
                 className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
-                  selected ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                  selected ? "bg-white text-slate-950 shadow-lg shadow-black/20" : "text-slate-400 hover:bg-white/[.07] hover:text-white"
                 } ${sidebarCollapsed ? "justify-center" : ""}`}
               >
                 <Icon size={17} strokeWidth={selected ? 2.2 : 1.9} />
@@ -268,14 +269,14 @@ export default function Admin() {
   }
 
   const sidebar = (
-    <aside className={`flex h-full flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${sidebarCollapsed ? "w-[76px]" : "w-[276px]"}`}>
-      <div className="border-b border-slate-200 px-3 py-4">
+    <aside className={`flex h-full flex-col border-r border-white/10 bg-[#0a0d12] text-white shadow-2xl shadow-slate-950/20 transition-[width] duration-200 ${sidebarCollapsed ? "w-[76px]" : "w-[284px]"}`}>
+      <div className="border-b border-white/10 px-3 py-4">
         <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : "px-2"}`}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-white">M</div>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#d8ff3e] text-sm font-black text-slate-950 shadow-[0_0_28px_rgba(216,255,62,.18)]">M</div>
           {!sidebarCollapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-black tracking-tight text-slate-950">MEO Commerce</p>
-              <p className="text-[11px] text-slate-400">Admin workspace</p>
+              <p className="truncate text-sm font-black tracking-tight text-white">MEO Commerce</p>
+              <p className="text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">Command center</p>
             </div>
           )}
           <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={18} /></button>
@@ -286,14 +287,14 @@ export default function Admin() {
             type="button"
             title={sidebarCollapsed ? "Switch workspace" : undefined}
             onClick={() => setStoreOpen((value) => !value)}
-            className={`flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-left transition hover:bg-slate-100 ${sidebarCollapsed ? "justify-center" : ""}`}
+            className={`flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[.055] p-2.5 text-left transition hover:bg-white/[.09] ${sidebarCollapsed ? "justify-center" : ""}`}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-900 shadow-sm"><Store size={17} /></div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[#d8ff3e]"><Store size={17} /></div>
             {!sidebarCollapsed && (
               <>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-slate-900">Global Ecommerce</p>
-                  <p className="truncate text-[11px] text-slate-500">Main workspace</p>
+                  <p className="truncate text-xs font-bold text-white">Global Ecommerce</p>
+                  <p className="truncate text-[11px] text-slate-500">Live operations</p>
                 </div>
                 <ChevronDown size={16} className={`text-slate-400 transition ${storeOpen ? "rotate-180" : ""}`} />
               </>
@@ -320,7 +321,7 @@ export default function Admin() {
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5 [scrollbar-color:#334155_transparent]">
         {renderNavGroup("Sales", primaryNavigation)}
         {renderNavGroup("Operations", operationsNavigation)}
         {renderNavGroup("Online store", storeNavigation)}
@@ -330,14 +331,14 @@ export default function Admin() {
             type="button"
             title={sidebarCollapsed ? "Settings" : undefined}
             onClick={() => setSettingsOpen((value) => !value)}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${active === "Settings" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"} ${sidebarCollapsed ? "justify-center" : ""}`}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${active === "Settings" ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[.07] hover:text-white"} ${sidebarCollapsed ? "justify-center" : ""}`}
           >
             <Settings size={17} />
             {!sidebarCollapsed && <><span className="flex-1">Settings</span><ChevronRight size={16} className={`transition ${settingsOpen ? "rotate-90" : ""}`} /></>}
           </button>
 
           {settingsOpen && !sidebarCollapsed && (
-            <div className="ml-5 mt-1 border-l border-slate-200 pl-2">
+            <div className="ml-5 mt-1 border-l border-white/10 pl-2">
               {settingsNavigation.map((item) => {
                 const selected = active === "Settings" && settingsSection === item.id;
                 return (
@@ -345,12 +346,12 @@ export default function Admin() {
                     key={item.id}
                     type="button"
                     onClick={() => navigateSetting(item.id)}
-                    className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${selected ? "bg-slate-100" : "hover:bg-slate-50"}`}
+                    className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${selected ? "bg-white/10" : "hover:bg-white/[.05]"}`}
                   >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-slate-950" : "bg-slate-300 group-hover:bg-slate-500"}`} />
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-[#d8ff3e]" : "bg-slate-700 group-hover:bg-slate-500"}`} />
                     <span className="min-w-0 flex-1">
-                      <span className={`block text-xs font-semibold ${selected ? "text-slate-950" : "text-slate-700"}`}>{item.label}</span>
-                      <span className="hidden text-[10px] leading-4 text-slate-400 xl:block">{item.description}</span>
+                      <span className={`block text-xs font-semibold ${selected ? "text-white" : "text-slate-400"}`}>{item.label}</span>
+                      <span className="hidden text-[10px] leading-4 text-slate-600 xl:block">{item.description}</span>
                     </span>
                   </button>
                 );
@@ -360,25 +361,26 @@ export default function Admin() {
         </div>
       </nav>
 
-      <div className="border-t border-slate-200 p-3">
-        <Link to="/admin/profile" className={`flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-slate-50 ${sidebarCollapsed ? "justify-center" : ""}`}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-black text-white">{initials}</div>
-          {!sidebarCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-900">{profileName}</p><p className="truncate text-[11px] text-slate-400">Store Owner</p></div>}
+      <div className="border-t border-white/10 p-3">
+        <div className={`mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/10 bg-emerald-400/[.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[.14em] text-emerald-300 ${sidebarCollapsed ? "justify-center px-1" : ""}`}><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399]" />{!sidebarCollapsed && "Systems operational"}</div>
+        <Link to="/admin/profile" className={`flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-white/[.06] ${sidebarCollapsed ? "justify-center" : ""}`}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white">{initials}</div>
+          {!sidebarCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{profileName}</p><p className="truncate text-[11px] text-slate-500">Store Owner</p></div>}
         </Link>
       </div>
     </aside>
   );
 
   return (
-    <div className="min-h-screen bg-[#f6f6f7] text-slate-950">
+    <div className="min-h-screen bg-[#f3f4f6] text-slate-950">
       {sidebarOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <div className={`fixed inset-y-0 left-0 z-50 transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         {sidebar}
       </div>
 
-      <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[276px]"}`}>
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[284px]"}`}>
+        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 shadow-[0_1px_0_rgba(15,23,42,.02)] backdrop-blur-xl">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
             <button type="button" onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
 
@@ -459,7 +461,7 @@ export default function Admin() {
           )}
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{renderPage()}</main>
+        <main className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 lg:px-9 lg:py-9">{renderPage()}</main>
       </div>
     </div>
   );
@@ -496,15 +498,15 @@ function Overview() {
   return (
     <div>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Overview</p><h1 className="mt-2 text-3xl font-black tracking-tight">Good afternoon 👋</h1><p className="mt-2 text-sm text-slate-500">Here’s what’s happening with your store.</p></div>
+        <div><div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400"><ShieldCheck size={14} className="text-emerald-600" /> Operations overview</div><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Commerce command center</h1><p className="mt-2 text-sm text-slate-500">Live commercial health, orders, profit and storefront operations.</p></div>
         <Link to="/store" target="_blank" className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50"><ExternalLink size={16} /> View store</Link>
       </div>
 
       <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat title="30-day sales" value={`$${revenue.toFixed(2)}`} />
-        <Stat title="Orders" value={orders.toString()} />
-        <Stat title="Profit" value={`$${profit.toFixed(2)}`} />
-        <Stat title="Profit margin" value={`${margin.toFixed(2)}%`} />
+        <Stat title="Gross sales · 30 days" value={`$${revenue.toFixed(2)}`} detail="Confirmed order revenue" />
+        <Stat title="Orders processed" value={orders.toString()} detail="Current reporting period" />
+        <Stat title="Net operating profit" value={`$${profit.toFixed(2)}`} detail="After recorded product costs" />
+        <Stat title="Profit margin" value={`${margin.toFixed(2)}%`} detail="Blended across confirmed sales" />
       </div>
 
       {error && <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
@@ -520,6 +522,6 @@ function Overview() {
   );
 }
 
-function Stat({ title, value }: { title: string; value: string }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">{title}</p><p className="mt-3 text-2xl font-black tracking-tight">{value}</p></div>; }
+function Stat({ title, value, detail }: { title: string; value: string; detail: string }) { return <div className="admin-panel group relative overflow-hidden p-5 transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"><div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-slate-950 via-slate-600 to-transparent opacity-70" /><div className="flex items-start justify-between gap-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-400">{title}</p><span className="h-2 w-2 rounded-full bg-emerald-400 ring-4 ring-emerald-50" /></div><p className="mt-5 text-3xl font-black tracking-[-0.04em] text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></div>; }
 function BusinessMetric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-2 text-lg font-bold text-slate-950">{value}</p></div>; }
 function Status({ label }: { label: string }) { return <div className="flex justify-between border-b border-slate-100 pb-3 text-sm"><span className="text-slate-600">{label}</span><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">0</span></div>; }

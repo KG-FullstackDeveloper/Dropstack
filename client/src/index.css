@@ -21,10 +21,39 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #f6f3ec;
-  color: #171713;
+  background: #f5f5f2;
+  color: #11110f;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+:root {
+  --ink: #11110f;
+  --paper: #f5f5f2;
+  --cream: #ece7dc;
+  --acid: #d8ff3e;
+  --admin-ink: #0a0d12;
+  --admin-line: rgba(15, 23, 42, 0.1);
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E");
+}
+
+@layer components {
+  .commerce-card {
+    @apply border border-black/10 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03),0_18px_55px_rgba(15,23,42,0.06)];
+  }
+
+  .admin-panel {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03),0_14px_35px_rgba(15,23,42,0.04)];
+  }
 }
 
 ::selection {
