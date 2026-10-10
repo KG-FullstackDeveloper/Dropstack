@@ -2,8 +2,10 @@ import { Hono } from "hono";
 
 import { db } from "../database/db";
 import { getAllOrders } from "../data/store";
+import { authMiddleware } from "../middleware/auth";
 
 const admin = new Hono();
+admin.use("*", authMiddleware);
 
 /*
 |--------------------------------------------------------------------------

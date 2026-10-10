@@ -1,277 +1,4083 @@
-import { Package, Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type {
+  ChangeEvent,
+  FormEvent,
+} from "react";
+import {
+  Check,
+  Edit3,
+  ImagePlus,
+  MoreHorizontal,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  createProduct,
+  deleteProduct,
+  getAdminProducts,
+  updateProduct,
+} from "../../services/adminApi";
+import type {
+  CreateProductInput,
+  Product,
+  ProductVariant,
+} from "../../types/product";
 
-import type { Product } from "../../types/product";
-import { getAdminProducts, deleteProduct } from "../../services/adminApi";
-import { formatCurrency } from "../../utils/currency";
-import ProductModal from "../../components/admin/ProductModal";
-import { useToast } from "../../components/admin/Toast";
+type StockFilter = "all" | "healthy" | "low" | "out";
+type StatusFilter = "all" | "active" | "inactive";
 
-export default function Products() {
-  const { addToast } = useToast();
+interface ProductFormState {
+  name: string;
+  slug: string;
+  sku: string;
+  category: string;
+  description: string;
+  price: string;
+  currency: string;
+  supplierName: string;
+  supplierProductId: string;
+  warehouseCountry: string;
+  supplierCost: string;
+  shippingCost: string;
+  otherCost: string;
+  processingTime: string;
+  deliveryTime: string;
+  stock: string;
+  lowStockThreshold: string;
+  imageUrl: string;
+  images: string[];
+  videoUrl: string;
+  active: boolean;
+  priceMode: "manual" | "recommended";
+  variants: ProductVariant[];
+}
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+interface CsvRow {
+  [key: string]: string;
+}
 
-  // Modal state
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+interface CsvGroup {
+  rows: CsvRow[];
+  firstRowIndex: number;
+  handle: string;
+}
 
-  // Delete confirmation
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+interface ImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+}
 
-  const loadProducts = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const result = await getAdminProducts();
-      setProducts(result);
-    } catch (err) {
-      setError("Unable to load products.");
-      addToast("Unable to load products.", "error");
-    } finally {
-      setLoading(false);
+const emptyForm: ProductFormState = {
+  name: "",
+  slug: "",
+  sku: "",
+  category: "",
+  description: "",
+  price: "",
+  currency: "USD",
+  supplierName: "",
+  supplierProductId: "",
+  warehouseCountry: "",
+  supplierCost: "",
+  shippingCost: "",
+  otherCost: "0",
+  processingTime: "",
+  deliveryTime: "",
+  stock: "",
+  lowStockThreshold: "5",
+  imageUrl: "",
+  images: [],
+  videoUrl: "",
+  active: true,
+  priceMode: "manual",
+  variants: [],
+};
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 180);
+}
+
+function money(value: number, currency = "USD") {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      maximumFractionDigits: 2,
+    }).format(Number.isFinite(value) ? value : 0);
+  } catch {
+    return `${currency || "USD"} ${
+      Number.isFinite(value) ? value.toFixed(2) : "0.00"
+    }`;
+  }
+}
+
+function numberValue(
+  value: string | number | null | undefined,
+) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const text = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^\d.-]/g, "");
+
+  if (!text || text === "-" || text === ".") {
+    return 0;
+  }
+
+  const parsed = Number(text);
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function calculateRecommendedPrice(
+  supplierCost: string,
+  shippingCost: string,
+  otherCost: string,
+) {
+  const total =
+    numberValue(supplierCost) +
+    numberValue(shippingCost) +
+    numberValue(otherCost);
+
+  return total > 0
+    ? Number((total * 2.5).toFixed(2))
+    : 0;
+}
+
+function productToForm(
+  product: Product,
+): ProductFormState {
+  return {
+    name: product.name || "",
+    slug: product.slug || "",
+    sku: product.sku || "",
+    category: product.category || "",
+    description: product.description || "",
+    price: String(product.price ?? ""),
+    currency: product.currency || "USD",
+    supplierName:
+      product.supplier_name || "",
+    supplierProductId:
+      product.supplier_product_id || "",
+    warehouseCountry:
+      product.warehouse_country || "",
+    supplierCost: String(
+      product.supplier_cost ?? "",
+    ),
+    shippingCost: String(
+      product.shipping_cost ?? "",
+    ),
+    otherCost: String(
+      product.other_cost ?? 0,
+    ),
+    processingTime:
+      product.processing_time || "",
+    deliveryTime:
+      product.delivery_time || "",
+    stock:
+      product.stock == null
+        ? ""
+        : String(product.stock),
+    lowStockThreshold:
+      product.low_stock_threshold == null
+        ? "5"
+        : String(product.low_stock_threshold),
+    imageUrl:
+      product.image_url ||
+      product.images?.[0] ||
+      "",
+    images: product.images || [],
+    videoUrl: product.video_url || "",
+    active: Number(product.active) === 1,
+    priceMode: "manual",
+    variants: product.variants || [],
+  };
+}
+
+function getStockState(product: Product) {
+  const stock = numberValue(product.stock);
+  const threshold = numberValue(
+    product.low_stock_threshold ?? 5,
+  );
+
+  if (stock <= 0) return "out";
+  if (stock <= threshold) return "low";
+
+  return "healthy";
+}
+
+/* -------------------------------------------------------------------------- */
+/* CSV                                                                         */
+/* -------------------------------------------------------------------------- */
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function parseCsvRecords(text: string): string[][] {
+  const input = text.replace(/^\uFEFF/, "");
+  const rows: string[][] = [];
+
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (
+    let index = 0;
+    index < input.length;
+    index += 1
+  ) {
+    const char = input[index];
+    const next = input[index + 1];
+
+    if (char === '"') {
+      if (quoted && next === '"') {
+        cell += '"';
+        index += 1;
+        continue;
+      }
+
+      quoted = !quoted;
+      continue;
     }
-  }, [addToast]);
+
+    if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (
+      (char === "\n" || char === "\r") &&
+      !quoted
+    ) {
+      if (char === "\r" && next === "\n") {
+        index += 1;
+      }
+
+      row.push(cell);
+      cell = "";
+
+      if (
+        row.some(
+          (value) => value.trim().length > 0,
+        )
+      ) {
+        rows.push(row);
+      }
+
+      row = [];
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+
+    if (
+      row.some(
+        (value) => value.trim().length > 0,
+      )
+    ) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function parseCsv(text: string): CsvRow[] {
+  const records = parseCsvRecords(text);
+
+  if (records.length < 2) return [];
+
+  const headers = records[0].map(
+    normalizeCsvHeader,
+  );
+
+  return records
+    .slice(1)
+    .map((values) => {
+      const row: CsvRow = {};
+
+      headers.forEach((header, index) => {
+        if (!header) return;
+
+        row[header] = String(
+          values[index] ?? "",
+        ).trim();
+      });
+
+      return row;
+    })
+    .filter((row) =>
+      Object.values(row).some(
+        (value) => value.trim() !== "",
+      ),
+    );
+}
+
+function firstValue(
+  row: CsvRow,
+  aliases: string[],
+) {
+  for (const alias of aliases) {
+    const key = normalizeCsvHeader(alias);
+    const value = row[key];
+
+    if (
+      value != null &&
+      value.trim() !== ""
+    ) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function splitList(value: string) {
+  if (!value.trim()) return [];
+
+  return value
+    .split(/[\n|;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseBoolean(
+  value: string,
+  fallback = true,
+) {
+  const normalized = value
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return fallback;
+
+  if (
+    [
+      "true",
+      "yes",
+      "y",
+      "1",
+      "active",
+      "published",
+      "publish",
+      "enabled",
+    ].includes(normalized)
+  ) {
+    return true;
+  }
+
+  if (
+    [
+      "false",
+      "no",
+      "n",
+      "0",
+      "inactive",
+      "draft",
+      "archived",
+      "unpublished",
+      "disabled",
+    ].includes(normalized)
+  ) {
+    return false;
+  }
+
+  return fallback;
+}
+
+function parseProductStatus(
+  status: string,
+  published: string,
+  fallback = true,
+) {
+  const normalized = status
+    .trim()
+    .toLowerCase();
+
+  if (
+    normalized === "draft" ||
+    normalized === "archived"
+  ) {
+    return false;
+  }
+
+  if (normalized === "active") {
+    return true;
+  }
+
+  if (published.trim()) {
+    return parseBoolean(
+      published,
+      fallback,
+    );
+  }
+
+  return fallback;
+}
+
+function getRowImages(row: CsvRow) {
+  const values = [
+    firstValue(row, [
+      "image_src",
+      "image_source",
+      "image_url",
+      "product_image_url",
+      "product_image",
+      "image",
+      "image_urls",
+      "images",
+    ]),
+    firstValue(row, [
+      "variant_image",
+      "variant_image_url",
+    ]),
+  ];
+
+  return Array.from(
+    new Set(
+      values
+        .flatMap(splitList)
+        .filter((value) =>
+          /^https?:\/\//i.test(value),
+        ),
+    ),
+  );
+}
+
+function getRowHandle(row: CsvRow) {
+  return firstValue(row, [
+    "handle",
+    "slug",
+    "product_handle",
+    "url_handle",
+    "product_slug",
+  ]);
+}
+
+function getRowName(row: CsvRow) {
+  return firstValue(row, [
+    "title",
+    "product_name",
+    "name",
+    "product_title",
+  ]);
+}
+
+function getRowSku(row: CsvRow) {
+  return firstValue(row, [
+    "variant_sku",
+    "sku",
+    "supplier_sku",
+    "supplier_sku_code",
+    "product_sku",
+  ]);
+}
+
+function getRowPrice(row: CsvRow) {
+  return firstValue(row, [
+    "variant_price",
+    "retail_price",
+    "price",
+    "selling_price",
+    "sale_price",
+    "product_price",
+  ]);
+}
+
+function getRowStock(row: CsvRow) {
+  return firstValue(row, [
+    "variant_inventory_qty",
+    "inventory_quantity",
+    "inventory_qty",
+    "stock",
+    "quantity",
+    "inventory",
+  ]);
+}
+
+function getRowCurrency(row: CsvRow) {
+  return (
+    firstValue(row, [
+      "currency",
+      "variant_currency",
+      "price_currency",
+    ]) || "USD"
+  ).toUpperCase();
+}
+
+function getRowOptionName(
+  row: CsvRow,
+  index: 1 | 2 | 3,
+) {
+  return firstValue(row, [
+    `option${index}_name`,
+    `option_${index}_name`,
+    `option${index}`,
+  ]);
+}
+
+function getRowOptionValue(
+  row: CsvRow,
+  index: 1 | 2 | 3,
+) {
+  return firstValue(row, [
+    `option${index}_value`,
+    `option_${index}_value`,
+  ]);
+}
+
+function buildVariantFromCsvRow(
+  row: CsvRow,
+  rowIndex: number,
+  fallbackPrice: number,
+) {
+  const sku = getRowSku(row);
+
+  const price =
+    numberValue(getRowPrice(row)) ||
+    fallbackPrice;
+
+  const stockText = getRowStock(row);
+
+  const stock = stockText
+    ? numberValue(stockText)
+    : 0;
+
+  const optionParts: string[] = [];
+
+  for (
+    const optionIndex of [1, 2, 3] as const
+  ) {
+    const name = getRowOptionName(
+      row,
+      optionIndex,
+    );
+
+    const value = getRowOptionValue(
+      row,
+      optionIndex,
+    );
+
+    if (value) {
+      optionParts.push(
+        name
+          ? `${name}: ${value}`
+          : value,
+      );
+    }
+  }
+
+  if (!sku && !optionParts.length) {
+    return null;
+  }
+
+  return {
+    id: `csv-variant-${Date.now()}-${rowIndex}`,
+    name:
+      optionParts.length > 0
+        ? optionParts.join(" / ")
+        : "Default",
+    value:
+      optionParts.length > 0
+        ? optionParts.join(" / ")
+        : "Default",
+    price: String(price),
+    sku,
+    stock: String(stock),
+  } satisfies ProductVariant;
+}
+
+interface CsvProductBuild {
+  payload: CreateProductInput;
+  handle: string;
+  variant: ProductVariant | null;
+  images: string[];
+  active: boolean;
+  supplied: {
+    name: boolean;
+    slug: boolean;
+    sku: boolean;
+    category: boolean;
+    description: boolean;
+    price: boolean;
+    currency: boolean;
+    supplierName: boolean;
+    supplierProductId: boolean;
+    warehouseCountry: boolean;
+    supplierCost: boolean;
+    shippingCost: boolean;
+    otherCost: boolean;
+    processingTime: boolean;
+    deliveryTime: boolean;
+    stock: boolean;
+    lowStockThreshold: boolean;
+    images: boolean;
+    videoUrl: boolean;
+    active: boolean;
+  };
+}
+
+function buildCsvProduct(
+  row: CsvRow,
+  rowIndex: number,
+  inherited?: {
+    name?: string;
+    handle?: string;
+  },
+): CsvProductBuild {
+  const rawName = getRowName(row);
+
+  const name =
+    rawName ||
+    inherited?.name ||
+    "";
+
+  if (!name) {
+    throw new Error(
+      "Product title/name is missing.",
+    );
+  }
+
+  const rawHandle = getRowHandle(row);
+
+  const handle = slugify(
+    rawHandle ||
+      inherited?.handle ||
+      name,
+  );
+
+  if (!handle) {
+    throw new Error(
+      "Product handle/slug is missing.",
+    );
+  }
+
+  const supplierCostText =
+    firstValue(row, [
+      "wholesale_cost",
+      "supplier_cost",
+      "cost",
+      "unit_cost",
+      "purchase_price",
+      "supplier_price",
+    ]);
+
+  const shippingCostText =
+    firstValue(row, [
+      "shipping_cost",
+      "supplier_shipping_cost",
+      "shipping",
+      "freight_cost",
+    ]);
+
+  const otherCostText =
+    firstValue(row, [
+      "other_cost",
+      "additional_cost",
+      "fees",
+      "fee",
+    ]);
+
+  const priceText =
+    getRowPrice(row);
+
+  const supplierCost =
+    numberValue(supplierCostText);
+
+  const shippingCost =
+    numberValue(shippingCostText);
+
+  const otherCost =
+    numberValue(otherCostText);
+
+  const price =
+    numberValue(priceText);
+
+  const recommendedPrice =
+    calculateRecommendedPrice(
+      String(supplierCost),
+      String(shippingCost),
+      String(otherCost),
+    );
+
+  const finalPrice =
+    price > 0
+      ? price
+      : recommendedPrice;
+
+  if (finalPrice <= 0) {
+    throw new Error(
+      "A valid retail/variant price or valid product costs are required.",
+    );
+  }
+
+  const sku =
+    getRowSku(row) || undefined;
+
+  const images = getRowImages(row);
+
+  const description =
+    firstValue(row, [
+      "body_html",
+      "body",
+      "description",
+      "product_description",
+      "short_description",
+    ]);
+
+  const category =
+    firstValue(row, [
+      "type",
+      "category",
+      "product_type",
+      "product_category",
+    ]);
+
+  const supplierName =
+    firstValue(row, [
+      "vendor",
+      "supplier_name",
+      "supplier",
+      "brand",
+    ]);
+
+  const supplierProductId =
+    firstValue(row, [
+      "supplier_product_id",
+      "supplier_product",
+      "spu",
+      "supplier_id",
+    ]);
+
+  const warehouseCountry =
+    firstValue(row, [
+      "warehouse_country",
+      "warehouse",
+      "warehouse_location",
+      "ship_from",
+      "country_of_origin",
+    ]);
+
+  const deliveryTime =
+    firstValue(row, [
+      "delivery_time",
+      "delivery_estimate",
+      "shipping_time",
+      "estimated_delivery",
+      "delivery",
+    ]);
+
+  const processingTime =
+    firstValue(row, [
+      "processing_time",
+      "processing",
+      "handling_time",
+    ]);
+
+  const stockText = getRowStock(row);
+
+  const stock =
+    stockText !== ""
+      ? numberValue(stockText)
+      : undefined;
+
+  const lowStockText =
+    firstValue(row, [
+      "low_stock_threshold",
+      "low_stock",
+      "inventory_threshold",
+    ]);
+
+  const lowStockThreshold =
+    lowStockText !== ""
+      ? numberValue(lowStockText)
+      : undefined;
+
+  const currency =
+    getRowCurrency(row);
+
+  const variant =
+    buildVariantFromCsvRow(
+      row,
+      rowIndex,
+      finalPrice,
+    );
+
+  const published =
+    firstValue(row, [
+      "published",
+      "published_at",
+      "visible",
+    ]);
+
+  const status =
+    firstValue(row, [
+      "status",
+      "product_status",
+    ]);
+
+  const activeProvided =
+    Boolean(published || status);
+
+  const active = activeProvided
+    ? parseProductStatus(
+        status,
+        published,
+        true,
+      )
+    : true;
+
+  const payload: CreateProductInput = {
+    name: name.trim(),
+    slug: handle,
+    sku,
+    category:
+      category || "Uncategorized",
+    description,
+    price: finalPrice,
+    currency,
+    image_url:
+      images[0] || undefined,
+    images,
+    video_url:
+      firstValue(row, [
+        "video_url",
+        "video",
+        "product_video",
+      ]) || undefined,
+    supplier_name:
+      supplierName || undefined,
+    supplier_product_id:
+      supplierProductId || undefined,
+    warehouse_country:
+      warehouseCountry || undefined,
+    supplier_cost: supplierCost,
+    shipping_cost: shippingCost,
+    other_cost: otherCost,
+    processing_time:
+      processingTime || undefined,
+    delivery_time:
+      deliveryTime || undefined,
+    stock,
+    low_stock_threshold:
+      lowStockThreshold,
+    variants: variant
+      ? [variant]
+      : [],
+  };
+
+  return {
+    payload,
+    handle,
+    variant,
+    images,
+    active,
+    supplied: {
+      name: Boolean(rawName || inherited?.name),
+      slug: Boolean(rawHandle),
+      sku: Boolean(sku),
+      category: Boolean(category),
+      description: Boolean(description),
+      price: Boolean(priceText),
+      currency: Boolean(
+        firstValue(row, [
+          "currency",
+          "variant_currency",
+          "price_currency",
+        ]),
+      ),
+      supplierName: Boolean(supplierName),
+      supplierProductId:
+        Boolean(supplierProductId),
+      warehouseCountry:
+        Boolean(warehouseCountry),
+      supplierCost:
+        supplierCostText !== "",
+      shippingCost:
+        shippingCostText !== "",
+      otherCost:
+        otherCostText !== "",
+      processingTime:
+        Boolean(processingTime),
+      deliveryTime:
+        Boolean(deliveryTime),
+      stock: stockText !== "",
+      lowStockThreshold:
+        lowStockText !== "",
+      images: images.length > 0,
+      videoUrl: Boolean(
+        firstValue(row, [
+          "video_url",
+          "video",
+          "product_video",
+        ]),
+      ),
+      active: activeProvided,
+    },
+  };
+}
+
+function variantKey(
+  variant: ProductVariant,
+) {
+  const sku =
+    variant.sku?.trim().toLowerCase();
+
+  if (sku) {
+    return `sku:${sku}`;
+  }
+
+  return `option:${(
+    variant.name || ""
+  )
+    .trim()
+    .toLowerCase()}:${(
+    variant.value || ""
+  )
+    .trim()
+    .toLowerCase()}`;
+}
+
+function mergeVariants(
+  existing: ProductVariant[] = [],
+  incoming: ProductVariant | null,
+) {
+  if (!incoming) return existing;
+
+  const key = variantKey(incoming);
+
+  const existingIndex =
+    existing.findIndex(
+      (variant) =>
+        variantKey(variant) === key,
+    );
+
+  if (existingIndex === -1) {
+    return [...existing, incoming];
+  }
+
+  return existing.map(
+    (variant, index) =>
+      index === existingIndex
+        ? {
+            ...variant,
+            ...incoming,
+            id:
+              variant.id ||
+              incoming.id,
+          }
+        : variant,
+  );
+}
+
+function mergeImages(
+  existing: string[] = [],
+  incoming: string[] = [],
+) {
+  return Array.from(
+    new Set([
+      ...existing,
+      ...incoming,
+    ]),
+  ).filter(Boolean);
+}
+
+function makeUniqueSlug(
+  base: string,
+  used: Set<string>,
+) {
+  const cleanBase =
+    slugify(base) || "product";
+
+  let candidate = cleanBase;
+  let counter = 2;
+
+  while (used.has(candidate)) {
+    candidate = `${cleanBase}-${counter}`;
+    counter += 1;
+  }
+
+  used.add(candidate);
+
+  return candidate;
+}
+
+/* -------------------------------------------------------------------------- */
+/* CSV TEMPLATE                                                               */
+/* -------------------------------------------------------------------------- */
+
+function escapeCsv(value: string) {
+  return `"${String(value).replace(
+    /"/g,
+    '""',
+  )}"`;
+}
+
+function downloadCsvTemplate() {
+  const headers = [
+    "Handle",
+    "Title",
+    "Body (HTML)",
+    "Vendor",
+    "Type",
+    "Tags",
+    "Published",
+    "Status",
+    "Option1 Name",
+    "Option1 Value",
+    "Option2 Name",
+    "Option2 Value",
+    "Option3 Name",
+    "Option3 Value",
+    "Variant SKU",
+    "Variant Price",
+    "Variant Inventory Qty",
+    "Image Src",
+    "Image Alt Text",
+    "Variant Image",
+    "supplier_sku",
+    "supplier_product_id",
+    "warehouse_country",
+    "wholesale_cost",
+    "shipping_cost",
+    "other_cost",
+    "processing_time",
+    "delivery_time",
+    "low_stock_threshold",
+    "currency",
+  ];
+
+  const example = [
+    "elevated-cat-feeding-bowl",
+    "Ergonomic 15 Degree Elevated Stainless Steel Cat Feeding Bowl",
+    "<p>Premium elevated stainless steel feeding bowl.</p>",
+    "My Store",
+    "Pet Supplies",
+    "cat,bowl,pet",
+    "true",
+    "active",
+    "Size",
+    "Medium",
+    "",
+    "",
+    "",
+    "",
+    "SUPPLIER-SKU-001",
+    "37.50",
+    "25",
+    "https://example.com/product-image.jpg",
+    "Elevated stainless steel cat bowl",
+    "",
+    "SUPPLIER-SKU-001",
+    "SUPPLIER-PRODUCT-001",
+    "CN",
+    "10.00",
+    "5.00",
+    "0",
+    "1-3 business days",
+    "7-15 business days",
+    "5",
+    "USD",
+  ];
+
+  const csv = [
+    headers.map(escapeCsv).join(","),
+    example.map(escapeCsv).join(","),
+  ].join("\n");
+
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const anchor =
+    document.createElement("a");
+
+  anchor.href = url;
+  anchor.download =
+    "global-product-import-template.csv";
+
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/* PRODUCT MODAL                                                              */
+/* -------------------------------------------------------------------------- */
+
+interface ProductModalProps {
+  product: Product | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}
+
+function ProductModal({
+  product,
+  onClose,
+  onSaved,
+}: ProductModalProps) {
+  const [form, setForm] =
+    useState<ProductFormState>(() =>
+      product
+        ? productToForm(product)
+        : { ...emptyForm },
+    );
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [imageInput, setImageInput] =
+    useState("");
+
+  const imageFileInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  const objectUrlsRef =
+    useRef<Set<string>>(new Set());
+
+  const isEditing =
+    Boolean(product);
+
+  const totalCost = useMemo(
+    () =>
+      numberValue(form.supplierCost) +
+      numberValue(form.shippingCost) +
+      numberValue(form.otherCost),
+    [
+      form.supplierCost,
+      form.shippingCost,
+      form.otherCost,
+    ],
+  );
+
+  const recommendedPrice = useMemo(
+    () =>
+      calculateRecommendedPrice(
+        form.supplierCost,
+        form.shippingCost,
+        form.otherCost,
+      ),
+    [
+      form.supplierCost,
+      form.shippingCost,
+      form.otherCost,
+    ],
+  );
+
+  const selectedPrice =
+    numberValue(form.price);
+
+  const estimatedProfit =
+    selectedPrice - totalCost;
+
+  const estimatedMargin =
+    selectedPrice > 0
+      ? (estimatedProfit /
+          selectedPrice) *
+        100
+      : 0;
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    return () => {
+      objectUrlsRef.current.forEach(
+        (url) => URL.revokeObjectURL(url),
+      );
 
-  const filteredProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.category.toLowerCase().includes(query) ||
-        p.slug.toLowerCase().includes(query)
+      objectUrlsRef.current.clear();
+    };
+  }, []);
+
+  function setField<
+    K extends keyof ProductFormState,
+  >(
+    field: K,
+    value: ProductFormState[K],
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function handleNameChange(
+    value: string,
+  ) {
+    setForm((current) => ({
+      ...current,
+      name: value,
+      slug:
+        !current.slug ||
+        current.slug ===
+          slugify(current.name)
+          ? slugify(value)
+          : current.slug,
+    }));
+  }
+
+  function handlePriceModeChange(
+    mode: "manual" | "recommended",
+  ) {
+    setForm((current) => ({
+      ...current,
+      priceMode: mode,
+      price:
+        mode === "recommended"
+          ? String(
+              calculateRecommendedPrice(
+                current.supplierCost,
+                current.shippingCost,
+                current.otherCost,
+              ),
+            )
+          : current.price,
+    }));
+  }
+
+  function addImageUrl() {
+    const value =
+      imageInput.trim();
+
+    if (!value) return;
+
+    setForm((current) => {
+      const images =
+        current.images.includes(value)
+          ? current.images
+          : [
+              ...current.images,
+              value,
+            ];
+
+      return {
+        ...current,
+        images,
+        imageUrl:
+          current.imageUrl ||
+          value,
+      };
+    });
+
+    setImageInput("");
+  }
+
+  function removeImage(
+    index: number,
+  ) {
+    setForm((current) => {
+      const removed =
+        current.images[index];
+
+      if (
+        removed &&
+        objectUrlsRef.current.has(
+          removed,
+        )
+      ) {
+        URL.revokeObjectURL(
+          removed,
+        );
+
+        objectUrlsRef.current.delete(
+          removed,
+        );
+      }
+
+      const images =
+        current.images.filter(
+          (_, imageIndex) =>
+            imageIndex !== index,
+        );
+
+      return {
+        ...current,
+        images,
+        imageUrl:
+          current.imageUrl === removed
+            ? images[0] || ""
+            : current.imageUrl,
+      };
+    });
+  }
+
+  function makeMainImage(
+    image: string,
+  ) {
+    setForm((current) => ({
+      ...current,
+      imageUrl: image,
+      images: [
+        image,
+        ...current.images.filter(
+          (item) => item !== image,
+        ),
+      ],
+    }));
+  }
+
+  function handleImageFiles(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(
+      event.target.files || [],
     );
-  }, [products, search]);
 
-  function openAdd() {
-    setEditingProduct(null);
-    setModalOpen(true);
+    if (!files.length) return;
+
+    const urls = files.map((file) => {
+      const url =
+        URL.createObjectURL(file);
+
+      objectUrlsRef.current.add(url);
+
+      return url;
+    });
+
+    setForm((current) => {
+      const images = [
+        ...current.images,
+        ...urls,
+      ];
+
+      return {
+        ...current,
+        images,
+        imageUrl:
+          current.imageUrl ||
+          urls[0] ||
+          "",
+      };
+    });
+
+    event.target.value = "";
   }
 
-  function openEdit(product: Product) {
-    setEditingProduct(product);
-    setModalOpen(true);
-  }
+  async function handleSubmit(
+    event: FormEvent,
+  ) {
+    event.preventDefault();
 
-  async function handleDelete(id: string) {
-    setDeletingId(id);
+    setError("");
+
+    if (!form.name.trim()) {
+      setError(
+        "Product name is required.",
+      );
+      return;
+    }
+
+    if (!form.category.trim()) {
+      setError(
+        "Category is required.",
+      );
+      return;
+    }
+
+    if (selectedPrice <= 0) {
+      setError(
+        "Enter a valid selling price.",
+      );
+      return;
+    }
+
+    if (
+      numberValue(form.supplierCost) <
+        0 ||
+      numberValue(form.shippingCost) <
+        0 ||
+      numberValue(form.otherCost) < 0
+    ) {
+      setError(
+        "Product costs cannot be negative.",
+      );
+      return;
+    }
+
+    setSaving(true);
+
     try {
-      await deleteProduct(id);
-      addToast("Product deleted.", "success");
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+      const images =
+        form.images.filter(Boolean);
+
+      const primaryImage =
+        form.imageUrl ||
+        images[0] ||
+        "";
+
+      const variantSku =
+        form.sku.trim() ||
+        form.variants[0]?.sku ||
+        "";
+
+      const variants: ProductVariant[] =
+        form.variants.length > 0
+          ? form.variants
+          : variantSku
+            ? [
+                {
+                  id: `variant-${Date.now()}`,
+                  name: "Default",
+                  value: "Default",
+                  price: String(
+                    selectedPrice,
+                  ),
+                  sku: variantSku,
+                  stock:
+                    form.stock || "0",
+                },
+              ]
+            : [];
+
+      const payload: CreateProductInput = {
+        name: form.name.trim(),
+        slug:
+          form.slug.trim() ||
+          slugify(form.name),
+        category:
+          form.category.trim(),
+        description:
+          form.description.trim(),
+        price: selectedPrice,
+        currency:
+          form.currency || "USD",
+        image_url:
+          primaryImage || undefined,
+        images,
+        video_url:
+          form.videoUrl.trim() ||
+          undefined,
+        supplier_name:
+          form.supplierName.trim() ||
+          undefined,
+        supplier_product_id:
+          form.supplierProductId.trim() ||
+          undefined,
+        warehouse_country:
+          form.warehouseCountry.trim() ||
+          undefined,
+        supplier_cost:
+          numberValue(
+            form.supplierCost,
+          ),
+        shipping_cost:
+          numberValue(
+            form.shippingCost,
+          ),
+        other_cost:
+          numberValue(
+            form.otherCost,
+          ),
+        processing_time:
+          form.processingTime.trim() ||
+          undefined,
+        delivery_time:
+          form.deliveryTime.trim() ||
+          undefined,
+        sku:
+          form.sku.trim() ||
+          undefined,
+        stock:
+          form.stock.trim() === ""
+            ? undefined
+            : numberValue(form.stock),
+        low_stock_threshold:
+          form.lowStockThreshold.trim() ===
+          ""
+            ? undefined
+            : numberValue(
+                form.lowStockThreshold,
+              ),
+        variants,
+      };
+
+      if (product) {
+        await updateProduct(
+          product.id,
+          {
+            ...payload,
+            active: form.active
+              ? 1
+              : 0,
+          },
+        );
+      } else {
+        const created =
+          await createProduct(
+            payload,
+          );
+
+        if (
+          !form.active &&
+          created?.id
+        ) {
+          await updateProduct(
+            created.id,
+            {
+              active: 0,
+            },
+          );
+        }
+      }
+
+      await onSaved();
+      onClose();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : "Failed to delete product.", "error");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save product.",
+      );
     } finally {
-      setDeletingId(null);
-      setConfirmDeleteId(null);
+      setSaving(false);
     }
   }
 
   return (
-    <div>
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <p className="text-sm text-slate-500">Catalog</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-950">Products</h1>
-          <p className="mt-2 text-slate-500">
-            Manage the products you sell and their real costs.
-          </p>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
+    >
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+              {isEditing
+                ? "Edit product"
+                : "Add product"}
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Add supplier information,
+              images, costs and selling
+              price.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={openAdd}
-          className="flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+        <form
+          onSubmit={handleSubmit}
+          className="overflow-y-auto p-6"
         >
-          <Plus size={18} />
-          Add product
-        </button>
-      </div>
+          {error && (
+            <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
-        <div className="flex items-center gap-3 border-b border-slate-200 p-5">
-          <Search size={18} className="text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products..."
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </div>
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <h3 className="mb-4 font-semibold text-slate-900 dark:text-white">
+                  Product information
+                </h3>
 
-        {loading && (
-          <div className="p-12 text-center">
-            <p className="text-sm text-slate-500">Loading products...</p>
-          </div>
-        )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="md:col-span-2">
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Product name
+                    </span>
 
-        {!loading && error && (
-          <div className="p-12 text-center">
-            <p className="text-sm text-red-500">{error}</p>
-          </div>
-        )}
+                    <input
+                      value={form.name}
+                      onChange={(event) =>
+                        handleNameChange(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Ergonomic 15° Elevated Stainless Steel Cat Feeding Bowl"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
 
-        {!loading && !error && filteredProducts.length > 0 && (
-          <div className="divide-y divide-slate-100">
-            {filteredProducts.map((product) => {
-              const profit = Number(product.profit_per_unit) || 0;
-              const margin = Number(product.profit_margin) || 0;
-              const isActive = product.active === 1;
+                  <label>
+                    <span className="mb-1.5 block text-sm font-medium">
+                      SKU
+                    </span>
 
-              return (
-                <div
-                  key={product.id}
-                  className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center"
-                >
-                  {/* Image */}
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Package size={24} className="text-slate-300" />
-                      </div>
-                    )}
-                  </div>
+                    <input
+                      value={form.sku}
+                      onChange={(event) =>
+                        setField(
+                          "sku",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="SUPEHDF00178-A0"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
 
-                  {/* Info */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate font-semibold text-slate-900">{product.name}</h3>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          isActive
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {isActive ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500">{product.category}</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {product.supplier_name || "No supplier assigned"}
+                  <label>
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Category
+                    </span>
+
+                    <input
+                      value={form.category}
+                      onChange={(event) =>
+                        setField(
+                          "category",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Pet Supplies"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+
+                  <label className="md:col-span-2">
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Description
+                    </span>
+
+                    <textarea
+                      value={
+                        form.description
+                      }
+                      onChange={(event) =>
+                        setField(
+                          "description",
+                          event.target.value,
+                        )
+                      }
+                      rows={5}
+                      placeholder="Describe the product for customers..."
+                      className="w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">
+                      Product images
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Upload images or add
+                      image URLs.
                     </p>
                   </div>
 
-                  {/* Numbers */}
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:flex sm:items-center sm:gap-8">
-                    <div>
-                      <p className="text-xs text-slate-400">Selling</p>
-                      <p className="mt-1 font-semibold">
-                        {formatCurrency(product.price, product.currency)}
-                      </p>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      imageFileInputRef.current?.click()
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    <Upload size={16} />
+                    Upload images
+                  </button>
 
-                    <div>
-                      <p className="text-xs text-slate-400">Supplier</p>
-                      <p className="mt-1 font-semibold">
-                        {formatCurrency(product.supplier_cost, product.currency)}
-                      </p>
-                    </div>
+                  <input
+                    ref={imageFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageFiles}
+                    className="hidden"
+                  />
+                </div>
 
-                    <div>
-                      <p className="text-xs text-slate-400">Profit</p>
-                      <p
-                        className={`mt-1 font-semibold ${
-                          profit >= 0 ? "text-emerald-600" : "text-red-600"
-                        }`}
-                      >
-                        {formatCurrency(profit, product.currency)}
-                      </p>
-                    </div>
+                <div className="mb-4 flex gap-2">
+                  <input
+                    value={imageInput}
+                    onChange={(event) =>
+                      setImageInput(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Or paste an image URL"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2.5 outline-none dark:border-slate-700 dark:bg-slate-900"
+                  />
 
-                    <div>
-                      <p className="text-xs text-slate-400">Margin</p>
-                      <p
-                        className={`mt-1 font-semibold ${
-                          margin >= 0 ? "text-emerald-600" : "text-red-600"
-                        }`}
-                      >
-                        {margin.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={addImageUrl}
+                    className="rounded-xl border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Add
+                  </button>
+                </div>
 
-                  {/* Actions */}
-                  <div className="flex shrink-0 items-center gap-2">
-                    {confirmDeleteId === product.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">Delete?</span>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          disabled={deletingId === product.id}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                {form.images.length ===
+                0 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      imageFileInputRef.current?.click()
+                    }
+                    className="flex min-h-40 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-slate-500 dark:border-slate-700"
+                  >
+                    <ImagePlus size={32} />
+
+                    <span className="mt-2 text-sm font-medium">
+                      Upload product images
+                    </span>
+
+                    <span className="mt-1 text-xs">
+                      PNG, JPG, WEBP and other
+                      browser-supported formats
+                    </span>
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    {form.images.map(
+                      (
+                        image,
+                        index,
+                      ) => (
+                        <div
+                          key={`${image}-${index}`}
+                          className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
                         >
-                          {deletingId === product.id ? "Deleting..." : "Yes, delete"}
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => openEdit(product)}
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          <Pencil size={13} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(product.id)}
-                          className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                        >
-                          <Trash2 size={13} />
-                          Delete
-                        </button>
-                      </>
+                          <img
+                            src={image}
+                            alt={`Product ${
+                              index + 1
+                            }`}
+                            className="aspect-square w-full object-cover"
+                            onError={(
+                              event,
+                            ) => {
+                              event.currentTarget.style.display =
+                                "none";
+                            }}
+                          />
+
+                          <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/60 p-2 opacity-0 transition group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                makeMainImage(
+                                  image,
+                                )
+                              }
+                              className="flex-1 rounded-lg bg-white px-2 py-1 text-xs font-medium text-slate-900"
+                            >
+                              {form.imageUrl ===
+                              image
+                                ? "Main image"
+                                : "Make main"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeImage(
+                                  index,
+                                )
+                              }
+                              className="rounded-lg bg-red-500 px-2 py-1 text-xs text-white"
+                            >
+                              <Trash2
+                                size={13}
+                              />
+                            </button>
+                          </div>
+
+                          {form.imageUrl ===
+                            image && (
+                            <div className="absolute left-2 top-2 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">
+                              MAIN
+                            </div>
+                          )}
+                        </div>
+                      ),
                     )}
                   </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <h3 className="mb-4 font-semibold text-slate-900 dark:text-white">
+                  Supplier & fulfillment
+                </h3>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    [
+                      "supplierName",
+                      "Supplier",
+                      "TeemDrop",
+                    ],
+                    [
+                      "supplierProductId",
+                      "Supplier product ID / SPU",
+                      "SUPEHDF00178",
+                    ],
+                    [
+                      "warehouseCountry",
+                      "Warehouse country",
+                      "China / CN",
+                    ],
+                    [
+                      "deliveryTime",
+                      "Delivery time",
+                      "7–15 business days",
+                    ],
+                    [
+                      "processingTime",
+                      "Processing time",
+                      "1–3 business days",
+                    ],
+                    [
+                      "videoUrl",
+                      "Video URL",
+                      "Optional product video URL",
+                    ],
+                  ].map(
+                    ([field, label, placeholder]) => (
+                      <label key={field}>
+                        <span className="mb-1.5 block text-sm font-medium">
+                          {label}
+                        </span>
+
+                        <input
+                          value={
+                            form[
+                              field as keyof ProductFormState
+                            ] as string
+                          }
+                          onChange={(event) =>
+                            setField(
+                              field as keyof ProductFormState,
+                              event.target.value as never,
+                            )
+                          }
+                          placeholder={
+                            placeholder
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
+                    ),
+                  )}
                 </div>
+              </section>
+            </div>
+
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <h3 className="mb-4 font-semibold text-slate-900 dark:text-white">
+                  Product costs
+                </h3>
+
+                <div className="space-y-4">
+                  {[
+                    [
+                      "supplierCost",
+                      "Supplier cost",
+                      "1.72",
+                    ],
+                    [
+                      "shippingCost",
+                      "Supplier shipping cost",
+                      "13.61",
+                    ],
+                    [
+                      "otherCost",
+                      "Other cost",
+                      "0",
+                    ],
+                  ].map(
+                    ([field, label, placeholder]) => (
+                      <label key={field}>
+                        <span className="mb-1.5 block text-sm font-medium">
+                          {label}
+                        </span>
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            form[
+                              field as keyof ProductFormState
+                            ] as string
+                          }
+                          onChange={(event) =>
+                            setField(
+                              field as keyof ProductFormState,
+                              event.target.value as never,
+                            )
+                          }
+                          placeholder={
+                            placeholder
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
+                    ),
+                  )}
+
+                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">
+                        Total product cost
+                      </span>
+
+                      <strong>
+                        {money(
+                          totalCost,
+                          form.currency,
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <h3 className="mb-4 font-semibold text-slate-900 dark:text-white">
+                  Selling price
+                </h3>
+
+                <div className="mb-4 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePriceModeChange(
+                        "manual",
+                      )
+                    }
+                    className={`rounded-xl border px-3 py-3 text-left text-sm ${
+                      form.priceMode ===
+                      "manual"
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 dark:border-slate-700"
+                    }`}
+                  >
+                    <strong className="block">
+                      Manual price
+                    </strong>
+
+                    <span className="text-xs opacity-70">
+                      I choose the price
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePriceModeChange(
+                        "recommended",
+                      )
+                    }
+                    className={`rounded-xl border px-3 py-3 text-left text-sm ${
+                      form.priceMode ===
+                      "recommended"
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 dark:border-slate-700"
+                    }`}
+                  >
+                    <strong className="block">
+                      Recommended
+                    </strong>
+
+                    <span className="text-xs opacity-70">
+                      2.5× total cost
+                    </span>
+                  </button>
+                </div>
+
+                <label>
+                  <span className="mb-1.5 block text-sm font-medium">
+                    Retail price
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.price}
+                    onChange={(event) =>
+                      setField(
+                        "price",
+                        event.target.value,
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-3 text-lg font-semibold dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </label>
+
+                <div className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">
+                      Recommended
+                    </span>
+
+                    <strong>
+                      {money(
+                        recommendedPrice,
+                        form.currency,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="mt-2 flex justify-between text-sm">
+                    <span className="text-slate-500">
+                      Estimated profit
+                    </span>
+
+                    <strong>
+                      {money(
+                        estimatedProfit,
+                        form.currency,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="mt-2 flex justify-between text-sm">
+                    <span className="text-slate-500">
+                      Estimated margin
+                    </span>
+
+                    <strong>
+                      {estimatedMargin.toFixed(
+                        1,
+                      )}
+                      %
+                    </strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <h3 className="mb-4 font-semibold text-slate-900 dark:text-white">
+                  Inventory
+                </h3>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label>
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Stock
+                    </span>
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.stock}
+                      onChange={(event) =>
+                        setField(
+                          "stock",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="0"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+
+                  <label>
+                    <span className="mb-1.5 block text-sm font-medium">
+                      Low-stock threshold
+                    </span>
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={
+                        form.lowStockThreshold
+                      }
+                      onChange={(event) =>
+                        setField(
+                          "lowStockThreshold",
+                          event.target.value,
+                        )
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">
+                      Store visibility
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Active products can appear
+                      on the storefront.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setField(
+                        "active",
+                        !form.active,
+                      )
+                    }
+                    className={`relative h-6 w-11 rounded-full transition ${
+                      form.active
+                        ? "bg-slate-900"
+                        : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
+                        form.active
+                          ? "left-6"
+                          : "left-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium dark:border-slate-700"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {saving
+                ? "Saving..."
+                : isEditing
+                  ? "Save changes"
+                  : "Create product"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* PRODUCTS PAGE                                                              */
+/* -------------------------------------------------------------------------- */
+
+export default function Products() {
+  const [products, setProducts] =
+    useState<Product[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>("all");
+
+  const [
+    stockFilter,
+    setStockFilter,
+  ] =
+    useState<StockFilter>("all");
+
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] = useState("all");
+
+  const [
+    selectedIds,
+    setSelectedIds,
+  ] = useState<string[]>([]);
+
+  const [
+    editingProduct,
+    setEditingProduct,
+  ] = useState<Product | null>(null);
+
+  const [
+    showModal,
+    setShowModal,
+  ] = useState(false);
+
+  const [menuId, setMenuId] =
+    useState<string | null>(null);
+
+  const csvInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  const [
+    csvImporting,
+    setCsvImporting,
+  ] = useState(false);
+
+  const [
+    csvMessage,
+    setCsvMessage,
+  ] = useState("");
+
+  const [
+    importResult,
+    setImportResult,
+  ] = useState<ImportResult | null>(
+    null,
+  );
+
+  const loadProducts =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+
+        const result =
+          await getAdminProducts();
+
+        setProducts(
+          Array.isArray(result)
+            ? result
+            : [],
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load products:",
+          error,
+        );
+
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
+  async function refreshProducts() {
+    setRefreshing(true);
+
+    try {
+      const result =
+        await getAdminProducts();
+
+      setProducts(
+        Array.isArray(result)
+          ? result
+          : [],
+      );
+    } catch (error) {
+      console.error(
+        "Failed to refresh products:",
+        error,
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    if (!menuId) return;
+
+    function handleKeyDown(
+      event: KeyboardEvent,
+    ) {
+      if (event.key === "Escape") {
+        setMenuId(null);
+      }
+    }
+
+    function handlePointerDown(
+      event: PointerEvent,
+    ) {
+      const target =
+        event.target as HTMLElement | null;
+
+      if (
+        target?.closest(
+          "[data-product-action-menu]",
+        )
+      ) {
+        return;
+      }
+
+      setMenuId(null);
+    }
+
+    document.addEventListener(
+      "keydown",
+      handleKeyDown,
+    );
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown,
+      );
+
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown,
+      );
+    };
+  }, [menuId]);
+
+  const categories = useMemo(() => {
+    return Array.from(
+      new Set(
+        products
+          .map(
+            (product) =>
+              product.category,
+          )
+          .filter(Boolean),
+      ),
+    ).sort();
+  }, [products]);
+
+  const filteredProducts =
+    useMemo(() => {
+      const query = search
+        .trim()
+        .toLowerCase();
+
+      return products.filter(
+        (product) => {
+          const matchesSearch =
+            !query ||
+            product.name
+              .toLowerCase()
+              .includes(query) ||
+            product.sku
+              ?.toLowerCase()
+              .includes(query) ||
+            product.supplier_name
+              ?.toLowerCase()
+              .includes(query) ||
+            product.category
+              ?.toLowerCase()
+              .includes(query);
+
+          const matchesStatus =
+            statusFilter === "all" ||
+            (statusFilter ===
+              "active" &&
+              Number(
+                product.active,
+              ) === 1) ||
+            (statusFilter ===
+              "inactive" &&
+              Number(
+                product.active,
+              ) !== 1);
+
+          const matchesStock =
+            stockFilter === "all" ||
+            getStockState(product) ===
+              stockFilter;
+
+          const matchesCategory =
+            categoryFilter === "all" ||
+            product.category ===
+              categoryFilter;
+
+          return (
+            matchesSearch &&
+            matchesStatus &&
+            matchesStock &&
+            matchesCategory
+          );
+        },
+      );
+    }, [
+      products,
+      search,
+      statusFilter,
+      stockFilter,
+      categoryFilter,
+    ]);
+
+  function toggleSelected(
+    id: string,
+  ) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter(
+            (item) => item !== id,
+          )
+        : [
+            ...current,
+            id,
+          ],
+    );
+  }
+
+  function toggleAllVisible() {
+    const visibleIds =
+      filteredProducts.map(
+        (product) => product.id,
+      );
+
+    const allSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) =>
+        selectedIds.includes(id),
+      );
+
+    setSelectedIds((current) =>
+      allSelected
+        ? current.filter(
+            (id) =>
+              !visibleIds.includes(id),
+          )
+        : Array.from(
+            new Set([
+              ...current,
+              ...visibleIds,
+            ]),
+          ),
+    );
+  }
+
+  async function handleDelete(
+    product: Product,
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${product.name}"? This cannot be undone.`,
+      );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteProduct(
+        product.id,
+      );
+
+      setProducts((current) =>
+        current.filter(
+          (item) =>
+            item.id !== product.id,
+        ),
+      );
+
+      setSelectedIds((current) =>
+        current.filter(
+          (id) =>
+            id !== product.id,
+        ),
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete product.",
+      );
+    }
+  }
+
+  async function toggleActive(
+    product: Product,
+  ) {
+    const nextActive =
+      Number(product.active) === 1
+        ? 0
+        : 1;
+
+    try {
+      await updateProduct(
+        product.id,
+        {
+          active: nextActive,
+        },
+      );
+
+      setProducts((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                active:
+                  nextActive,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to update product.",
+      );
+    }
+  }
+
+  async function bulkUpdateActive(
+    active: number,
+  ) {
+    if (!selectedIds.length) return;
+
+    const ids = [...selectedIds];
+
+    const results =
+      await Promise.allSettled(
+        ids.map((id) =>
+          updateProduct(id, {
+            active,
+          }),
+        ),
+      );
+
+    const failed = results.filter(
+      (result) =>
+        result.status === "rejected",
+    ).length;
+
+    setProducts((current) =>
+      current.map((product) => {
+        const index =
+          ids.indexOf(product.id);
+
+        if (
+          index === -1 ||
+          results[index]?.status !==
+            "fulfilled"
+        ) {
+          return product;
+        }
+
+        return {
+          ...product,
+          active,
+        };
+      }),
+    );
+
+    setSelectedIds([]);
+
+    if (failed > 0) {
+      window.alert(
+        `${failed} product(s) failed to update.`,
+      );
+    }
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.length) return;
+
+    const confirmed =
+      window.confirm(
+        `Delete ${selectedIds.length} selected product(s)?`,
+      );
+
+    if (!confirmed) return;
+
+    const ids = [...selectedIds];
+
+    const results =
+      await Promise.allSettled(
+        ids.map((id) =>
+          deleteProduct(id),
+        ),
+      );
+
+    const failed = results.filter(
+      (result) =>
+        result.status === "rejected",
+    ).length;
+
+    const successfulIds =
+      ids.filter(
+        (_, index) =>
+          results[index].status ===
+          "fulfilled",
+      );
+
+    setProducts((current) =>
+      current.filter(
+        (product) =>
+          !successfulIds.includes(
+            product.id,
+          ),
+      ),
+    );
+
+    setSelectedIds([]);
+
+    if (failed > 0) {
+      window.alert(
+        `${failed} product(s) failed to delete.`,
+      );
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* CSV IMPORT                                                             */
+  /* ---------------------------------------------------------------------- */
+
+  async function handleCsvImport(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file =
+      event.target.files?.[0];
+
+    if (!file) return;
+
+    setCsvMessage("");
+    setImportResult(null);
+    setCsvImporting(true);
+
+    try {
+      if (
+        !file.name
+          .toLowerCase()
+          .endsWith(".csv")
+      ) {
+        throw new Error(
+          "Please select a CSV file.",
+        );
+      }
+
+      const text =
+        await file.text();
+
+      const rows = parseCsv(text);
+
+      if (!rows.length) {
+        throw new Error(
+          "The CSV file contains no product rows.",
+        );
+      }
+
+      const existingProducts =
+        products.length > 0
+          ? products
+          : await getAdminProducts();
+
+      const byHandle =
+        new Map<string, Product>();
+
+      const bySku =
+        new Map<string, Product>();
+
+      const bySupplierId =
+        new Map<string, Product>();
+
+      existingProducts.forEach(
+        (product) => {
+          if (product.slug) {
+            byHandle.set(
+              slugify(product.slug),
+              product,
+            );
+          }
+
+          if (product.sku) {
+            bySku.set(
+              product.sku
+                .trim()
+                .toLowerCase(),
+              product,
+            );
+          }
+
+          if (
+            product.supplier_product_id
+          ) {
+            bySupplierId.set(
+              product
+                .supplier_product_id
+                .trim()
+                .toLowerCase(),
+              product,
+            );
+          }
+        },
+      );
+
+      const usedSlugs =
+        new Set<string>(
+          existingProducts
+            .map((product) =>
+              slugify(product.slug),
+            )
+            .filter(Boolean),
+        );
+
+      const result: ImportResult = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [],
+      };
+
+      const groups =
+        new Map<string, CsvGroup>();
+
+      let currentGroup:
+        | CsvGroup
+        | null = null;
+
+      rows.forEach(
+        (row, index) => {
+          const explicitHandle =
+            getRowHandle(row);
+
+          const name =
+            getRowName(row);
+
+          if (
+            explicitHandle ||
+            name
+          ) {
+            const handle = slugify(
+              explicitHandle ||
+                name,
+            );
+
+            if (!handle) {
+              return;
+            }
+
+            const existing =
+              groups.get(handle);
+
+            if (existing) {
+              existing.rows.push(
+                row,
               );
-            })}
+
+              currentGroup =
+                existing;
+            } else {
+              const group: CsvGroup =
+                {
+                  rows: [row],
+                  firstRowIndex:
+                    index,
+                  handle,
+                };
+
+              groups.set(
+                handle,
+                group,
+              );
+
+              currentGroup = group;
+            }
+
+            return;
+          }
+
+          if (currentGroup) {
+            currentGroup.rows.push(
+              row,
+            );
+          }
+        },
+      );
+
+      for (
+        const group of groups.values()
+      ) {
+        const firstRow =
+          group.rows[0];
+
+        const rowNumber =
+          group.firstRowIndex + 2;
+
+        try {
+          const firstBuilt =
+            buildCsvProduct(
+              firstRow,
+              group.firstRowIndex,
+            );
+
+          let payload =
+            firstBuilt.payload;
+
+          let allImages =
+            firstBuilt.images;
+
+          let variants =
+            payload.variants || [];
+
+          let totalVariantStock = 0;
+          let hasVariantStock = false;
+
+          if (
+            firstBuilt.variant &&
+            getRowStock(firstRow)
+          ) {
+            totalVariantStock +=
+              numberValue(
+                getRowStock(firstRow),
+              );
+
+            hasVariantStock = true;
+          }
+
+          for (
+            let index = 1;
+            index < group.rows.length;
+            index += 1
+          ) {
+            const additionalRow =
+              group.rows[index];
+
+            const built =
+              buildCsvProduct(
+                additionalRow,
+                group.firstRowIndex +
+                  index,
+                {
+                  name: payload.name,
+                  handle: group.handle,
+                },
+              );
+
+            allImages =
+              mergeImages(
+                allImages,
+                built.images,
+              );
+
+            variants =
+              mergeVariants(
+                variants,
+                built.variant,
+              );
+
+            if (
+              built.variant &&
+              getRowStock(
+                additionalRow,
+              )
+            ) {
+              totalVariantStock +=
+                numberValue(
+                  getRowStock(
+                    additionalRow,
+                  ),
+                );
+
+              hasVariantStock = true;
+            }
+
+            if (
+              !payload.description &&
+              built.payload.description
+            ) {
+              payload = {
+                ...payload,
+                description:
+                  built.payload
+                    .description,
+              };
+            }
+
+            if (
+              payload.category ===
+                "Uncategorized" &&
+              built.payload.category &&
+              built.payload.category !==
+                "Uncategorized"
+            ) {
+              payload = {
+                ...payload,
+                category:
+                  built.payload
+                    .category,
+              };
+            }
+
+            if (
+              !payload.supplier_name &&
+              built.payload.supplier_name
+            ) {
+              payload = {
+                ...payload,
+                supplier_name:
+                  built.payload
+                    .supplier_name,
+              };
+            }
+
+            if (
+              !payload
+                .supplier_product_id &&
+              built.payload
+                .supplier_product_id
+            ) {
+              payload = {
+                ...payload,
+                supplier_product_id:
+                  built.payload
+                    .supplier_product_id,
+              };
+            }
+
+            if (
+              payload.stock == null &&
+              built.payload.stock != null
+            ) {
+              payload = {
+                ...payload,
+                stock:
+                  built.payload.stock,
+              };
+            }
+          }
+
+          if (
+            payload.stock == null &&
+            hasVariantStock
+          ) {
+            payload = {
+              ...payload,
+              stock:
+                totalVariantStock,
+            };
+          }
+
+          payload = {
+            ...payload,
+            images: allImages,
+            image_url:
+              allImages[0] ||
+              payload.image_url,
+            variants,
+          };
+
+          const normalizedHandle =
+            slugify(
+              firstBuilt.handle,
+            );
+
+          const sku =
+            payload.sku
+              ?.trim()
+              .toLowerCase();
+
+          const supplierId =
+            payload
+              .supplier_product_id
+              ?.trim()
+              .toLowerCase();
+
+          const existing =
+            byHandle.get(
+              normalizedHandle,
+            ) ||
+            (sku
+              ? bySku.get(sku)
+              : undefined) ||
+            (supplierId
+              ? bySupplierId.get(
+                  supplierId,
+                )
+              : undefined);
+
+          if (existing) {
+            const supplied =
+              firstBuilt.supplied;
+
+            const updatedPayload: Partial<
+              CreateProductInput
+            > & {
+              active?: number;
+            } = {};
+
+            if (supplied.name) {
+              updatedPayload.name =
+                payload.name;
+            }
+
+            if (supplied.slug) {
+              updatedPayload.slug =
+                payload.slug;
+            }
+
+            if (supplied.sku) {
+              updatedPayload.sku =
+                payload.sku;
+            }
+
+            if (supplied.category) {
+              updatedPayload.category =
+                payload.category;
+            }
+
+            if (supplied.description) {
+              updatedPayload.description =
+                payload.description;
+            }
+
+            if (supplied.price) {
+              updatedPayload.price =
+                payload.price;
+            }
+
+            if (supplied.currency) {
+              updatedPayload.currency =
+                payload.currency;
+            }
+
+            if (supplied.supplierName) {
+              updatedPayload.supplier_name =
+                payload.supplier_name;
+            }
+
+            if (
+              supplied.supplierProductId
+            ) {
+              updatedPayload.supplier_product_id =
+                payload.supplier_product_id;
+            }
+
+            if (
+              supplied.warehouseCountry
+            ) {
+              updatedPayload.warehouse_country =
+                payload.warehouse_country;
+            }
+
+            if (supplied.supplierCost) {
+              updatedPayload.supplier_cost =
+                payload.supplier_cost;
+            }
+
+            if (supplied.shippingCost) {
+              updatedPayload.shipping_cost =
+                payload.shipping_cost;
+            }
+
+            if (supplied.otherCost) {
+              updatedPayload.other_cost =
+                payload.other_cost;
+            }
+
+            if (supplied.processingTime) {
+              updatedPayload.processing_time =
+                payload.processing_time;
+            }
+
+            if (supplied.deliveryTime) {
+              updatedPayload.delivery_time =
+                payload.delivery_time;
+            }
+
+            if (supplied.stock) {
+              updatedPayload.stock =
+                payload.stock;
+            }
+
+            if (
+              supplied.lowStockThreshold
+            ) {
+              updatedPayload.low_stock_threshold =
+                payload.low_stock_threshold;
+            }
+
+            if (supplied.images) {
+              updatedPayload.images =
+                mergeImages(
+                  existing.images || [],
+                  allImages,
+                );
+
+              updatedPayload.image_url =
+                updatedPayload.images[0] ||
+                existing.image_url ||
+                undefined;
+            }
+
+            if (supplied.videoUrl) {
+              updatedPayload.video_url =
+                payload.video_url;
+            }
+
+            if (
+              variants.length > 0
+            ) {
+              updatedPayload.variants =
+                variants;
+            }
+
+            if (supplied.active) {
+              updatedPayload.active =
+                firstBuilt.active
+                  ? 1
+                  : 0;
+            }
+
+            const updated =
+              await updateProduct(
+                existing.id,
+                updatedPayload,
+              );
+
+            const finalProduct =
+              updated || {
+                ...existing,
+                ...updatedPayload,
+              };
+
+            byHandle.set(
+              slugify(
+                finalProduct.slug ||
+                  existing.slug,
+              ),
+              finalProduct,
+            );
+
+            if (finalProduct.sku) {
+              bySku.set(
+                finalProduct.sku
+                  .trim()
+                  .toLowerCase(),
+                finalProduct,
+              );
+            }
+
+            if (
+              finalProduct
+                .supplier_product_id
+            ) {
+              bySupplierId.set(
+                finalProduct
+                  .supplier_product_id
+                  .trim()
+                  .toLowerCase(),
+                finalProduct,
+              );
+            }
+
+            result.updated += 1;
+          } else {
+            const uniqueSlug =
+              makeUniqueSlug(
+                normalizedHandle,
+                usedSlugs,
+              );
+
+            const createPayload: CreateProductInput =
+              {
+                ...payload,
+                slug: uniqueSlug,
+              };
+
+            const created =
+              await createProduct(
+                createPayload,
+              );
+
+            result.created += 1;
+
+            /*
+             * CreateProductInput intentionally does
+             * not contain `active`. The product is
+             * created first, then its visibility is
+             * updated separately when the CSV says it
+             * should be inactive.
+             */
+            if (
+              created?.id &&
+              !firstBuilt.active
+            ) {
+              await updateProduct(
+                created.id,
+                {
+                  active: 0,
+                },
+              );
+            }
+
+            if (created) {
+              const finalCreated =
+                !firstBuilt.active
+                  ? {
+                      ...created,
+                      active: 0,
+                    }
+                  : created;
+
+              byHandle.set(
+                slugify(
+                  finalCreated.slug ||
+                    uniqueSlug,
+                ),
+                finalCreated,
+              );
+
+              if (finalCreated.sku) {
+                bySku.set(
+                  finalCreated.sku
+                    .trim()
+                    .toLowerCase(),
+                  finalCreated,
+                );
+              }
+
+              if (
+                finalCreated
+                  .supplier_product_id
+              ) {
+                bySupplierId.set(
+                  finalCreated
+                    .supplier_product_id
+                    .trim()
+                    .toLowerCase(),
+                  finalCreated,
+                );
+              }
+            }
+          }
+        } catch (error) {
+          result.failed += 1;
+
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unable to import product.";
+
+          result.errors.push(
+            `Row ${rowNumber}: ${message}`,
+          );
+        }
+      }
+
+      await loadProducts();
+
+      setImportResult(result);
+
+      setCsvMessage(
+        `Import complete — Created ${result.created}, updated ${result.updated}, skipped ${result.skipped}, failed ${result.failed}.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to import CSV.";
+
+      setCsvMessage(message);
+
+      setImportResult({
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 1,
+        errors: [message],
+      });
+    } finally {
+      setCsvImporting(false);
+
+      if (csvInputRef.current) {
+        csvInputRef.current.value =
+          "";
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
+            Products
+          </h1>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Manage your Global store products,
+            pricing, suppliers and inventory.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={
+              downloadCsvTemplate
+            }
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            CSV template
+          </button>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            <Upload size={17} />
+
+            {csvImporting
+              ? "Importing..."
+              : "Import CSV"}
+
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={
+                handleCsvImport
+              }
+              disabled={csvImporting}
+              className="hidden"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() =>
+              void refreshProducts()
+            }
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <RefreshCw
+              size={17}
+              className={
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditingProduct(
+                null,
+              );
+              setShowModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            <Plus size={18} />
+            Add product
+          </button>
+        </div>
+      </div>
+
+      {csvMessage && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-4">
+            <span className="text-slate-700 dark:text-slate-300">
+              {csvMessage}
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setCsvMessage("")
+              }
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {importResult &&
+            importResult.errors.length >
+              0 && (
+              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-600">
+                  Import errors
+                </p>
+
+                <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-red-600">
+                  {importResult.errors.map(
+                    (
+                      importError,
+                      index,
+                    ) => (
+                      <div
+                        key={`${importError}-${index}`}
+                      >
+                        {importError}
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500">
+            Total products
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold">
+            {products.length}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500">
+            Active
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold">
+            {
+              products.filter(
+                (product) =>
+                  Number(
+                    product.active,
+                  ) === 1,
+              ).length
+            }
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500">
+            Low stock
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold">
+            {
+              products.filter(
+                (product) =>
+                  getStockState(
+                    product,
+                  ) === "low",
+              ).length
+            }
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500">
+            Out of stock
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold">
+            {
+              products.filter(
+                (product) =>
+                  getStockState(
+                    product,
+                  ) === "out",
+              ).length
+            }
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 xl:flex-row">
+          <div className="relative flex-1">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value,
+                )
+              }
+              placeholder="Search products, SKU or supplier..."
+              className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-4 outline-none dark:border-slate-700 dark:bg-slate-900"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target
+                  .value as StatusFilter,
+              )
+            }
+            className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="all">
+              All status
+            </option>
+            <option value="active">
+              Active
+            </option>
+            <option value="inactive">
+              Inactive
+            </option>
+          </select>
+
+          <select
+            value={stockFilter}
+            onChange={(event) =>
+              setStockFilter(
+                event.target
+                  .value as StockFilter,
+              )
+            }
+            className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="all">
+              All stock
+            </option>
+            <option value="healthy">
+              Healthy
+            </option>
+            <option value="low">
+              Low stock
+            </option>
+            <option value="out">
+              Out of stock
+            </option>
+          </select>
+
+          <select
+            value={categoryFilter}
+            onChange={(event) =>
+              setCategoryFilter(
+                event.target.value,
+              )
+            }
+            className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="all">
+              All categories
+            </option>
+
+            {categories.map(
+              (category) => (
+                <option
+                  key={category}
+                  value={category}
+                >
+                  {category}
+                </option>
+              ),
+            )}
+          </select>
+        </div>
+
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <span className="mr-2 text-sm font-medium">
+              {selectedIds.length}{" "}
+              selected
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                void bulkUpdateActive(
+                  1,
+                )
+              }
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+            >
+              Activate
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void bulkUpdateActive(
+                  0,
+                )
+              }
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+            >
+              Deactivate
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void bulkDelete()
+              }
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
+            >
+              Delete
+            </button>
           </div>
         )}
 
-        {!loading && !error && filteredProducts.length === 0 && (
-          <div className="p-12 text-center">
-            <Package size={40} className="mx-auto text-slate-300" />
-            <p className="mt-3 font-medium text-slate-600">
-              {products.length === 0
-                ? "No products yet."
-                : "No products match your search."}
+        {loading ? (
+          <div className="flex min-h-80 items-center justify-center">
+            <RefreshCw
+              size={24}
+              className="animate-spin text-slate-400"
+            />
+          </div>
+        ) : filteredProducts.length ===
+          0 ? (
+          <div className="flex min-h-96 flex-col items-center justify-center px-6 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-900">
+              <Package
+                size={28}
+                className="text-slate-400"
+              />
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold">
+              No products found
+            </h3>
+
+            <p className="mt-2 max-w-md text-sm text-slate-500">
+              Your Products page is connected
+              to the real product database. Add
+              your first product or import your
+              Master Inventory CSV.
             </p>
-            {products.length === 0 && (
-              <p className="mt-1 text-sm text-slate-400">
-                Add your first product to get started.
-              </p>
-            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingProduct(
+                  null,
+                );
+                setShowModal(true);
+              }}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"
+            >
+              <Plus size={17} />
+              Add your first product
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1050px]">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800">
+                  <th className="w-12 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredProducts.length >
+                          0 &&
+                        filteredProducts.every(
+                          (
+                            product,
+                          ) =>
+                            selectedIds.includes(
+                              product.id,
+                            ),
+                        )
+                      }
+                      onChange={
+                        toggleAllVisible
+                      }
+                    />
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Product
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Category
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Price
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Inventory
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Supplier
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Profit
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Status
+                  </th>
+
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredProducts.map(
+                  (product) => {
+                    const stockState =
+                      getStockState(
+                        product,
+                      );
+
+                    const image =
+                      product.image_url ||
+                      product.images?.[0];
+
+                    return (
+                      <tr
+                        key={
+                          product.id
+                        }
+                        className="border-b border-slate-100 last:border-0 dark:border-slate-900"
+                      >
+                        <td className="px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(
+                              product.id,
+                            )}
+                            onChange={() =>
+                              toggleSelected(
+                                product.id,
+                              )
+                            }
+                          />
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
+                              {image ? (
+                                <img
+                                  src={image}
+                                  alt={
+                                    product.name
+                                  }
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Package
+                                  size={
+                                    20
+                                  }
+                                  className="text-slate-400"
+                                />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="max-w-[260px] truncate font-medium text-slate-900 dark:text-white">
+                                {
+                                  product.name
+                                }
+                              </p>
+
+                              <p className="mt-1 text-xs text-slate-500">
+                                {product.sku ||
+                                  "No SKU"}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm">
+                          {product.category ||
+                            "—"}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-medium">
+                          {money(
+                            numberValue(
+                              product.price,
+                            ),
+                            product.currency,
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="text-sm">
+                            <strong>
+                              {product.stock ??
+                                0}
+                            </strong>
+
+                            <span className="ml-1 text-slate-500">
+                              units
+                            </span>
+                          </div>
+
+                          <span
+                            className={`mt-1 inline-block text-xs ${
+                              stockState ===
+                              "healthy"
+                                ? "text-emerald-600"
+                                : stockState ===
+                                    "low"
+                                  ? "text-amber-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {stockState ===
+                            "healthy"
+                              ? "Healthy"
+                              : stockState ===
+                                  "low"
+                                ? "Low stock"
+                                : "Out of stock"}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm">
+                          {product.supplier_name ||
+                            "—"}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-medium">
+                            {money(
+                              numberValue(
+                                product.profit_per_unit,
+                              ),
+                              product.currency,
+                            )}
+                          </div>
+
+                          <div className="text-xs text-slate-500">
+                            {numberValue(
+                              product.profit_margin,
+                            ).toFixed(
+                              1,
+                            )}
+                            %
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                              Number(
+                                product.active,
+                              ) === 1
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {Number(
+                              product.active,
+                            ) === 1
+                              ? "Active"
+                              : "Inactive"}
+                          </span>
+                        </td>
+
+                        <td
+                          className="relative px-4 py-4 text-right"
+                          data-product-action-menu
+                        >
+                          <button
+                            type="button"
+                            aria-label={`Actions for ${product.name}`}
+                            aria-expanded={
+                              menuId ===
+                              product.id
+                            }
+                            onClick={(
+                              event,
+                            ) => {
+                              event.stopPropagation();
+
+                              setMenuId(
+                                (current) =>
+                                  current ===
+                                  product.id
+                                    ? null
+                                    : product.id,
+                              );
+                            }}
+                            className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          >
+                            <MoreHorizontal
+                              size={
+                                18
+                              }
+                            />
+                          </button>
+
+                          {menuId ===
+                            product.id && (
+                            <div
+                              className="absolute right-4 top-12 z-20 w-48 rounded-xl border border-slate-200 bg-white p-1 text-left shadow-xl dark:border-slate-800 dark:bg-slate-950"
+                              data-product-action-menu
+                              onPointerDown={(
+                                event,
+                              ) =>
+                                event.stopPropagation()
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingProduct(
+                                    product,
+                                  );
+
+                                  setShowModal(
+                                    true,
+                                  );
+
+                                  setMenuId(
+                                    null,
+                                  );
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                <Edit3
+                                  size={
+                                    15
+                                  }
+                                />
+                                Edit product
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuId(
+                                    null,
+                                  );
+
+                                  void toggleActive(
+                                    product,
+                                  );
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                <Check
+                                  size={
+                                    15
+                                  }
+                                />
+
+                                {Number(
+                                  product.active,
+                                ) === 1
+                                  ? "Deactivate"
+                                  : "Activate"}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuId(
+                                    null,
+                                  );
+
+                                  void handleDelete(
+                                    product,
+                                  );
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              >
+                                <Trash2
+                                  size={
+                                    15
+                                  }
+                                />
+
+                                Delete product
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {modalOpen && (
+      {showModal && (
         <ProductModal
-          product={editingProduct}
-          onClose={() => setModalOpen(false)}
-          onSuccess={loadProducts}
+          product={
+            editingProduct
+          }
+          onClose={() => {
+            setShowModal(false);
+            setEditingProduct(
+              null,
+            );
+          }}
+          onSaved={loadProducts}
         />
       )}
     </div>

@@ -1,53 +1,80 @@
+export interface ProductVariant {
+  id: string;
+  name: string;
+  value: string;
+  price: string;
+  sku: string;
+  stock: string;
+}
+
 export interface Product {
-id: string;
-name: string;
-slug: string;
-description: string;
-category: string;
-price: number;
-currency: string;
+  id: string;
+  name: string;
+  slug: string;
+  sku?: string | null;
 
-image_url: string | null;
-video_url: string | null;
+  category: string;
+  description: string;
 
-supplier_name: string | null;
-supplier_product_id: string | null;
+  price: number;
+  currency: string;
 
-warehouse_country: string | null;
-processing_time: string | null;
-delivery_time: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
+  images?: string[];
 
-supplier_cost: number;
-shipping_cost: number;
-other_cost: number;
+  supplier_name?: string | null;
+  supplier_product_id?: string | null;
+  warehouse_country?: string | null;
 
-profit_per_unit: number;
-profit_margin: number;
+  supplier_cost: number;
+  shipping_cost: number;
+  other_cost: number;
 
-active: number;
-created_at: string;
+  profit_per_unit: number;
+  profit_margin: number;
+
+  processing_time?: string | null;
+  delivery_time?: string | null;
+
+  stock?: number;
+  low_stock_threshold?: number;
+
+  variants?: ProductVariant[];
+
+  active: number;
+
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateProductInput {
-name: string;
-slug: string;
-description: string;
-category: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string;
 
-price: number;
-currency?: string;
+  price: number;
+  currency: string;
 
-image_url?: string;
-video_url?: string;
+  image_url?: string;
+  video_url?: string;
+  images?: string[];
 
-supplier_name?: string;
-supplier_product_id?: string;
+  supplier_name?: string;
+  supplier_product_id?: string;
+  warehouse_country?: string;
 
-warehouse_country?: string;
-processing_time?: string;
-delivery_time?: string;
+  supplier_cost: number;
+  shipping_cost: number;
+  other_cost: number;
 
-supplier_cost?: number;
-shipping_cost?: number;
-other_cost?: number;
+  processing_time?: string;
+  delivery_time?: string;
+
+  sku?: string;
+  stock?: number;
+  low_stock_threshold?: number;
+
+  variants?: ProductVariant[];
 }

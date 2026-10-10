@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import { getAllOrders, getAllProducts } from "../data/store";
 import type { Order } from "../types/order";
 import { calculateProfitability } from "../utils/profitability";
 
 const businessHealthRoute = new Hono();
+businessHealthRoute.use("*", authMiddleware);
 
 type HealthPoint = {
   timestamp: string;

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { authMiddleware } from "../middleware/auth";
 
 import { visitorLocations } from "../data/visitors";
 
@@ -73,6 +74,7 @@ ip.startsWith("172.31.")
 
 visitorsRoute.get(
 "/",
+authMiddleware,
 (c) => {
 return c.json({
 success: true,

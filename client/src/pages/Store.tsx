@@ -33,10 +33,10 @@ import type { MarketInfo } from "../types/market";
 import type { CartItem } from "../types/cart";
 import type { StoreConfig } from "../types/store";
 
-import { DEFAULT_STORE_CONFIG } from "../themes/registry";
+import { DEFAULT_STORE_CONFIG } from "../types/themes/registry";
 import {
-  getProducts,
-  getStoreConfig,
+  getPublicStore,
+  getStoreProducts,
 } from "../services/api";
 import { detectMarket } from "../services/market";
 import {
@@ -60,98 +60,12 @@ type Page =
   | "order-success";
 
 type DemoProduct = Product & {
+  storeId?: string;
   image_url?: string;
   mobile_image_url?: string;
   inventory?: number;
   active?: number;
 };
-
-const DEMO_PRODUCTS: DemoProduct[] = [
-  {
-    id: "demo-gel-cleanser",
-    storeId: "skincare-store",
-    name: "Cloud Cleanser",
-    description: "A soft, low-foam cleanser for a calm daily reset.",
-    price: 28,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=1100&q=82",
-    category: "Cleansers",
-    inventory: 18,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-barrier-serum",
-    storeId: "skincare-store",
-    name: "Barrier Serum",
-    description: "A silky serum built around hydration and barrier care.",
-    price: 42,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
-    category: "Serums",
-    inventory: 12,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-daily-cream",
-    storeId: "skincare-store",
-    name: "Daily Veil Cream",
-    description: "A weightless cream that leaves skin soft, plush and fresh.",
-    price: 36,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=1100&q=82",
-    category: "Moisturisers",
-    inventory: 24,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-vitamin-c",
-    storeId: "skincare-store",
-    name: "Morning C Drops",
-    description: "A brightening step for a clear, luminous-looking routine.",
-    price: 48,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1100&q=82",
-    category: "Treatments",
-    inventory: 9,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-spf",
-    storeId: "skincare-store",
-    name: "Daily Screen SPF 40",
-    description: "An easy final step with a clean, comfortable finish.",
-    price: 31,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1556229010-aa3e9850f4e1?auto=format&fit=crop&w=1100&q=82",
-    category: "SPF",
-    inventory: 16,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "demo-night-oil",
-    storeId: "skincare-store",
-    name: "Night Recovery Oil",
-    description: "A richer evening ritual for skin that likes comfort.",
-    price: 46,
-    currency: "USD",
-    image_url:
-      "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1100&q=82",
-    category: "Treatments",
-    inventory: 7,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
 
 const CONCERNS = [
   {
@@ -187,39 +101,39 @@ const INGREDIENTS = [
   ["Vitamin C", "Brighten"],
 ];
 
-function getImage(product: Product, fallbackIndex = 0) {
-  const candidate = product as DemoProduct;
+function getImage(product?: Product, _fallbackIndex = 0) {
+  if (!product) return "";
 
-  if (candidate.image_url) {
-    return candidate.image_url;
-  }
+  const candidate = product as DemoProduct & {
+    images?: string[];
+    image_urls?: string[];
+  };
 
-  const fallbacks = [
-    "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=1100&q=82",
-    "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=1100&q=82",
-    "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=1100&q=82",
-  ];
-
-  return fallbacks[fallbackIndex % fallbacks.length];
+  return (
+    candidate.image_url ||
+    candidate.images?.find(Boolean) ||
+    candidate.image_urls?.find(Boolean) ||
+    ""
+  );
 }
-
 function getImages(product: Product) {
   const candidate = product as DemoProduct & {
     images?: string[];
     image_urls?: string[];
   };
 
-  const all = [
-    ...(candidate.images ?? []),
-    ...(candidate.image_urls ?? []),
-    candidate.image_url ?? getImage(product),
-  ];
-
-  return Array.from(new Set(all.filter(Boolean)));
+  return Array.from(
+    new Set([
+      ...(candidate.images ?? []),
+      ...(candidate.image_urls ?? []),
+      candidate.image_url ?? "",
+    ].filter(Boolean)),
+  );
 }
 
 function getDelivery(product: Product) {
-  const value = (product as DemoProduct & { delivery_time?: string }).delivery_time;
+  const value = (product as DemoProduct & { delivery_time?: string })
+    .delivery_time;
   return typeof value === "string" && value.trim() ? value : "3–5 days";
 }
 
@@ -228,34 +142,22 @@ function getStock(product: Product) {
   return typeof value === "number" ? value : 12;
 }
 
-function storeBrand(store: StoreConfig, slug?: string) {
-  if ((slug ?? "").toLowerCase() === "skincare-store") {
-    return "Luma Skin";
-  }
-
-  return store.name || "Luma Skin";
+function storeBrand(store: StoreConfig) {
+  return store.name || "Store";
 }
 
-function storeTagline(store: StoreConfig, slug?: string) {
-  if ((slug ?? "").toLowerCase() === "skincare-store") {
-    return "Skincare for skin, not trends.";
-  }
-
-  return store.description || "Considered skincare for everyday skin.";
+function storeTagline(store: StoreConfig) {
+  return store.description || "Welcome to our store.";
 }
-
 export default function Store() {
   const { slug } = useParams<{ slug: string }>();
 
-  const [store, setStore] = useState<StoreConfig>(
-    DEFAULT_STORE_CONFIG,
-  );
+  const [store, setStore] = useState<StoreConfig>(DEFAULT_STORE_CONFIG);
   const [products, setProducts] = useState<Product[]>([]);
   const [market, setMarket] = useState<MarketInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<Page>("home");
-  const [selectedProduct, setSelectedProduct] =
-    useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -280,48 +182,58 @@ export default function Store() {
   } | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    async function loadStore() {
-      try {
-        const [storeData, productData, marketData] =
-          await Promise.all([
-            getStoreConfig(),
-            getProducts(),
-            detectMarket(),
-          ]);
+  async function loadStore() {
+    try {
+      if (!slug) {
+        throw new Error("A store URL slug is required.");
+      }
 
-        if (!mounted) return;
+      const [storeData, productData, marketData] =
+        await Promise.all([
+          getPublicStore(slug),
+          getStoreProducts(slug),
+          detectMarket(),
+        ]);
 
-        setStore(storeData || DEFAULT_STORE_CONFIG);
-        setProducts(productData || []);
-        setMarket(marketData);
-      } catch (error) {
-        console.error("Unable to load storefront:", error);
+      if (!mounted) return;
 
-        if (mounted) {
-          setStore(DEFAULT_STORE_CONFIG);
-          setProducts([]);
-          try {
-            setMarket(await detectMarket());
-          } catch {
-            setMarket(null);
-          }
-        }
-      } finally {
-        if (mounted) {
-          setCart(getCart());
-          setLoading(false);
+      setStore({
+        ...DEFAULT_STORE_CONFIG,
+        name: storeData.name,
+        description: storeData.description || "",
+      });
+
+      setProducts(productData || []);
+      setMarket(marketData);
+    } catch (error) {
+      console.error("Unable to load storefront:", error);
+
+      if (mounted) {
+        setProducts([]);
+        setLoading(false);
+
+        try {
+          setMarket(await detectMarket());
+        } catch {
+          setMarket(null);
         }
       }
+    } finally {
+      if (mounted) {
+        setCart(getCart());
+        setLoading(false);
+      }
     }
+  }
 
-    void loadStore();
+  void loadStore();
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  return () => {
+    mounted = false;
+  };
+}, [slug]);
 
   useEffect(() => {
     const syncCart = () => setCart(getCart());
@@ -332,27 +244,20 @@ export default function Store() {
     };
   }, []);
 
-  const brandName = storeBrand(store, slug);
-  const tagline = storeTagline(store, slug);
+  const brandName = storeBrand(store);
+  const tagline = storeTagline(store);
   const activeCurrency = market?.currency || "USD";
   const activeCountry = market?.countryCode || "US";
 
   const displayProducts = useMemo<Product[]>(() => {
-    const active = products.filter((product) => {
-      const candidate = product as DemoProduct;
-      return candidate.active === undefined || Boolean(candidate.active);
-    });
-
-    return active.length ? active : DEMO_PRODUCTS;
-  }, [products]);
+  return products.filter((product) => {
+    const candidate = product as DemoProduct;
+    return candidate.active === undefined || Boolean(candidate.active);
+  });
+}, [products]);
 
   const cartSummary = useMemo(
-    () =>
-      getCartSummary(
-        cart,
-        activeCountry,
-        activeCurrency,
-      ),
+    () => getCartSummary(cart, activeCountry, activeCurrency),
     [cart, activeCountry, activeCurrency],
   );
 
@@ -538,7 +443,6 @@ export default function Store() {
         <HomePage
           products={displayProducts}
           loading={loading}
-          brandName={brandName}
           tagline={tagline}
           onCatalog={() => go("catalog")}
           onProduct={openProduct}
@@ -744,7 +648,6 @@ function MobileMenu({
 function HomePage({
   products,
   loading,
-  brandName,
   tagline,
   onCatalog,
   onProduct,
@@ -752,7 +655,6 @@ function HomePage({
 }: {
   products: Product[];
   loading: boolean;
-  brandName: string;
   tagline: string;
   onCatalog: () => void;
   onProduct: (product: Product) => void;
@@ -936,7 +838,8 @@ function HomePage({
               Good ingredients. Clear purpose.
             </h2>
             <p className="mt-5 max-w-md text-base leading-7 text-black/52">
-              Nothing to decode. Each ingredient has a job and each step earns its place.
+              Nothing to decode. Each ingredient has a job and each step earns
+              its place.
             </p>
             <button
               type="button"
@@ -987,7 +890,8 @@ function HomePage({
               Less noise. Better rituals.
             </h2>
             <p className="mt-6 max-w-md text-base leading-7 text-white/55">
-              Build a routine you can actually keep. Start with the basics, then add only what your skin needs.
+              Build a routine you can actually keep. Start with the basics, then
+              add only what your skin needs.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
@@ -1017,11 +921,10 @@ function HomePage({
             ))}
           </div>
           <blockquote className="mt-7 max-w-4xl font-serif text-3xl leading-[1.03] tracking-[-0.04em] sm:text-4xl lg:text-5xl">
-            “The whole routine feels considered. Nothing is shouting for attention, and my skin feels better for it.”
+            “The whole routine feels considered. Nothing is shouting for
+            attention, and my skin feels better for it.”
           </blockquote>
-          <p className="mt-5 text-sm text-black/40">
-            Verified customer
-          </p>
+          <p className="mt-5 text-sm text-black/40">Verified customer</p>
         </div>
       </section>
     </main>
@@ -1082,7 +985,8 @@ function CatalogPage({
               The collection.
             </h1>
             <p className="max-w-md text-base leading-7 text-black/52">
-              A focused edit of everyday skincare, from first cleanse to final step.
+              A focused edit of everyday skincare, from first cleanse to final
+              step.
             </p>
           </div>
         </div>
@@ -1268,9 +1172,7 @@ function ProductPage({
   onAdd: (product: Product) => void;
 }) {
   const images = getImages(product);
-  const related = products
-    .filter((item) => item.id !== product.id)
-    .slice(0, 4);
+  const related = products.filter((item) => item.id !== product.id).slice(0, 4);
   const [imageIndex, setImageIndex] = useState(0);
   const [subscribe, setSubscribe] = useState(false);
   const [openDetails, setOpenDetails] = useState<string | null>(null);
@@ -1291,15 +1193,11 @@ function ProductPage({
   }, []);
 
   function previousImage() {
-    setImageIndex((index) =>
-      index === 0 ? images.length - 1 : index - 1,
-    );
+    setImageIndex((index) => (index === 0 ? images.length - 1 : index - 1));
   }
 
   function nextImage() {
-    setImageIndex((index) =>
-      index === images.length - 1 ? 0 : index + 1,
-    );
+    setImageIndex((index) => (index === images.length - 1 ? 0 : index + 1));
   }
 
   function touchStart(event: TouchEvent<HTMLDivElement>) {
@@ -1425,9 +1323,7 @@ function ProductPage({
                   <Star key={index} size={14} fill="currentColor" />
                 ))}
               </div>
-              <span className="text-xs text-black/40">
-                4.9 · 148 reviews
-              </span>
+              <span className="text-xs text-black/40">4.9 · 148 reviews</span>
             </div>
 
             <div className="mt-6 text-xl font-semibold">
@@ -1445,9 +1341,7 @@ function ProductPage({
                 className="flex min-h-11 w-full items-center justify-between gap-5 text-left"
               >
                 <div>
-                  <p className="text-sm font-semibold">
-                    Subscribe & save 10%
-                  </p>
+                  <p className="text-sm font-semibold">Subscribe & save 10%</p>
                   <p className="mt-1 text-xs leading-5 text-black/42">
                     Flexible delivery. Skip when you need to.
                   </p>
@@ -1501,9 +1395,7 @@ function ProductPage({
                   ? `${getStock(product)} available`
                   : "Currently unavailable"}
               </span>
-              <span>
-                Delivery {getDelivery(product)}
-              </span>
+              <span>Delivery {getDelivery(product)}</span>
             </div>
 
             <div className="mt-5 border-t border-black/10">
@@ -1517,7 +1409,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Ingredient details will appear here as product data is completed.
+                  Ingredient details will appear here as product data is
+                  completed.
                 </p>
               </Accordion>
 
@@ -1531,7 +1424,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  The formula is designed around a clear purpose, with ingredients chosen to fit a consistent daily routine.
+                  The formula is designed around a clear purpose, with
+                  ingredients chosen to fit a consistent daily routine.
                 </p>
               </Accordion>
 
@@ -1545,7 +1439,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Follow the product directions and introduce new actives gradually.
+                  Follow the product directions and introduce new actives
+                  gradually.
                 </p>
               </Accordion>
 
@@ -1559,7 +1454,8 @@ function ProductPage({
                 }
               >
                 <p>
-                  Delivery estimates are shown for your detected market. Store policies apply to returns and refunds.
+                  Delivery estimates are shown for your detected market. Store
+                  policies apply to returns and refunds.
                 </p>
               </Accordion>
             </div>
@@ -1644,9 +1540,7 @@ function Accordion({
         />
       </button>
       {open && (
-        <div className="pb-5 text-sm leading-6 text-black/50">
-          {children}
-        </div>
+        <div className="pb-5 text-sm leading-6 text-black/50">{children}</div>
       )}
     </div>
   );
@@ -1752,10 +1646,7 @@ function CartPage({
                     <button
                       type="button"
                       onClick={() =>
-                        onQuantity(
-                          item.product.id,
-                          item.quantity + 1,
-                        )
+                        onQuantity(item.product.id, item.quantity + 1)
                       }
                       className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10"
                       aria-label="Increase quantity"
@@ -1814,9 +1705,7 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className={large ? "font-semibold" : "text-white/45"}>
-        {label}
-      </span>
+      <span className={large ? "font-semibold" : "text-white/45"}>{label}</span>
       <span className={large ? "text-xl font-bold" : "font-semibold"}>
         {value}
       </span>
@@ -1940,10 +1829,7 @@ function CartPanel({
                       <button
                         type="button"
                         onClick={() =>
-                          onQuantity(
-                            item.product.id,
-                            item.quantity + 1,
-                          )
+                          onQuantity(item.product.id, item.quantity + 1)
                         }
                         className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10"
                         aria-label="Increase quantity"
@@ -2030,7 +1916,8 @@ function ContactPage({ brandName }: { brandName: string }) {
             </h1>
           </div>
           <p className="max-w-xl text-base leading-7 text-black/52 lg:justify-self-end">
-            Questions about a product, an order or building your routine? Reach {brandName} here.
+            Questions about a product, an order or building your routine? Reach{" "}
+            {brandName} here.
           </p>
         </div>
       </section>
@@ -2064,7 +1951,8 @@ function ContactPage({ brandName }: { brandName: string }) {
                 Message received.
               </h2>
               <p className="mt-3 max-w-md text-base leading-7 text-black/48">
-                Thanks for reaching out. Your message has been captured for this storefront preview.
+                Thanks for reaching out. Your message has been captured for this
+                storefront preview.
               </p>
               <button
                 type="button"
