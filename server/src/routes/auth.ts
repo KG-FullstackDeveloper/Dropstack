@@ -8,7 +8,7 @@ import {
   authMiddleware,
   type AuthVariables,
 } from "../middleware/auth";
-import { sendPasswordResetCode } from "../services/emailService";
+import { sendPasswordResetCode, sendNewLoginAlertEmail } from "../services/emailService";
 
 interface AdminUser {
   id: string;
@@ -734,6 +734,8 @@ auth.post(
         ipAddress,
         userAgent
       );
+
+      await sendNewLoginAlertEmail({ recipientEmail: admin.email, recipientName: admin.name });
 
       return c.json({
         success: true,

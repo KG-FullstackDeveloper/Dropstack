@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../middleware/auth";
+import { sendShippingUpdateEmail } from "../services/emailService";
 import {
   getAllOrders,
   getOrderById,
@@ -342,6 +343,13 @@ ordersRoute.patch("/:id", async (c) => {
         { success: false, error: "Order not found." },
         404,
       );
+    }
+
+    if (order.order_status === "shipped" && (current.order_status !== "shipped" || current.tracking_number !== order.tracking_number)) {
+      await sendShippingUpdateEmail({
+        orderId: order.id, customerName: order.customer_name, customerEmail: order.customer_email,
+        total: order.total, currency: order.currency, trackingNumber: order.tracking_number,
+      });
     }
 
     return c.json({

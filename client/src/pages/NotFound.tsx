@@ -1,0 +1,5 @@
+import { Link } from "react-router-dom";
+import { ArrowLeft, Search } from "lucide-react";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+export default function NotFound() { return <><Navbar/><main className="flex min-h-[65vh] items-center justify-center px-6 py-16"><div className="max-w-lg text-center"><p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-700">404 · Page not found</p><h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950">This page doesn’t exist</h1><p className="mt-4 text-slate-600">The link may be outdated or the page may have moved. Head back to the store to keep browsing.</p><div className="mt-8 flex flex-wrap justify-center gap-3"><Link to="/shop" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white"><Search size={17}/>Browse products</Link><Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700"><ArrowLeft size={17}/>Home</Link></div></div></main><Footer/></>; }

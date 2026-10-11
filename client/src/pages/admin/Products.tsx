@@ -2230,6 +2230,7 @@ function ProductModal({
 /* -------------------------------------------------------------------------- */
 
 export default function Products() {
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [products, setProducts] =
     useState<Product[]>([]);
 
@@ -3633,6 +3634,11 @@ export default function Products() {
               ),
             )}
           </select>
+
+          <div className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900" aria-label="Product layout">
+            <button type="button" onClick={() => setViewMode("grid")} aria-pressed={viewMode === "grid"} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "grid" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}>Cards</button>
+            <button type="button" onClick={() => setViewMode("table")} aria-pressed={viewMode === "table"} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "table" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}>Table</button>
+          </div>
         </div>
 
         {selectedIds.length > 0 && (
@@ -3721,6 +3727,30 @@ export default function Products() {
             </button>
           </div>
         ) : (
+          viewMode === "grid" ? (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {filteredProducts.map((product) => {
+                const stockState = getStockState(product);
+                const image = product.image_url || product.images?.[0];
+                const active = Number(product.active) === 1;
+                return (
+                  <article key={product.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-950">
+                    <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
+                      {image ? <img src={image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /> : <div className="flex h-full items-center justify-center"><Package size={34} className="text-slate-400" /></div>}
+                      <input type="checkbox" aria-label={`Select ${product.name}`} checked={selectedIds.includes(product.id)} onChange={() => toggleSelected(product.id)} className="absolute left-3 top-3 h-4 w-4 rounded border-slate-300 bg-white" />
+                      <span className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{active ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="space-y-3 p-4">
+                      <div className="min-w-0"><h3 className="truncate font-semibold text-slate-950 dark:text-white" title={product.name}>{product.name}</h3><p className="mt-1 truncate text-xs text-slate-500">{product.sku || "No SKU"} · {product.category || "Uncategorized"}</p></div>
+                      <div className="flex items-end justify-between gap-3"><p className="text-lg font-bold text-slate-950 dark:text-white">{money(numberValue(product.price), product.currency)}</p><span className={`rounded-full px-2 py-1 text-xs font-semibold ${stockState === "healthy" ? "bg-emerald-50 text-emerald-700" : stockState === "low" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{stockState === "healthy" ? "In stock" : stockState === "low" ? "Low stock" : "Out of stock"}</span></div>
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800"><span>{product.stock ?? 0} units available</span><span>{product.supplier_name || "No supplier"}</span></div>
+                      <div className="flex gap-2"><button type="button" onClick={() => { setEditingProduct(product); setShowModal(true); }} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950"><Edit3 size={15}/> Edit product</button><button type="button" onClick={() => void toggleActive(product)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">{active ? "Disable" : "Activate"}</button><button type="button" aria-label={`Delete ${product.name}`} onClick={() => void handleDelete(product)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700"><Trash2 size={16}/></button></div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px]">
               <thead>
@@ -4063,6 +4093,7 @@ export default function Products() {
               </tbody>
             </table>
           </div>
+          )
         )}
       </div>
 

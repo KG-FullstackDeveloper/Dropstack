@@ -7,6 +7,7 @@ import {
   Loader2,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import {
@@ -836,12 +837,31 @@ export default function ProductModal({
                   Product media
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Add product image URLs. The first image is used as the primary image.
+                  Upload a JPG, PNG, or WebP image (maximum 5 MB), or use an image URL. The first image is used as the primary image.
                 </p>
               </div>
 
               <div className="p-5">
-                <Field label="Primary image URL">
+                <label className="mb-4 flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-slate-300 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-950">
+                  <Upload className="h-5 w-5" /> Upload product image
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (!file) return;
+                    const allowed = ["image/jpeg", "image/png", "image/webp"];
+                    if (!allowed.includes(file.type)) { setError("Choose a JPG, PNG, or WebP image."); return; }
+                    if (file.size > 5 * 1024 * 1024) { setError("Product images must be 5 MB or smaller."); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      if (typeof reader.result !== "string") { setError("Unable to read this image."); return; }
+                      setError("");
+                      setForm((current) => ({ ...current, image_url: reader.result as string, images: Array.from(new Set([reader.result as string, ...current.images])) }));
+                    };
+                    reader.onerror = () => setError("Unable to read this image.");
+                    reader.readAsDataURL(file);
+                  }} />
+                </label>
+                <Field label="Primary image URL or uploaded image">
                   <input
                     value={form.image_url}
                     onChange={(event) =>

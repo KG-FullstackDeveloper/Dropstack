@@ -124,3 +124,63 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+export interface OrderEmailDetails {
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  currency: string;
+  items?: Array<{ product_name: string; quantity: number; total: number }>;
+  trackingNumber?: string | null;
+  shippingAddress?: string;
+}
+
+async function sendBestEffortEmail(message: { to: string; subject: string; text: string; html?: string }): Promise<void> {
+  try {
+    if (!EMAIL_FROM) throw new Error("EMAIL_FROM is not configured.");
+    const transporter = getTransporter();
+    await transporter.sendMail({ from: EMAIL_FROM, ...message });
+  } catch (error) {
+    // Email is deliberately best-effort: mail failures must never roll back an order update.
+    console.error("Email delivery failed.", error instanceof Error ? error.message : "Unknown email error");
+  }
+}
+
+export async function sendOrderConfirmationEmail(order: OrderEmailDetails): Promise<void> {
+  const lines = (order.items ?? []).map((item) => `• ${item.product_name} × ${item.quantity}: ${order.currency} ${item.total.toFixed(2)}`);
+  await sendBestEffortEmail({
+    to: order.customerEmail,
+    subject: `We received your order ${order.orderId}`,
+    text: [`Hello ${order.customerName},`, "", `We received order ${order.orderId}. Its current status is pending payment confirmation.`, ...lines, "", `Order total: ${order.currency} ${order.total.toFixed(2)}`, "We will send another email when shipping and tracking details are available."].join("\n"),
+  });
+}
+
+export async function sendNewOrderNotificationEmail(order: OrderEmailDetails): Promise<void> {
+  const recipient = process.env.STORE_OWNER_EMAIL?.trim() || SMTP_USER;
+  if (!recipient) {
+    console.error("New-order notification skipped: STORE_OWNER_EMAIL is not configured.");
+    return;
+  }
+  await sendBestEffortEmail({
+    to: recipient,
+    subject: `New store order ${order.orderId}`,
+    text: [`New order received: ${order.orderId}`, `Customer: ${order.customerName} (${order.customerEmail})`, `Total: ${order.currency} ${order.total.toFixed(2)}`, `Shipping address: ${order.shippingAddress || "Not provided"}`, "Payment status: pending"].join("\n"),
+  });
+}
+
+export async function sendShippingUpdateEmail(order: OrderEmailDetails): Promise<void> {
+  await sendBestEffortEmail({
+    to: order.customerEmail,
+    subject: `Shipping update for order ${order.orderId}`,
+    text: [`Hello ${order.customerName},`, "", `Your order ${order.orderId} has been marked as shipped.`, `Tracking number: ${order.trackingNumber || "Pending"}`, "Please use the tracking number with the carrier when tracking becomes available."].join("\n"),
+  });
+}
+
+export async function sendNewLoginAlertEmail(options: { recipientEmail: string; recipientName?: string | null }): Promise<void> {
+  const name = options.recipientName?.trim() || "Store Owner";
+  await sendBestEffortEmail({
+    to: options.recipientEmail,
+    subject: "New login to your MEO Store admin account",
+    text: [`Hello ${name},`, "", "A successful login to your MEO Store admin account was just recorded.", "If this was you, no action is needed.", "If you do not recognize this login, change your password and review your account security immediately."].join("\n"),
+  });
+}

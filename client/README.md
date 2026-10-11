@@ -69,3 +69,8 @@ export default defineConfig([
   },
 ])
 
+
+
+## Before deployment
+
+Replace `YOUR-PRODUCTION-DOMAIN` in `public/robots.txt` and `public/sitemap.xml`, and replace the Open Graph URL in `index.html` with the real canonical storefront URL. Trust-page text is starter copy and must be reviewed before launch.

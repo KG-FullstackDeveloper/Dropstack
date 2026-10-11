@@ -17,3 +17,8 @@ dist-ssr/
 !.vscode/extensions.json
 .idea/
 .DS_Store
+server/backups/
+server/.env
+server/dropstack.db
+server/dropstack.db-wal
+server/dropstack.db-shm

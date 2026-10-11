@@ -15,7 +15,6 @@ import {
   changePassword,
   getMe,
   updateProfile,
-  type AdminUser,
 } from "../services/adminApi";
 
 export default function Profile() {
@@ -26,7 +25,6 @@ export default function Profile() {
   const otherPath = nigeria ? "/admin/profile" : "/nigeria-admin/profile";
   const workspaceLabel = nigeria ? "Nigeria Ecommerce" : "Global Ecommerce";
 
-  const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -51,7 +49,6 @@ export default function Profile() {
       .then((result) => {
         if (!active) return;
 
-        setAdmin(result);
         setName(result.name || "Store Owner");
         setPhone(result.phone || "");
         setEmail(result.email || "");
@@ -102,7 +99,6 @@ export default function Profile() {
         phone.trim() || null
       );
 
-      setAdmin(result);
       setName(result.name);
       setPhone(result.phone || "");
       setEmail(result.email);
@@ -322,9 +318,7 @@ export default function Profile() {
                     icon={ShieldCheck}
                     label="2FA"
                     value={
-                      admin?.twoFactorEnabled
-                        ? "Infrastructure enabled"
-                        : "Not enabled"
+                      "Unavailable — not enforced"
                     }
                   />
                 </div>

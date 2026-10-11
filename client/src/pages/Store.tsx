@@ -23,7 +23,8 @@ import {
   type FormEvent,
   type TouchEvent,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import Checkout from "./Checkout";
 import OrderSuccess from "./OrderSuccess";
@@ -34,10 +35,7 @@ import type { CartItem } from "../types/cart";
 import type { StoreConfig } from "../types/store";
 
 import { DEFAULT_STORE_CONFIG } from "../types/themes/registry";
-import {
-  getPublicStore,
-  getStoreProducts,
-} from "../services/api";
+import { getPublicStore, getStoreProducts } from "../services/api";
 import { detectMarket } from "../services/market";
 import {
   addToCart,
@@ -58,14 +56,6 @@ type Page =
   | "cart"
   | "checkout"
   | "order-success";
-
-type DemoProduct = Product & {
-  storeId?: string;
-  image_url?: string;
-  mobile_image_url?: string;
-  inventory?: number;
-  active?: number;
-};
 
 const CONCERNS = [
   {
@@ -101,61 +91,48 @@ const INGREDIENTS = [
   ["Vitamin C", "Brighten"],
 ];
 
-function getImage(product?: Product, _fallbackIndex = 0) {
-  if (!product) return "";
-
-  const candidate = product as DemoProduct & {
-    images?: string[];
-    image_urls?: string[];
-  };
-
-  return (
-    candidate.image_url ||
-    candidate.images?.find(Boolean) ||
-    candidate.image_urls?.find(Boolean) ||
-    ""
-  );
+function getImage(product: Product, _fallbackIndex = 0) {
+  return product.image_url || product.images?.[0] || "";
 }
-function getImages(product: Product) {
-  const candidate = product as DemoProduct & {
-    images?: string[];
-    image_urls?: string[];
-  };
 
-  return Array.from(
-    new Set([
-      ...(candidate.images ?? []),
-      ...(candidate.image_urls ?? []),
-      candidate.image_url ?? "",
-    ].filter(Boolean)),
-  );
+function getImages(product: Product) {
+  return Array.from(new Set([...(product.images ?? []), product.image_url ?? ""].filter(Boolean)));
 }
 
 function getDelivery(product: Product) {
-  const value = (product as DemoProduct & { delivery_time?: string })
-    .delivery_time;
-  return typeof value === "string" && value.trim() ? value : "3–5 days";
+  return product.delivery_time?.trim() || "Delivery estimate provided at checkout";
 }
 
 function getStock(product: Product) {
-  const value = (product as DemoProduct).inventory;
-  return typeof value === "number" ? value : 12;
+  return typeof product.stock === "number" ? product.stock : 0;
 }
 
-function storeBrand(store: StoreConfig) {
-  return store.name || "Store";
+function storeBrand(store: StoreConfig, slug?: string) {
+  if ((slug ?? "").toLowerCase() === "skincare-store") {
+    return "Luma Skin";
+  }
+
+  return store.name || "Luma Skin";
 }
 
-function storeTagline(store: StoreConfig) {
-  return store.description || "Welcome to our store.";
+function storeTagline(store: StoreConfig, slug?: string) {
+  if ((slug ?? "").toLowerCase() === "skincare-store") {
+    return "Skincare for skin, not trends.";
+  }
+
+  return store.description || "Considered skincare for everyday skin.";
 }
+
 export default function Store() {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
+  const reduceMotion = useReducedMotion();
 
   const [store, setStore] = useState<StoreConfig>(DEFAULT_STORE_CONFIG);
   const [products, setProducts] = useState<Product[]>([]);
   const [market, setMarket] = useState<MarketInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [storeLoadError, setStoreLoadError] = useState("");
   const [page, setPage] = useState<Page>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -182,58 +159,78 @@ export default function Store() {
   } | null>(null);
 
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  async function loadStore() {
-    try {
-      if (!slug) {
-        throw new Error("A store URL slug is required.");
-      }
+    async function loadStore() {
+      setLoading(true);
+      setStoreLoadError("");
+      setSelectedProduct(null);
 
-      const [storeData, productData, marketData] =
-        await Promise.all([
+      try {
+        if (!slug?.trim()) {
+          throw new Error("A store slug is required to open this storefront.");
+        }
+
+        const [publicStore, storeProducts, marketData] = await Promise.all([
           getPublicStore(slug),
           getStoreProducts(slug),
           detectMarket(),
         ]);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setStore({
-        ...DEFAULT_STORE_CONFIG,
-        name: storeData.name,
-        description: storeData.description || "",
-      });
+        // Keep the existing storefront theme defaults while applying the
+        // identity returned for this specific store. Product data is never
+        // loaded from the global /api/products endpoint here.
+        setStore({
+          ...DEFAULT_STORE_CONFIG,
+          name: publicStore.name || DEFAULT_STORE_CONFIG.name,
+          description:
+            publicStore.description || DEFAULT_STORE_CONFIG.description,
+          logo_url: publicStore.logo_url || DEFAULT_STORE_CONFIG.logo_url,
+        });
+        setProducts(Array.isArray(storeProducts) ? storeProducts : []);
+        setMarket(marketData);
+        setStoreLoadError("");
+      } catch (error) {
+        console.error("Unable to load storefront:", error);
 
-      setProducts(productData || []);
-      setMarket(marketData);
-    } catch (error) {
-      console.error("Unable to load storefront:", error);
-
-      if (mounted) {
-        setProducts([]);
-        setLoading(false);
-
-        try {
-          setMarket(await detectMarket());
-        } catch {
-          setMarket(null);
+        if (mounted) {
+          setStoreLoadError(
+            error instanceof Error
+              ? error.message
+              : "We could not load this storefront. Please try again shortly.",
+          );
+          // Do not fall back to global products if a store lookup fails.
+          setStore(DEFAULT_STORE_CONFIG);
+          setProducts([]);
+          try {
+            setMarket(await detectMarket());
+          } catch {
+            setMarket(null);
+          }
+        }
+      } finally {
+        if (mounted) {
+          setCart(getCart());
+          setLoading(false);
         }
       }
-    } finally {
-      if (mounted) {
-        setCart(getCart());
-        setLoading(false);
-      }
     }
-  }
 
-  void loadStore();
+    void loadStore();
 
-  return () => {
-    mounted = false;
-  };
-}, [slug]);
+    return () => {
+      mounted = false;
+    };
+  }, [slug]);
+
+  useEffect(() => {
+    if ((location.state as { openCart?: boolean } | null)?.openCart) {
+      setCart(getCart());
+      setCartOpen(true);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const syncCart = () => setCart(getCart());
@@ -244,17 +241,14 @@ export default function Store() {
     };
   }, []);
 
-  const brandName = storeBrand(store);
-  const tagline = storeTagline(store);
+  const brandName = storeBrand(store, slug);
+  const tagline = storeTagline(store, slug);
   const activeCurrency = market?.currency || "USD";
   const activeCountry = market?.countryCode || "US";
 
   const displayProducts = useMemo<Product[]>(() => {
-  return products.filter((product) => {
-    const candidate = product as DemoProduct;
-    return candidate.active === undefined || Boolean(candidate.active);
-  });
-}, [products]);
+    return products.filter((product) => Number(product.active) === 1);
+  }, [products]);
 
   const cartSummary = useMemo(
     () => getCartSummary(cart, activeCountry, activeCurrency),
@@ -363,8 +357,16 @@ export default function Store() {
             className="flex min-h-11 items-center gap-3"
             aria-label="Go to home"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1d1d19] text-white">
-              <Sparkles size={17} />
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#1d1d19] text-white ring-1 ring-black/5">
+              {store.logo_url ? (
+                <img
+                  src={store.logo_url}
+                  alt={`${brandName} logo`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Sparkles size={17} />
+              )}
             </span>
             <span className="font-serif text-[25px] tracking-[-0.05em]">
               {brandName}
@@ -425,6 +427,16 @@ export default function Store() {
         </div>
       </header>
 
+      {storeLoadError && (
+        <div
+          role="alert"
+          className="border-b border-rose-200 bg-rose-50 px-5 py-4 text-center text-sm text-rose-900"
+        >
+          <p className="font-semibold">This storefront is temporarily unavailable.</p>
+          <p className="mt-1 text-rose-800/80">{storeLoadError}</p>
+        </div>
+      )}
+
       {mobileMenu && (
         <MobileMenu
           brandName={brandName}
@@ -433,11 +445,9 @@ export default function Store() {
         />
       )}
 
-      {toast && (
-        <div className="fixed right-4 top-24 z-[90] rounded-full bg-[#1d1d19] px-5 py-3 text-sm font-semibold text-white shadow-2xl">
-          {toast}
-        </div>
-      )}
+      <AnimatePresence>
+        {toast && <motion.div initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0 }} role="status" className="fixed right-4 top-24 z-[90] rounded-full bg-[#1d1d19] px-5 py-3 text-sm font-semibold text-white shadow-2xl">{toast}</motion.div>}
+      </AnimatePresence>
 
       {page === "home" && (
         <HomePage
@@ -707,8 +717,11 @@ function HomePage({
 
           <div className="order-1 relative min-h-[430px] overflow-hidden sm:min-h-[520px] min-[1025px]:order-2 min-[1025px]:min-h-full">
             <img
-              src={getImage(products[1] ?? products[0])}
-              alt="Luma Skin skincare products"
+              src={
+                getImage(products[1] ?? products[0]) ||
+                "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=1600&q=85"
+              }
+              alt={`${tagline} — featured products`}
               fetchPriority="high"
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -811,19 +824,30 @@ function HomePage({
                     <div className="aspect-[0.92] animate-pulse rounded-[2rem] bg-black/5" />
                   </div>
                 ))
-              : products.slice(0, 3).map((product, index) => (
-                  <div
-                    key={product.id}
-                    className="min-w-[80%] snap-start min-[641px]:min-w-0"
-                  >
-                    <ProductCard
-                      product={product}
-                      index={index}
-                      onProduct={onProduct}
-                      onAdd={onAdd}
-                    />
+              : products.length > 0 ? (
+                  products.slice(0, 3).map((product, index) => (
+                    <div
+                      key={product.id}
+                      className="min-w-[80%] snap-start min-[641px]:min-w-0"
+                    >
+                      <ProductCard
+                        product={product}
+                        index={index}
+                        onProduct={onProduct}
+                        onAdd={onAdd}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full rounded-[2rem] border border-black/10 bg-white/70 px-6 py-12 text-center">
+                    <p className="font-serif text-2xl">Your collection is taking shape.</p>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-black/50">
+                      {storeLoadError
+                        ? "Products will appear here when this storefront is available again."
+                        : "There are no published products in this store yet. Please check back soon."}
+                    </p>
                   </div>
-                ))}
+                )}
           </div>
         </div>
       </section>
@@ -1739,10 +1763,10 @@ function CartPanel({
   onCheckout: () => void;
   onContinue: () => void;
 }) {
-  if (!open) return null;
-
+  const reduceMotion = useReducedMotion();
   return (
-    <div className="fixed inset-0 z-[120] bg-black/35">
+    <AnimatePresence>
+    {open && <motion.div initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/35">
       <button
         type="button"
         onClick={onClose}
@@ -1750,7 +1774,7 @@ function CartPanel({
         aria-label="Close cart"
       />
 
-      <aside className="absolute bottom-0 right-0 flex h-[92vh] w-full flex-col rounded-t-[2rem] bg-[#f8f6f1] shadow-2xl min-[641px]:bottom-auto min-[641px]:top-0 min-[641px]:h-full min-[641px]:w-[430px] min-[641px]:rounded-none min-[641px]:rounded-l-[2rem]">
+      <motion.aside initial={reduceMotion ? { x: 0 } : { x: 440 }} animate={{ x: 0 }} exit={reduceMotion ? { x: 0 } : { x: 440 }} transition={{ type: "spring", stiffness: 320, damping: 32 }} className="absolute bottom-0 right-0 flex h-[92vh] w-full flex-col rounded-t-[2rem] bg-[#f8f6f1] shadow-2xl min-[641px]:bottom-auto min-[641px]:top-0 min-[641px]:h-full min-[641px]:w-[430px] min-[641px]:rounded-none min-[641px]:rounded-l-[2rem]">
         <div className="flex items-center justify-between border-b border-black/10 px-5 py-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/35">
@@ -1887,8 +1911,9 @@ function CartPanel({
             </button>
           </div>
         )}
-      </aside>
-    </div>
+      </motion.aside>
+    </motion.div>}
+    </AnimatePresence>
   );
 }
 

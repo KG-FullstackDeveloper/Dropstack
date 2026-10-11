@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 
-import { getProductById, insertOrder } from "../data/store";
+import {
+  getProductById,
+  insertOrder,
+} from "../data/store";
 import { createId } from "../utils/id";
+import { sendNewOrderNotificationEmail, sendOrderConfirmationEmail } from "../services/emailService";
+import { getShippingInfo } from "../services/shippingService";
 
 import type {
   CreateOrderInput,
@@ -11,310 +16,107 @@ import type {
 
 const checkout = new Hono();
 
-type ShippingMarket =
-  | "AFRICA"
-  | "UK"
-  | "EUROPE"
-  | "USA"
-  | "CANADA"
-  | "OTHER";
-
-const AFRICA = new Set([
-  "NG", "GH", "ZA", "KE", "UG", "TZ",
-  "RW", "ZM", "ZW", "SN", "CI", "CM",
-]);
-
-const EUROPE = new Set([
-  "DE", "FR", "ES", "IT", "NL", "BE", "AT",
-  "PT", "IE", "SE", "NO", "DK", "FI", "PL",
-  "CZ", "CH", "GR",
-]);
-
-const USD_TO_CURRENCY: Record<string, number> = {
-  USD: 1,
-  NGN: 1600,
-  GHS: 15.5,
-  ZAR: 17.5,
-  KES: 129,
-  UGX: 3500,
-  TZS: 2650,
-  GBP: 0.75,
-  EUR: 0.86,
-  CAD: 1.38,
-};
-
-function getShippingMarket(country: string): ShippingMarket {
-  if (AFRICA.has(country)) return "AFRICA";
-  if (country === "GB") return "UK";
-  if (EUROPE.has(country)) return "EUROPE";
-  if (country === "US") return "USA";
-  if (country === "CA") return "CANADA";
-  return "OTHER";
-}
-
-function getDefaultCurrency(country: string): string {
-  const countryCurrencies: Record<string, string> = {
-    NG: "NGN",
-    GH: "GHS",
-    ZA: "ZAR",
-    KE: "KES",
-    UG: "UGX",
-    TZ: "TZS",
-    GB: "GBP",
-    US: "USD",
-    CA: "CAD",
-  };
-
-  if (countryCurrencies[country]) {
-    return countryCurrencies[country];
-  }
-
-  // Countries using the euro.
-  if (
-    [
-      "DE", "FR", "ES", "IT", "NL", "BE", "AT",
-      "PT", "IE", "FI", "GR",
-    ].includes(country)
-  ) {
-    return "EUR";
-  }
-
-  // The existing shipping conversion table does not contain
-  // exchange rates for every worldwide currency.
-  return "USD";
-}
-
-function getShippingBaseAmount(market: ShippingMarket): number {
-  const fees: Record<ShippingMarket, number> = {
-    AFRICA: 15,
-    UK: 10,
-    EUROPE: 15,
-    USA: 20,
-    CANADA: 20,
-    OTHER: 20,
-  };
-
-  return fees[market];
-}
-
-function calculateServerShippingFee(
-  country: string,
-  currency: string,
-): number | null {
-  const expectedCurrency = getDefaultCurrency(country);
-
-  // Prevent the customer from selecting a cheaper currency
-  // to manipulate the server-calculated shipping fee.
-  if (currency !== expectedCurrency) {
-    return null;
-  }
-
-  const conversionRate = USD_TO_CURRENCY[currency];
-
-  if (
-    typeof conversionRate !== "number" ||
-    !Number.isFinite(conversionRate) ||
-    conversionRate <= 0
-  ) {
-    return null;
-  }
-
-  const amount =
-    getShippingBaseAmount(getShippingMarket(country)) *
-    conversionRate;
-
-  return Number.isFinite(amount)
-    ? Math.round(amount * 100) / 100
-    : null;
-}
-
 checkout.post("/", async (c) => {
-  let body: CreateOrderInput;
-
   try {
-    body = await c.req.json<CreateOrderInput>();
-  } catch {
-    return c.json(
-      { success: false, error: "Invalid checkout request body." },
-      400,
-    );
-  }
+    const body = await c.req.json<CreateOrderInput>();
 
-  try {
-    if (!body || typeof body !== "object") {
+    if (!body.customer_name?.trim()) {
       return c.json(
-        { success: false, error: "Invalid checkout request." },
+        {
+          success: false,
+          error: "Customer name is required.",
+        },
         400,
       );
     }
 
-    const customerName =
-      typeof body.customer_name === "string"
-        ? body.customer_name.trim()
-        : "";
-
-    const customerEmail =
-      typeof body.customer_email === "string"
-        ? body.customer_email.trim()
-        : "";
-
-    const shippingAddress =
-      typeof body.shipping_address === "string"
-        ? body.shipping_address.trim()
-        : "";
-
-    const country =
-      typeof body.country === "string"
-        ? body.country.trim().toUpperCase()
-        : "";
-
-    const currency =
-      typeof body.currency === "string"
-        ? body.currency.trim().toUpperCase()
-        : "";
-
-    if (!customerName) {
+    if (!body.customer_email?.trim()) {
       return c.json(
-        { success: false, error: "Customer name is required." },
+        {
+          success: false,
+          error: "Customer email is required.",
+        },
+        400,
+      );
+    }
+
+    if (!body.shipping_address?.trim()) {
+      return c.json(
+        {
+          success: false,
+          error: "Shipping address is required.",
+        },
+        400,
+      );
+    }
+
+    if (!body.country?.trim()) {
+      return c.json(
+        {
+          success: false,
+          error: "Country is required.",
+        },
+        400,
+      );
+    }
+
+    if (!body.currency?.trim()) {
+      return c.json(
+        {
+          success: false,
+          error: "Currency is required.",
+        },
         400,
       );
     }
 
     if (
-      !customerEmail ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)
+      typeof body.subtotal !== "number" ||
+      !Number.isFinite(body.subtotal) ||
+      body.subtotal < 0
     ) {
       return c.json(
-        { success: false, error: "A valid customer email is required." },
+        {
+          success: false,
+          error: "Invalid subtotal.",
+        },
         400,
       );
     }
 
-    if (!shippingAddress) {
-      return c.json(
-        { success: false, error: "Shipping address is required." },
-        400,
-      );
-    }
-
-    if (!/^[A-Z]{2}$/.test(country)) {
-      return c.json(
-        { success: false, error: "A valid country code is required." },
-        400,
-      );
-    }
-
-    if (!/^[A-Z]{3}$/.test(currency)) {
-      return c.json(
-        { success: false, error: "A valid currency code is required." },
-        400,
-      );
-    }
-
-    if (!Array.isArray(body.items) || body.items.length === 0) {
-      return c.json(
-        { success: false, error: "Your cart is empty." },
-        400,
-      );
-    }
-
+    const inputItems = body.items ?? [];
     const orderItems: OrderItem[] = [];
-    const seenProductIds = new Set<string>();
     let calculatedSubtotal = 0;
 
-    for (const inputItem of body.items) {
+    for (const inputItem of inputItems) {
       if (
-        !inputItem ||
-        typeof inputItem.product_id !== "string" ||
-        !inputItem.product_id.trim() ||
-        !Number.isSafeInteger(inputItem.quantity) ||
+        !inputItem.product_id ||
+        !Number.isFinite(inputItem.quantity) ||
         inputItem.quantity <= 0
       ) {
-        return c.json(
-          {
-            success: false,
-            error: "The cart contains an invalid product or quantity.",
-          },
-          400,
-        );
+        return c.json({ success: false, error: "The cart contains an invalid product quantity." }, 400);
       }
 
-      const productId = inputItem.product_id.trim();
-
-      if (seenProductIds.has(productId)) {
-        return c.json(
-          {
-            success: false,
-            error: "The cart contains duplicate products. Please refresh your cart.",
-          },
-          400,
-        );
-      }
-
-      seenProductIds.add(productId);
-
-      const product = getProductById(productId);
+      const product = getProductById(inputItem.product_id);
 
       if (!product || product.active !== 1) {
-        return c.json(
-          {
-            success: false,
-            error: "A product is unavailable. Please refresh your cart.",
-          },
-          400,
-        );
+        return c.json({ success: false, error: "A product in your cart is no longer available." }, 400);
       }
 
-      const quantity = inputItem.quantity;
-      const sellingPrice = Number(product.price);
-      const supplierCost = Number(product.supplier_cost ?? 0);
-      const productShippingCost = Number(product.shipping_cost ?? 0);
-      const otherCost = Number(product.other_cost ?? 0);
+      const quantity = Math.floor(inputItem.quantity);
 
-      if (
-        !Number.isFinite(sellingPrice) ||
-        sellingPrice < 0 ||
-        !Number.isFinite(supplierCost) ||
-        supplierCost < 0 ||
-        !Number.isFinite(productShippingCost) ||
-        productShippingCost < 0 ||
-        !Number.isFinite(otherCost) ||
-        otherCost < 0
-      ) {
-        console.error("Invalid product pricing:", productId);
-
-        return c.json(
-          {
-            success: false,
-            error: "A product has invalid pricing. Please contact support.",
-          },
-          500,
-        );
+      if (quantity <= 0) {
+        continue;
       }
 
-      const lineTotal =
-        Math.round(sellingPrice * quantity * 100) / 100;
-
+      const sellingPrice = Number(product.price) || 0;
+      const supplierCost = Number(product.supplier_cost) || 0;
+      const shippingCost = Number(product.shipping_cost) || 0;
+      const otherCost = Number(product.other_cost) || 0;
+      const total = sellingPrice * quantity;
       const totalCost =
-        Math.round(
-          (supplierCost + productShippingCost + otherCost) *
-            quantity *
-            100,
-        ) / 100;
-
-      const profit =
-        Math.round((lineTotal - totalCost) * 100) / 100;
-
-      if (
-        !Number.isFinite(lineTotal) ||
-        !Number.isFinite(totalCost) ||
-        !Number.isFinite(profit)
-      ) {
-        return c.json(
-          { success: false, error: "Unable to calculate the order total." },
-          400,
-        );
-      }
+        (supplierCost + shippingCost + otherCost) * quantity;
+      const profit = total - totalCost;
 
       orderItems.push({
         id: createId("item"),
@@ -324,43 +126,35 @@ checkout.post("/", async (c) => {
         quantity,
         selling_price: sellingPrice,
         supplier_cost: supplierCost,
-        shipping_cost: productShippingCost,
+        shipping_cost: shippingCost,
         other_cost: otherCost,
-        total: lineTotal,
+        total,
         profit,
       });
 
-      calculatedSubtotal += lineTotal;
+      calculatedSubtotal += total;
     }
 
-    const subtotal =
-      Math.round(calculatedSubtotal * 100) / 100;
-
-    if (!Number.isFinite(subtotal) || subtotal < 0) {
-      return c.json(
-        { success: false, error: "Invalid calculated subtotal." },
-        400,
-      );
+    if (inputItems.length === 0) {
+      return c.json({ success: false, error: "Your cart is empty." }, 400);
     }
 
-    // Both values come from server-side calculations.
-    // body.subtotal and body.shipping_fee are never trusted.
-    const shippingFee = calculateServerShippingFee(country, currency);
-
-    if (shippingFee === null) {
+    if (orderItems.length === 0) {
       return c.json(
         {
           success: false,
-          error:
-            "The selected country or currency is not supported by the current shipping configuration.",
+          error: "No valid products were found in the order.",
         },
         400,
       );
     }
 
-    const total =
-      Math.round((subtotal + shippingFee) * 100) / 100;
+    const subtotal = calculatedSubtotal;
 
+    // Shipping fees are determined on the server; never trust a fee supplied by the browser.
+    const shippingFee = getShippingInfo(body.country.trim().toUpperCase()).fee;
+
+    const total = subtotal + shippingFee;
     const now = new Date().toISOString();
     const orderId = createId("order");
 
@@ -370,27 +164,15 @@ checkout.post("/", async (c) => {
 
     const order: Order = {
       id: orderId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone:
-        typeof body.customer_phone === "string"
-          ? body.customer_phone.trim() || null
-          : null,
-      shipping_address: shippingAddress,
-      city:
-        typeof body.city === "string"
-          ? body.city.trim() || null
-          : null,
-      state:
-        typeof body.state === "string"
-          ? body.state.trim() || null
-          : null,
-      postal_code:
-        typeof body.postal_code === "string"
-          ? body.postal_code.trim() || null
-          : null,
-      country,
-      currency,
+      customer_name: body.customer_name.trim(),
+      customer_email: body.customer_email.trim(),
+      customer_phone: body.customer_phone?.trim() || null,
+      shipping_address: body.shipping_address.trim(),
+      city: body.city?.trim() || null,
+      state: body.state?.trim() || null,
+      postal_code: body.postal_code?.trim() || null,
+      country: body.country.trim().toUpperCase(),
+      currency: body.currency.trim().toUpperCase(),
       subtotal,
       shipping_fee: shippingFee,
       total,
@@ -400,11 +182,7 @@ checkout.post("/", async (c) => {
       fulfillment_mode: "international_dropship",
       payment_method: "online",
       flutterwave_transaction_id: null,
-
-      // Payment references must be generated/verified by the
-      // server-side payment integration, not supplied by the browser.
-      flutterwave_reference: null,
-
+      flutterwave_reference: body.flutterwave_reference?.trim() || null,
       supplier_name: null,
       supplier_order_reference: null,
       tracking_number: null,
@@ -414,6 +192,17 @@ checkout.post("/", async (c) => {
     };
 
     insertOrder(order);
+
+    const emailDetails = {
+      orderId: order.id,
+      customerName: order.customer_name,
+      customerEmail: order.customer_email,
+      total: order.total,
+      currency: order.currency,
+      items: order.items.map((item) => ({ product_name: item.product_name, quantity: item.quantity, total: item.total })),
+      shippingAddress: [order.shipping_address, order.city, order.state, order.country].filter(Boolean).join(", "),
+    };
+    await Promise.all([sendOrderConfirmationEmail(emailDetails), sendNewOrderNotificationEmail(emailDetails)]);
 
     return c.json(
       {

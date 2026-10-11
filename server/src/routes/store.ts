@@ -1,474 +1,453 @@
-
 import { Hono } from "hono";
 import { db } from "../database/db";
 import { authMiddleware } from "../middleware/auth";
+import { createId } from "../utils/id";
 
 const stores = new Hono();
 
-type StoreStatus = "Active" | "Draft";
-
-interface StoreRow {
+type StoreStatus = "Active" | "Draft" | "Archived";
+type StoreRow = {
   id: string;
   name: string;
   slug: string;
   niche: string;
+  domain: string | null;
   status: StoreStatus;
-  description: string | null;
-  logo_url: string | null;
   created_at: string;
   updated_at: string;
+};
+
+const validStatuses = new Set<StoreStatus>(["Active", "Draft", "Archived"]);
+
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-interface ProductRow extends Record<string, unknown> {
-  id: string;
-  store_id?: string | null;
-  active?: number | boolean;
-  price?: number | string | null;
-  stock?: number | string | null;
-  images?: string | string[] | null;
-  variants?: string | unknown[] | null;
-}
-
-function makeSlug(value: string): string {
+function slugify(value: string): string {
   return value
-    .trim()
     .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
-function createId(): string {
-  return crypto.randomUUID();
+function normalizeStatus(
+  value: unknown,
+  fallback: StoreStatus = "Draft",
+): StoreStatus | null {
+  if (value === undefined || value === null || value === "") return fallback;
+  switch (String(value).trim().toLowerCase()) {
+    case "active": return "Active";
+    case "draft": return "Draft";
+    case "archived": return "Archived";
+    default: return null;
+  }
 }
 
-function now(): string {
-  return new Date().toISOString();
-}
-
-function getStore(id: string): StoreRow | undefined {
-  return db
-    .prepare("SELECT * FROM stores WHERE id = ?")
-    .get(id) as StoreRow | undefined;
-}
-
-function getStoreBySlug(slug: string): StoreRow | undefined {
-  return db
-    .prepare("SELECT * FROM stores WHERE slug = ?")
-    .get(slug) as StoreRow | undefined;
-}
-
-function getStoreResponse(store: StoreRow) {
+function toStore(row: StoreRow) {
   return {
-    id: store.id,
-    name: store.name,
-    slug: store.slug,
-    niche: store.niche,
-    status: store.status,
-    description: store.description,
-    logo_url: store.logo_url,
-    created_at: store.created_at,
-    updated_at: store.updated_at,
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    niche: row.niche,
+    domain: row.domain || `${row.slug}.localhost`,
+    status: row.status.toLowerCase() as "active" | "draft" | "archived",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-function parseJson(value: unknown, fallback: unknown): unknown {
-  if (typeof value !== "string" || !value.trim()) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
+function columns(table: string): Set<string> {
+  return new Set(
+    (
+      db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{
+        name: string;
+      }>
+    ).map((row) => row.name),
+  );
 }
 
-function parseStoreStatus(value: unknown): StoreStatus | null {
-  if (value === "Active" || value === "Draft") {
-    return value;
-  }
-
-  return null;
+function storeById(id: string): StoreRow | undefined {
+  return db.prepare(`
+    SELECT id, name, slug, niche, domain, status, created_at, updated_at
+    FROM stores WHERE id = ?
+  `).get(id) as StoreRow | undefined;
 }
 
 /**
- * ADMIN: LIST STORES
- * GET /api/store
+ * Keep product assignment in its own join table so the existing products
+ * table and product records are not modified.
  */
-stores.get("/", authMiddleware, (c) => {
-  const rows = db
-    .prepare("SELECT * FROM stores ORDER BY created_at DESC")
-    .all() as StoreRow[];
+function ensureStoreProductsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS store_registry_metadata (
+      store_id TEXT PRIMARY KEY,
+      archived INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS store_products (
+      store_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (store_id, product_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_store_products_store_id
+      ON store_products(store_id);
+    CREATE INDEX IF NOT EXISTS idx_store_products_product_id
+      ON store_products(product_id);
+  `);
+}
 
-  const result = rows.map((store) => {
-    const productCount = db
-      .prepare("SELECT COUNT(*) AS count FROM products WHERE store_id = ?")
-      .get(store.id) as { count: number };
+ensureStoreProductsTable();
 
-    return {
-      ...getStoreResponse(store),
-      products: productCount.count,
-    };
-  });
+function productIdsFromBody(value: unknown): string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  if (!value.every((id) => typeof id === "string" && id.trim())) return null;
+  return [...new Set(value.map((id) => String(id).trim()))];
+}
 
-  return c.json({
-    success: true,
-    data: result,
-  });
-});
+function saveStoreProducts(storeId: string, productIds: string[], now: string) {
+  const productColumns = columns("products");
+  if (!productColumns.has("id")) {
+    throw new Error("The products table does not contain an id column.");
+  }
 
-/**
- * ADMIN: CREATE STORE
- * POST /api/store
- */
-stores.post("/", authMiddleware, async (c) => {
-  let body: Record<string, unknown>;
+  const findProduct = db.prepare("SELECT id FROM products WHERE id = ?");
+  const insertAssignment = db.prepare(`
+    INSERT OR IGNORE INTO store_products (store_id, product_id, created_at)
+    VALUES (?, ?, ?)
+  `);
 
+  for (const productId of productIds) {
+    if (!findProduct.get(productId)) {
+      throw new Error(`Product not found: ${productId}`);
+    }
+  }
+
+  db.prepare("DELETE FROM store_products WHERE store_id = ?").run(storeId);
+  for (const productId of productIds) {
+    insertAssignment.run(storeId, productId, now);
+  }
+}
+
+function getAssignedProducts(storeId: string) {
+  const productColumns = columns("products");
+  const selected = [
+    "id",
+    "name",
+    "slug",
+    "description",
+    "category",
+    "price",
+    "currency",
+    "image_url",
+    "images",
+    "sku",
+    "stock",
+    "active",
+  ].filter((column) => productColumns.has(column));
+
+  if (!selected.includes("id")) return [];
+
+  return db.prepare(`
+    SELECT ${selected.map((column) => `p."${column}"`).join(", ")}
+    FROM products p
+    INNER JOIN store_products sp ON sp.product_id = p.id
+    WHERE sp.store_id = ?
+    ORDER BY sp.created_at ASC
+  `).all(storeId);
+}
+
+function isArchived(id: string): boolean {
+  const row = db.prepare(
+    "SELECT archived FROM store_registry_metadata WHERE store_id = ?",
+  ).get(id) as { archived: number } | undefined;
+  return row?.archived === 1;
+}
+
+function setArchived(id: string, archived: boolean, now: string) {
+  db.prepare(`
+    INSERT INTO store_registry_metadata (store_id, archived, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(store_id) DO UPDATE SET
+      archived = excluded.archived,
+      updated_at = excluded.updated_at
+  `).run(id, archived ? 1 : 0, now);
+}
+
+function list(c: any) {
   try {
-    body = await c.req.json<Record<string, unknown>>();
-  } catch {
-    return c.json(
-      { success: false, error: "A valid JSON request body is required." },
-      400,
-    );
+    const rows = db.prepare(`
+      SELECT id, name, slug, niche, domain, status, created_at, updated_at
+      FROM stores
+      ORDER BY datetime(created_at) DESC, name COLLATE NOCASE ASC
+    `).all() as StoreRow[];
+
+    return c.json({ success: true, data: rows.filter((row) => !isArchived(row.id)).map(toStore) });
+  } catch (error) {
+    console.error("List stores error:", error);
+    return c.json({ success: false, error: "Unable to load stores." }, 500);
   }
+}
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  const niche =
-    typeof body.niche === "string" && body.niche.trim()
-      ? body.niche.trim()
-      : "Other";
-  const description =
-    typeof body.description === "string" ? body.description.trim() : null;
-  const logoUrl =
-    typeof body.logo_url === "string" ? body.logo_url.trim() : null;
+stores.use("*", authMiddleware);
+stores.get("/", list);
+stores.get("", list);
 
-  if (!name) {
-    return c.json(
-      { success: false, error: "Store name is required." },
-      400,
-    );
-  }
-
-  const requestedSlug =
-    typeof body.slug === "string" && body.slug.trim()
-      ? makeSlug(body.slug)
-      : makeSlug(name);
-
-  if (!requestedSlug) {
-    return c.json(
-      { success: false, error: "A valid store name or slug is required." },
-      400,
-    );
-  }
-
-  const existing = getStoreBySlug(requestedSlug);
-
-  if (existing) {
-    return c.json(
-      {
-        success: false,
-        error: "That store URL is already in use. Choose another name.",
-      },
-      409,
-    );
-  }
-
-  const timestamp = now();
-  const store: StoreRow = {
-    id: createId(),
-    name,
-    slug: requestedSlug,
-    niche,
-    status: "Draft",
-    description,
-    logo_url: logoUrl,
-    created_at: timestamp,
-    updated_at: timestamp,
-  };
-
+stores.post("/", async (c) => {
   try {
-    db.prepare(`
-      INSERT INTO stores (
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const name = clean(body.name);
+    const niche = clean(body.niche) || "General";
+    const slug = slugify(clean(body.slug) || name);
+    const description = clean(body.description) || `${name} — ${niche} storefront`;
+    const productIds = productIdsFromBody(body.productIds);
+
+    if (!name) return c.json({ success: false, error: "Store name is required." }, 400);
+    if (!slug) return c.json({ success: false, error: "Store name must contain letters or numbers." }, 400);
+    if (!productIds) return c.json({ success: false, error: "productIds must be an array of product IDs." }, 400);
+
+    if (db.prepare("SELECT id FROM stores WHERE slug = ? COLLATE NOCASE").get(slug)) {
+      return c.json({ success: false, error: "A store with this URL slug already exists. Change the store name or slug." }, 409);
+    }
+
+    const inputDomain = clean(body.domain).replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const domain = inputDomain || `${slug}.localhost`;
+    if (db.prepare("SELECT id FROM stores WHERE domain = ? COLLATE NOCASE AND domain IS NOT NULL AND domain != ''").get(domain)) {
+      return c.json({ success: false, error: "That domain is already assigned to another store." }, 409);
+    }
+
+    const id = createId("store");
+    const now = new Date().toISOString();
+    const configColumns = columns("store_config");
+
+    const create = db.transaction(() => {
+      // Use the legacy-compatible status casing expected by existing databases.
+      db.prepare(`
+        INSERT INTO stores (id, name, slug, niche, domain, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'Draft', ?, ?)
+      `).run(id, name, slug, niche, domain, now, now);
+
+      const fields = [
+        "id", "name", "description", "logo_url", "favicon_url", "theme_id",
+        "navigation", "settings", "primary_color", "accent_color", "font_family", "updated_at",
+      ].filter((field) => configColumns.has(field));
+
+      const configValues: Record<string, unknown> = {
         id,
         name,
-        slug,
-        niche,
-        status,
         description,
-        logo_url,
-        created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      store.id,
-      store.name,
-      store.slug,
-      store.niche,
-      store.status,
-      store.description,
-      store.logo_url,
-      store.created_at,
-      store.updated_at,
-    );
+        logo_url: null,
+        favicon_url: null,
+        theme_id: "meo-default",
+        navigation: JSON.stringify([
+          { label: "Home", page: "home", enabled: true },
+          { label: "Products", page: "catalog", enabled: true },
+          { label: "About", page: "about", enabled: true },
+          { label: "Contact", page: "contact", enabled: true },
+          { label: "Cart", page: "cart", enabled: true },
+        ]),
+        settings: JSON.stringify({
+          showRelatedProducts: true, showContactPage: true, showCatalogPage: true,
+          showCartPage: true, showSearch: true, showNewsletter: true,
+          showTestimonials: true, showTrustBadges: true, showAnnouncementBar: true,
+          stickyHeader: true, darkMode: false,
+        }),
+        primary_color: "#064e3b",
+        accent_color: "#10b981",
+        font_family: "Inter",
+        updated_at: now,
+      };
 
-    return c.json(
-      {
-        success: true,
-        data: getStoreResponse(store),
-      },
-      201,
-    );
-  } catch (error) {
-    console.error("Failed to create store:", error);
+      if (!db.prepare("SELECT id FROM store_config WHERE id = ?").get(id)) {
+        db.prepare(`
+          INSERT INTO store_config (${fields.map((field) => `"${field}"`).join(", ")})
+          VALUES (${fields.map(() => "?").join(", ")})
+        `).run(...fields.map((field) => configValues[field]));
+      }
 
-    return c.json(
-      { success: false, error: "Unable to create the store." },
-      500,
-    );
-  }
-});
+      // Validate and save product assignments in the same transaction as creation.
+      saveStoreProducts(id, productIds, now);
+      setArchived(id, false, now);
+    });
 
-/**
- * ADMIN: UPDATE STORE
- * PATCH /api/store/:id
- */
-stores.patch("/:id", authMiddleware, async (c) => {
-  const id = c.req.param("id");
-  const current = getStore(id);
+    create();
 
-  if (!current) {
-    return c.json(
-      { success: false, error: "Store not found." },
-      404,
-    );
-  }
-
-  let body: Record<string, unknown>;
-
-  try {
-    body = await c.req.json<Record<string, unknown>>();
-  } catch {
-    return c.json(
-      { success: false, error: "A valid JSON request body is required." },
-      400,
-    );
-  }
-
-  const name =
-    typeof body.name === "string" ? body.name.trim() : current.name;
-  const niche =
-    typeof body.niche === "string" ? body.niche.trim() : current.niche;
-  const description =
-    typeof body.description === "string"
-      ? body.description.trim() || null
-      : current.description;
-  const logoUrl =
-    typeof body.logo_url === "string"
-      ? body.logo_url.trim() || null
-      : current.logo_url;
-
-  const requestedSlug =
-    typeof body.slug === "string" && body.slug.trim()
-      ? makeSlug(body.slug)
-      : current.slug;
-
-  const status =
-    body.status === undefined
-      ? current.status
-      : parseStoreStatus(body.status);
-
-  if (!name) {
-    return c.json(
-      { success: false, error: "Store name cannot be empty." },
-      400,
-    );
-  }
-
-  if (!requestedSlug) {
-    return c.json(
-      { success: false, error: "A valid store URL slug is required." },
-      400,
-    );
-  }
-
-  if (!status) {
-    return c.json(
-      { success: false, error: "Store status must be Active or Draft." },
-      400,
-    );
-  }
-
-  const slugOwner = getStoreBySlug(requestedSlug);
-
-  if (slugOwner && slugOwner.id !== id) {
-    return c.json(
-      {
-        success: false,
-        error: "That store URL is already in use. Choose another slug.",
-      },
-      409,
-    );
-  }
-
-  const updatedAt = now();
-
-  try {
-    db.prepare(`
-      UPDATE stores
-      SET
-        name = ?,
-        slug = ?,
-        niche = ?,
-        status = ?,
-        description = ?,
-        logo_url = ?,
-        updated_at = ?
-      WHERE id = ?
-    `).run(
-      name,
-      requestedSlug,
-      niche || "Other",
-      status,
-      description,
-      logoUrl,
-      updatedAt,
-      id,
-    );
-
-    const updated = getStore(id);
-
-    if (!updated) {
-      return c.json(
-        { success: false, error: "Unable to load the updated store." },
-        500,
-      );
-    }
+    const created = storeById(id);
+    if (!created) throw new Error("Store was created but could not be loaded.");
 
     return c.json({
       success: true,
-      data: getStoreResponse(updated),
+      data: { ...toStore(created), productIds },
+      message: `Store created with ${productIds.length} assigned product(s).`,
+    }, 201);
+  } catch (error) {
+    console.error("Create store error:", error);
+    const message = error instanceof Error ? error.message : "Unable to create store.";
+    const status = /UNIQUE/i.test(message) ? 409 : /Product not found/.test(message) ? 400 : 500;
+    return c.json({ success: false, error: message }, status);
+  }
+});
+
+stores.get("/:id/products", (c) => {
+  try {
+    const id = c.req.param("id");
+    if (!storeById(id)) {
+      return c.json({ success: false, error: "Store not found." }, 404);
+    }
+
+    const products = getAssignedProducts(id);
+    const productIds = products.map((product: any) => String(product.id));
+
+    return c.json({ success: true, data: products, productIds });
+  } catch (error) {
+    console.error("Get store products error:", error);
+    return c.json({ success: false, error: "Unable to load products assigned to this store." }, 500);
+  }
+});
+
+stores.put("/:id/products", async (c) => {
+  try {
+    const id = c.req.param("id");
+    if (!storeById(id)) {
+      return c.json({ success: false, error: "Store not found." }, 404);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const productIds = productIdsFromBody(body.productIds);
+
+    if (!productIds) {
+      return c.json({ success: false, error: "productIds must be an array of product IDs." }, 400);
+    }
+
+    const now = new Date().toISOString();
+    db.transaction(() => saveStoreProducts(id, productIds, now))();
+
+    return c.json({
+      success: true,
+      data: { storeId: id, productIds },
+      message: `${productIds.length} product(s) assigned to the store.`,
     });
   } catch (error) {
-    console.error("Failed to update store:", error);
-
-    return c.json(
-      { success: false, error: "Unable to update the store." },
-      500,
-    );
+    console.error("Save store products error:", error);
+    const message = error instanceof Error ? error.message : "Unable to save store products.";
+    const status = /Product not found/.test(message) ? 400 : 500;
+    return c.json({ success: false, error: message }, status);
   }
 });
 
-/**
- * ADMIN: DELETE AN EMPTY STORE
- * DELETE /api/store/:id
- *
- * A store containing products cannot be deleted.
- */
-stores.delete("/:id", authMiddleware, (c) => {
-  const id = c.req.param("id");
-  const store = getStore(id);
+stores.get("/:id", (c) => {
+  try {
+    const row = storeById(c.req.param("id"));
+    if (!row) return c.json({ success: false, error: "Store not found." }, 404);
 
-  if (!store) {
-    return c.json(
-      { success: false, error: "Store not found." },
-      404,
-    );
+    return c.json({
+      success: true,
+      data: { ...toStore(row), productIds: getAssignedProducts(row.id).map((product: any) => String(product.id)) },
+    });
+  } catch (error) {
+    console.error("Get store error:", error);
+    return c.json({ success: false, error: "Unable to load store." }, 500);
   }
+});
 
-  const productCount = db
-    .prepare("SELECT COUNT(*) AS count FROM products WHERE store_id = ?")
-    .get(id) as { count: number };
+stores.patch("/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const current = storeById(id);
+    if (!current) return c.json({ success: false, error: "Store not found." }, 404);
 
-  if (productCount.count > 0) {
-    return c.json(
-      {
-        success: false,
-        error: "This store still has products. Remove or reassign them before deleting the store.",
+    const name = body.name === undefined ? current.name : clean(body.name);
+    const niche = body.niche === undefined ? current.niche : (clean(body.niche) || "General");
+    const slug = body.slug === undefined ? current.slug : slugify(clean(body.slug) || name);
+    const rawDomain = body.domain === undefined ? (current.domain || "") : clean(body.domain);
+    const domain = rawDomain.replace(/^https?:\/\//i, "").replace(/\/+$/, "") || `${slug}.localhost`;
+    const status = body.status === undefined ? current.status : normalizeStatus(body.status, current.status);
+    const productIds = body.productIds === undefined ? null : productIdsFromBody(body.productIds);
+
+    if (!name) return c.json({ success: false, error: "Store name is required." }, 400);
+    if (!slug) return c.json({ success: false, error: "Store slug is invalid." }, 400);
+    if (!status || !validStatuses.has(status)) return c.json({ success: false, error: "Status must be Active, Draft, or Archived." }, 400);
+    if (productIds === null && body.productIds !== undefined) return c.json({ success: false, error: "productIds must be an array of product IDs." }, 400);
+    if (id === "default" && status === "Archived") return c.json({ success: false, error: "The default store cannot be archived." }, 400);
+
+    if (db.prepare("SELECT id FROM stores WHERE slug = ? COLLATE NOCASE AND id != ?").get(slug, id)) {
+      return c.json({ success: false, error: "Another store already uses that slug." }, 409);
+    }
+    if (db.prepare("SELECT id FROM stores WHERE domain = ? COLLATE NOCASE AND id != ? AND domain IS NOT NULL AND domain != ''").get(domain, id)) {
+      return c.json({ success: false, error: "Another store already uses that domain." }, 409);
+    }
+
+    const now = new Date().toISOString();
+    const update = db.transaction(() => {
+      // Some existing databases constrain stores.status to only Active/Draft.
+      // Store archived state separately so archiving works without rebuilding user data.
+      const databaseStatus = status === "Archived" ? "Draft" : status;
+      db.prepare("UPDATE stores SET name = ?, slug = ?, niche = ?, domain = ?, status = ?, updated_at = ? WHERE id = ?")
+        .run(name, slug, niche, domain, databaseStatus, now, id);
+      setArchived(id, status === "Archived", now);
+
+      if (columns("store_config").has("name") && db.prepare("SELECT id FROM store_config WHERE id = ?").get(id)) {
+        const configCols = columns("store_config");
+        if (configCols.has("description") && body.description !== undefined) {
+          db.prepare("UPDATE store_config SET name = ?, description = ?, updated_at = ? WHERE id = ?")
+            .run(name, clean(body.description), now, id);
+        } else {
+          db.prepare("UPDATE store_config SET name = ?, updated_at = ? WHERE id = ?").run(name, now, id);
+        }
+      }
+
+      if (productIds !== null) saveStoreProducts(id, productIds, now);
+    });
+    update();
+
+    const updated = storeById(id);
+    if (!updated) throw new Error("Store was updated but could not be loaded.");
+
+    return c.json({
+      success: true,
+      data: {
+        ...toStore(updated),
+        productIds: getAssignedProducts(id).map((product: any) => String(product.id)),
       },
-      409,
-    );
+      message: "Store updated successfully.",
+    });
+  } catch (error) {
+    console.error("Update store error:", error);
+    const message = error instanceof Error ? error.message : "Unable to update store.";
+    const status = /UNIQUE/i.test(message) ? 409 : /Product not found/.test(message) ? 400 : 500;
+    return c.json({ success: false, error: message }, status);
   }
-
-  db.prepare("DELETE FROM stores WHERE id = ?").run(id);
-
-  return c.json({
-    success: true,
-    message: "Store deleted successfully.",
-  });
 });
 
-/**
- * PUBLIC: GET AN ACTIVE STORE
- * GET /api/store/public/:slug
- *
- * This route is public; customers do not need an admin token.
- */
-stores.get("/public/:slug", (c) => {
-  const slug = c.req.param("slug");
-  const store = getStoreBySlug(slug);
+stores.delete("/:id", (c) => {
+  try {
+    const id = c.req.param("id");
+    if (id === "default") return c.json({ success: false, error: "The default store cannot be deleted." }, 400);
 
-  if (!store || store.status !== "Active") {
-    return c.json(
-      { success: false, error: "Store not found." },
-      404,
-    );
+    if (!db.prepare("SELECT id FROM stores WHERE id = ?").get(id)) {
+      return c.json({ success: false, error: "Store not found." }, 404);
+    }
+
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      // Keep the legacy status constraint intact; archive state lives in metadata.
+      db.prepare("UPDATE stores SET status = 'Draft', updated_at = ? WHERE id = ?")
+        .run(now, id);
+      setArchived(id, true, now);
+    })();
+
+    return c.json({ success: true, message: "Store archived successfully." });
+  } catch (error) {
+    console.error("Archive store error:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : "Unable to archive store." }, 500);
   }
-
-  return c.json({
-    success: true,
-    data: {
-      id: store.id,
-      name: store.name,
-      slug: store.slug,
-      niche: store.niche,
-      description: store.description,
-      logo_url: store.logo_url,
-    },
-  });
-});
-
-/**
- * PUBLIC: GET ACTIVE PRODUCTS BELONGING TO ONE STORE
- * GET /api/store/public/:slug/products
- *
- * Only products assigned to this exact store are returned.
- * Global products and products belonging to other stores are excluded.
- */
-stores.get("/public/:slug/products", (c) => {
-  const slug = c.req.param("slug");
-  const store = getStoreBySlug(slug);
-
-  if (!store || store.status !== "Active") {
-    return c.json(
-      { success: false, error: "Store not found." },
-      404,
-    );
-  }
-
-  const rows = db.prepare(`
-    SELECT *
-    FROM products
-    WHERE store_id = ? AND active = 1
-    ORDER BY created_at DESC
-  `).all(store.id) as ProductRow[];
-
-  const products = rows.map((row) => ({
-    ...row,
-    price: Number(row.price ?? 0),
-    stock: Number(row.stock ?? 0),
-    inventory: Number(row.stock ?? 0),
-    active: Number(row.active ?? 0),
-    images: parseJson(row.images, []),
-    variants: parseJson(row.variants, []),
-  }));
-
-  return c.json({
-    success: true,
-    data: products,
-  });
 });
 
 export default stores;

@@ -1,7 +1,7 @@
 export default function Footer() {
   return (
     <footer className="mt-20 border-t border-slate-200 bg-slate-950 text-white">
-      <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 md:grid-cols-3">
+      <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 md:grid-cols-4">
         <div>
           <h2 className="text-xl font-bold">MEO Store</h2>
           <p className="mt-3 max-w-sm text-sm leading-6 text-slate-400">
@@ -17,6 +17,16 @@ export default function Footer() {
             <p>Beauty & Skincare</p>
             <p>Pet Products</p>
             <p>Shapewear</p>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-semibold">Customer care</h3>
+          <div className="mt-4 flex flex-col gap-2 text-sm text-slate-400">
+            <a className="hover:text-white" href="/order-tracking">Order tracking</a>
+            <a className="hover:text-white" href="/refund-returns">Refunds & returns</a>
+            <a className="hover:text-white" href="/privacy">Privacy policy</a>
+            <a className="hover:text-white" href="/terms">Terms of service</a>
           </div>
         </div>
 

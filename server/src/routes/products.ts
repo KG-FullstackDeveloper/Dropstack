@@ -1,81 +1,101 @@
-
 import { Hono } from "hono";
 import {
   deleteProductRecord,
   getActiveProducts,
   getAllProducts,
-  getGlobalProducts,
   getProductById,
   getProductBySlug,
   insertProduct,
   updateProductRecord,
-  type ProductWithStore,
 } from "../data/store";
 import { db } from "../database/db";
 import { createId } from "../utils/id";
-import type { Product, ProductVariant } from "../types/product";
+import type {
+  Product,
+  ProductVariant,
+} from "../types/product";
 import { authMiddleware } from "../middleware/auth";
 
 const products = new Hono();
 
+function validateUploadedImage(value: unknown): string | null {
+  if (typeof value !== "string" || !value.startsWith("data:")) return null;
+  const match = value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return "Uploaded images must be valid JPG, PNG, or WebP files.";
+  const approximateBytes = Math.floor(match[2].length * 3 / 4);
+  if (approximateBytes > 5 * 1024 * 1024) return "Product images must be 5 MB or smaller.";
+  return null;
+}
+
 /* -------------------------------------------------------------------------- */
-/* PUBLIC GLOBAL PRODUCT ROUTES                                               */
+/* PUBLIC PRODUCT ROUTES                                                      */
 /* -------------------------------------------------------------------------- */
 
 products.get("/", async (c) => {
   try {
-    // Only products without a store assignment belong to the Global catalogue.
-    const items = (await getGlobalProducts()).filter(
-      (product) => Number(product.active) === 1,
-    );
+    const items = await getActiveProducts();
 
     return c.json({
       success: true,
       data: items,
     });
   } catch (error) {
-    console.error("Get active global products error:", error);
+    console.error(
+      "Get active products error:",
+      error,
+    );
 
     return c.json(
-      { success: false, error: "Unable to load products." },
+      {
+        success: false,
+        error: "Unable to load products.",
+      },
       500,
     );
   }
 });
 
-products.get("/all", authMiddleware, async (c) => {
-  try {
-    // Keep the Global admin product list separate from individual storefronts.
-    const items = await getGlobalProducts();
+products.get(
+  "/all",
+  authMiddleware,
+  async (c) => {
+    try {
+      const items = await getAllProducts();
 
-    return c.json({
-      success: true,
-      data: items,
-    });
-  } catch (error) {
-    console.error("Get all global products error:", error);
+      return c.json({
+        success: true,
+        data: items,
+      });
+    } catch (error) {
+      console.error(
+        "Get all products error:",
+        error,
+      );
 
-    return c.json(
-      { success: false, error: "Unable to load products." },
-      500,
-    );
-  }
-});
-
-/* -------------------------------------------------------------------------- */
-/* PRODUCT LOOKUPS                                                            */
-/* -------------------------------------------------------------------------- */
+      return c.json(
+        {
+          success: false,
+          error: "Unable to load products.",
+        },
+        500,
+      );
+    }
+  },
+);
 
 products.get("/id/:id", async (c) => {
   const id = c.req.param("id");
 
   try {
-    const product = await getProductById(id);
+    const product =
+      await getProductById(id);
 
-    // Store products must be accessed through their own storefront.
-    if (!product || product.store_id) {
+    if (!product) {
       return c.json(
-        { success: false, error: "Product not found." },
+        {
+          success: false,
+          error: "Product not found.",
+        },
         404,
       );
     }
@@ -85,12 +105,29 @@ products.get("/id/:id", async (c) => {
       data: product,
     });
   } catch (error) {
-    console.error("Get product error:", error);
+    console.error(
+      "Get product error:",
+      error,
+    );
 
     return c.json(
-      { success: false, error: "Unable to load product." },
+      {
+        success: false,
+        error: "Unable to load product.",
+      },
       500,
     );
+  }
+});
+
+products.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const product = await getProductById(id);
+    if (!product || product.active !== 1) return c.json({ success: false, error: "Product not found." }, 404);
+    return c.json({ success: true, data: product });
+  } catch {
+    return c.json({ success: false, error: "Unable to load product." }, 500);
   }
 });
 
@@ -98,11 +135,15 @@ products.get("/slug/:slug", async (c) => {
   const slug = c.req.param("slug");
 
   try {
-    const product = await getProductBySlug(slug);
+    const product =
+      await getProductBySlug(slug);
 
-    if (!product || product.store_id) {
+    if (!product) {
       return c.json(
-        { success: false, error: "Product not found." },
+        {
+          success: false,
+          error: "Product not found.",
+        },
         404,
       );
     }
@@ -112,10 +153,17 @@ products.get("/slug/:slug", async (c) => {
       data: product,
     });
   } catch (error) {
-    console.error("Get product by slug error:", error);
+    console.error(
+      "Get product by slug error:",
+      error,
+    );
 
     return c.json(
-      { success: false, error: "Unable to load product." },
+      {
+        success: false,
+        error:
+          "Unable to load product.",
+      },
       500,
     );
   }
@@ -125,21 +173,37 @@ products.get("/slug/:slug", async (c) => {
 /* NORMALIZATION HELPERS                                                      */
 /* -------------------------------------------------------------------------- */
 
-function cleanString(value: unknown): string {
-  if (value === undefined || value === null) {
+function cleanString(
+  value: unknown,
+): string {
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return "";
   }
 
   return String(value).trim();
 }
 
-function nullableString(value: unknown): string | null {
+function nullableString(
+  value: unknown,
+): string | null {
   const result = cleanString(value);
-  return result.length > 0 ? result : null;
+
+  return result.length > 0
+    ? result
+    : null;
 }
 
-function numberValue(value: unknown, fallback = 0): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
+function numberValue(
+  value: unknown,
+  fallback = 0,
+): number {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
     return value;
   }
 
@@ -149,22 +213,42 @@ function numberValue(value: unknown, fallback = 0): number {
     return fallback;
   }
 
-  const cleaned = text.replace(/,/g, "").replace(/[^\d.-]/g, "");
+  const cleaned = text
+    .replace(/,/g, "")
+    .replace(/[^\d.-]/g, "");
+
   const parsed = Number(cleaned);
 
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return Number.isFinite(parsed)
+    ? parsed
+    : fallback;
 }
 
-function integerValue(value: unknown, fallback = 0): number {
-  return Math.max(0, Math.round(numberValue(value, fallback)));
+function integerValue(
+  value: unknown,
+  fallback = 0,
+): number {
+  const result = numberValue(
+    value,
+    fallback,
+  );
+
+  return Math.max(
+    0,
+    Math.round(result),
+  );
 }
 
-function booleanValue(value: unknown, fallback = true): boolean {
+function booleanValue(
+  value: unknown,
+  fallback = true,
+): boolean {
   if (typeof value === "boolean") {
     return value;
   }
 
-  const text = cleanString(value).toLowerCase();
+  const text =
+    cleanString(value).toLowerCase();
 
   if (!text) {
     return fallback;
@@ -202,7 +286,9 @@ function booleanValue(value: unknown, fallback = true): boolean {
   return fallback;
 }
 
-function slugify(value: string): string {
+function slugify(
+  value: string,
+): string {
   return value
     .toLowerCase()
     .trim()
@@ -218,24 +304,21 @@ async function createUniqueSlug(
   ignoreId?: string,
 ): Promise<string> {
   const base =
-    slugify(requestedSlug || name) || `product-${Date.now()}`;
+    slugify(requestedSlug || name) ||
+    `product-${Date.now()}`;
 
   let slug = base;
   let counter = 2;
 
   while (true) {
-    const existing = await getProductBySlug(slug);
+    const existing =
+      await getProductBySlug(slug);
 
-    if (!existing || existing.id === ignoreId) {
-      // Also check inactive products and store products, since slugs
-      // must remain unique across the shared products table.
-      const anyExisting = db
-        .prepare("SELECT id FROM products WHERE slug = ? LIMIT 1")
-        .get(slug) as { id: string } | undefined;
-
-      if (!anyExisting || anyExisting.id === ignoreId) {
-        return slug;
-      }
+    if (
+      !existing ||
+      existing.id === ignoreId
+    ) {
+      return slug;
     }
 
     slug = `${base}-${counter}`;
@@ -249,20 +332,38 @@ function calculateFinancials(
   shippingCost: number,
   otherCost: number,
 ) {
-  const totalCost = supplierCost + shippingCost + otherCost;
-  const profit = price - totalCost;
-  const margin = price > 0 ? (profit / price) * 100 : 0;
+  const totalCost =
+    supplierCost +
+    shippingCost +
+    otherCost;
 
-  return { profit, margin };
+  const profit =
+    price - totalCost;
+
+  const margin =
+    price > 0
+      ? (profit / price) * 100
+      : 0;
+
+  return {
+    profit,
+    margin,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
 /* IMAGE NORMALIZATION                                                        */
 /* -------------------------------------------------------------------------- */
 
-function normalizeImages(value: unknown): string[] {
+function normalizeImages(
+  value: unknown,
+): string[] {
   if (Array.isArray(value)) {
-    return value.map(cleanString).filter(Boolean);
+    return value
+      .map((item) =>
+        cleanString(item),
+      )
+      .filter(Boolean);
   }
 
   const text = cleanString(value);
@@ -272,13 +373,21 @@ function normalizeImages(value: unknown): string[] {
   }
 
   try {
-    const parsed: unknown = JSON.parse(text);
+    const parsed =
+      JSON.parse(text);
 
     if (Array.isArray(parsed)) {
-      return parsed.map(cleanString).filter(Boolean);
+      return parsed
+        .map((item) =>
+          cleanString(item),
+        )
+        .filter(Boolean);
     }
 
-    if (typeof parsed === "string" && parsed.trim()) {
+    if (
+      typeof parsed === "string" &&
+      parsed.trim()
+    ) {
       return [parsed.trim()];
     }
   } catch {
@@ -296,67 +405,69 @@ function normalizeImages(value: unknown): string[] {
 /* -------------------------------------------------------------------------- */
 
 function normalizeVariants(value: unknown): ProductVariant[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((item): ProductVariant | null => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-
-      const variant = item as Record<string, unknown>;
-
-      return {
-        id:
-          typeof variant.id === "string" && variant.id.trim()
-            ? variant.id.trim()
-            : createId("variant"),
-
-        name:
-          typeof variant.name === "string"
-            ? variant.name.trim()
-            : "",
-
-        value:
-          typeof variant.value === "string"
-            ? variant.value.trim()
-            : "",
-
-        price:
-          variant.price === undefined ||
-          variant.price === null ||
-          variant.price === ""
-            ? ""
-            : String(variant.price),
-
-        sku:
-          variant.sku === undefined || variant.sku === null
-            ? ""
-            : String(variant.sku).trim(),
-
-        stock:
-          variant.stock === undefined ||
-          variant.stock === null ||
-          variant.stock === ""
-            ? "0"
-            : String(variant.stock),
-      };
-    })
-    .filter(
-      (variant): variant is ProductVariant => variant !== null,
-    );
+if (!Array.isArray(value)) {
+return [];
 }
 
+return value
+.map((item): ProductVariant | null => {
+if (!item || typeof item !== "object") {
+return null;
+}
+
+  const variant = item as Record<string, unknown>;
+
+  return {
+    id:
+      typeof variant.id === "string" && variant.id.trim()
+        ? variant.id.trim()
+        : createId("variant"),
+
+    name:
+      typeof variant.name === "string"
+        ? variant.name.trim()
+        : "",
+
+    value:
+      typeof variant.value === "string"
+        ? variant.value.trim()
+        : "",
+
+    price:
+      variant.price === undefined ||
+      variant.price === null ||
+      variant.price === ""
+        ? ""
+        : String(variant.price),
+
+    sku:
+      variant.sku === undefined ||
+      variant.sku === null
+        ? ""
+        : String(variant.sku).trim(),
+
+    stock:
+      variant.stock === undefined ||
+      variant.stock === null ||
+      variant.stock === ""
+        ? "0"
+        : String(variant.stock),
+  };
+})
+.filter(
+  (variant): variant is ProductVariant =>
+    variant !== null,
+);
+
+}
 /* -------------------------------------------------------------------------- */
 /* PRODUCT BUILDER                                                            */
 /* -------------------------------------------------------------------------- */
 
 function buildProduct(
   input: Record<string, unknown>,
-  existing?: ProductWithStore,
-): ProductWithStore {
+  existing?: Product,
+): Product {
   const name =
     cleanString(input.name) ||
     cleanString(input.title) ||
@@ -364,7 +475,9 @@ function buildProduct(
     "";
 
   const description =
-    cleanString(input.description) ||
+    cleanString(
+      input.description,
+    ) ||
     cleanString(input.bodyHtml) ||
     cleanString(input.body) ||
     existing?.description ||
@@ -378,86 +491,143 @@ function buildProduct(
 
   const price =
     input.price !== undefined
-      ? numberValue(input.price)
-      : input.retail_price !== undefined
-        ? numberValue(input.retail_price)
+      ? numberValue(
+          input.price,
+          0,
+        )
+      : input.retail_price !==
+          undefined
+        ? numberValue(
+            input.retail_price,
+            0,
+          )
         : existing?.price ?? 0;
 
   const supplierCost =
-    input.supplier_cost !== undefined
-      ? numberValue(input.supplier_cost)
-      : input.wholesale_cost !== undefined
-        ? numberValue(input.wholesale_cost)
-        : existing?.supplier_cost ?? 0;
+    input.supplier_cost !==
+    undefined
+      ? numberValue(
+          input.supplier_cost,
+          0,
+        )
+      : input.wholesale_cost !==
+          undefined
+        ? numberValue(
+            input.wholesale_cost,
+            0,
+          )
+        : existing?.supplier_cost ??
+          0;
 
   const shippingCost =
-    input.shipping_cost !== undefined
-      ? numberValue(input.shipping_cost)
-      : existing?.shipping_cost ?? 0;
+    input.shipping_cost !==
+    undefined
+      ? numberValue(
+          input.shipping_cost,
+          0,
+        )
+      : existing?.shipping_cost ??
+        0;
 
   const otherCost =
-    input.other_cost !== undefined
-      ? numberValue(input.other_cost)
+    input.other_cost !==
+    undefined
+      ? numberValue(
+          input.other_cost,
+          0,
+        )
       : existing?.other_cost ?? 0;
 
-  const financials = calculateFinancials(
-    price,
-    supplierCost,
-    shippingCost,
-    otherCost,
-  );
+  const financials =
+    calculateFinancials(
+      price,
+      supplierCost,
+      shippingCost,
+      otherCost,
+    );
 
+  /*
+   * IMPORTANT:
+   *
+   * Images are persisted as normal product data.
+   * We preserve the complete images array and also
+   * keep image_url synchronized with the first image.
+   */
   const images =
     input.images !== undefined
-      ? normalizeImages(input.images)
-      : input.image_url !== undefined
-        ? normalizeImages(input.image_url)
-        : input.imageUrl !== undefined
-          ? normalizeImages(input.imageUrl)
+      ? normalizeImages(
+          input.images,
+        )
+      : input.image_url !==
+          undefined
+        ? normalizeImages(
+            input.image_url,
+          )
+        : input.imageUrl !==
+            undefined
+          ? normalizeImages(
+              input.imageUrl,
+            )
           : existing?.images ?? [];
 
   const imageUrl =
-    cleanString(input.image_url) ||
-    cleanString(input.imageUrl) ||
+    cleanString(
+      input.image_url,
+    ) ||
+    cleanString(
+      input.imageUrl,
+    ) ||
     images[0] ||
     existing?.image_url ||
     null;
 
   const variants =
     input.variants !== undefined
-      ? normalizeVariants(input.variants)
+      ? normalizeVariants(
+          input.variants,
+        )
       : existing?.variants ?? [];
 
   const stock =
     input.stock !== undefined
-      ? integerValue(input.stock)
-      : input.inventory_quantity !== undefined
-        ? integerValue(input.inventory_quantity)
+      ? integerValue(
+          input.stock,
+          0,
+        )
+      : input.inventory_quantity !==
+          undefined
+        ? integerValue(
+            input.inventory_quantity,
+            0,
+          )
         : existing?.stock ?? 0;
 
   const lowStockThreshold =
-    input.low_stock_threshold !== undefined
-      ? integerValue(input.low_stock_threshold)
-      : existing?.low_stock_threshold ?? 0;
+    input.low_stock_threshold !==
+    undefined
+      ? integerValue(
+          input.low_stock_threshold,
+          0,
+        )
+      : existing?.low_stock_threshold ??
+        0;
 
   const activeValue =
     input.active !== undefined
-      ? booleanValue(input.active, true)
+      ? booleanValue(
+          input.active,
+          true,
+        )
       : input.status !== undefined
-        ? booleanValue(input.status, true)
-        : existing
-          ? Number(existing.active) === 1
-          : true;
+        ? booleanValue(
+            input.status,
+            true,
+          )
+        : existing?.active === 1;
 
-  /*
-   * On creation, omitted store_id means a Global product.
-   * On update, omitted store_id preserves the existing assignment.
-   * Explicit null or an empty string moves the product to Global.
-   */
-  const storeId =
-    Object.prototype.hasOwnProperty.call(input, "store_id")
-      ? nullableString(input.store_id)
-      : existing?.store_id ?? null;
+  const active = activeValue
+    ? 1
+    : 0;
 
   return {
     id:
@@ -468,76 +638,114 @@ function buildProduct(
     name,
 
     slug:
+      existing?.slug ||
       cleanString(input.slug) ||
       cleanString(input.handle) ||
-      existing?.slug ||
       slugify(name),
 
     sku:
       nullableString(input.sku) ||
-      nullableString(input.variant_sku) ||
+      nullableString(
+        input.variant_sku,
+      ) ||
       existing?.sku ||
       null,
 
     description,
+
     category,
+
     price,
 
     currency:
-      cleanString(input.currency) ||
+      cleanString(
+        input.currency,
+      ) ||
       existing?.currency ||
       "USD",
 
     image_url: imageUrl,
+
     images,
 
     video_url:
-      nullableString(input.video_url) ||
-      nullableString(input.videoUrl) ||
+      nullableString(
+        input.video_url,
+      ) ||
+      nullableString(
+        input.videoUrl,
+      ) ||
       existing?.video_url ||
       null,
 
     supplier_name:
-      nullableString(input.supplier_name) ||
-      nullableString(input.vendor) ||
+      nullableString(
+        input.supplier_name,
+      ) ||
+      nullableString(
+        input.vendor,
+      ) ||
       existing?.supplier_name ||
       null,
 
     supplier_product_id:
-      nullableString(input.supplier_product_id) ||
+      nullableString(
+        input.supplier_product_id,
+      ) ||
       existing?.supplier_product_id ||
       null,
 
     warehouse_country:
-      nullableString(input.warehouse_country) ||
+      nullableString(
+        input.warehouse_country,
+      ) ||
       existing?.warehouse_country ||
       null,
 
     processing_time:
-      nullableString(input.processing_time) ||
+      nullableString(
+        input.processing_time,
+      ) ||
       existing?.processing_time ||
       null,
 
     delivery_time:
-      nullableString(input.delivery_time) ||
+      nullableString(
+        input.delivery_time,
+      ) ||
       existing?.delivery_time ||
       null,
 
-    supplier_cost: supplierCost,
-    shipping_cost: shippingCost,
-    other_cost: otherCost,
-    profit_per_unit: financials.profit,
-    profit_margin: financials.margin,
+    supplier_cost:
+      supplierCost,
+
+    shipping_cost:
+      shippingCost,
+
+    other_cost:
+      otherCost,
+
+    profit_per_unit:
+      financials.profit,
+
+    profit_margin:
+      financials.margin,
+
     stock,
-    low_stock_threshold: lowStockThreshold,
+
+    low_stock_threshold:
+      lowStockThreshold,
+
     variants,
-    active: activeValue ? 1 : 0,
+
+    active,
+
     created_at:
       existing?.created_at ||
-      cleanString(input.created_at) ||
+      cleanString(
+        input.created_at,
+      ) ||
       new Date().toISOString(),
-
-    store_id: storeId,
   };
 }
 
@@ -545,9 +753,21 @@ function buildProduct(
 /* DATABASE ERROR                                                             */
 /* -------------------------------------------------------------------------- */
 
-function getDatabaseErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
+function getDatabaseErrorMessage(
+  error: unknown,
+): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error
+  ) {
+    return String(
+      (
+        error as {
+          message: unknown;
+        }
+      ).message,
+    );
   }
 
   return String(error);
@@ -557,286 +777,415 @@ function getDatabaseErrorMessage(error: unknown): string {
 /* CREATE PRODUCT                                                             */
 /* -------------------------------------------------------------------------- */
 
-products.post("/", authMiddleware, async (c) => {
-  try {
-    const body = (await c.req.json()) as Record<string, unknown>;
+products.post(
+  "/",
+  authMiddleware,
+  async (c) => {
+    try {
+      const body =
+        (await c.req.json()) as Record<
+          string,
+          unknown
+        >;
 
-    const name =
-      cleanString(body.name) || cleanString(body.title);
+      const imageValidationError = validateUploadedImage(body.image_url ?? body.imageUrl);
+      if (imageValidationError) return c.json({ success: false, error: imageValidationError }, 400);
 
-    const description =
-      cleanString(body.description) ||
-      cleanString(body.bodyHtml) ||
-      cleanString(body.body);
+      const name =
+        cleanString(body.name) ||
+        cleanString(body.title);
 
-    const price = numberValue(
-      body.price ?? body.retail_price ?? body.variant_price,
-    );
+      const description =
+        cleanString(
+          body.description,
+        ) ||
+        cleanString(body.bodyHtml) ||
+        cleanString(body.body);
 
-    if (!name) {
-      return c.json(
-        { success: false, error: "Product name/title is required." },
-        400,
+      const price = numberValue(
+        body.price ??
+          body.retail_price ??
+          body.variant_price,
+        0,
       );
-    }
 
-    if (!description) {
-      return c.json(
-        { success: false, error: "Product description is required." },
-        400,
-      );
-    }
-
-    if (price <= 0) {
-      return c.json(
-        { success: false, error: "Product price must be greater than 0." },
-        400,
-      );
-    }
-
-    const sku =
-      nullableString(body.sku) ||
-      nullableString(body.variant_sku);
-
-    if (sku) {
-      const duplicate = db
-        .prepare("SELECT id FROM products WHERE sku = ? LIMIT 1")
-        .get(sku) as { id: string } | undefined;
-
-      if (duplicate) {
+      if (!name) {
         return c.json(
           {
             success: false,
-            error: "A product with this SKU already exists.",
-            details: `SKU "${sku}" already belongs to product ${duplicate.id}.`,
+            error:
+              "Product name/title is required.",
           },
-          409,
+          400,
         );
       }
+
+      if (!description) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product description is required.",
+          },
+          400,
+        );
+      }
+
+      if (price <= 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product price must be greater than 0.",
+          },
+          400,
+        );
+      }
+
+      const sku =
+        nullableString(body.sku) ||
+        nullableString(
+          body.variant_sku,
+        );
+
+      if (sku) {
+        const duplicate =
+          db.prepare(
+            `
+            SELECT id
+            FROM products
+            WHERE sku = ?
+            LIMIT 1
+            `,
+          ).get(sku) as
+            | {
+                id: string;
+              }
+            | undefined;
+
+        if (duplicate) {
+          return c.json(
+            {
+              success: false,
+              error:
+                "A product with this SKU already exists.",
+              details: `SKU "${sku}" already belongs to product ${duplicate.id}.`,
+            },
+            409,
+          );
+        }
+      }
+
+      const slug =
+        await createUniqueSlug(
+          name,
+          nullableString(
+            body.slug,
+          ) ||
+            nullableString(
+              body.handle,
+            ),
+        );
+
+      const product =
+        buildProduct({
+          ...body,
+          name,
+          description,
+          price,
+          slug,
+        });
+
+      const saved =
+        await insertProduct(
+          product,
+        );
+
+      return c.json(
+        {
+          success: true,
+          data: saved,
+          message:
+            "Product created successfully.",
+        },
+        201,
+      );
+    } catch (error) {
+      console.error(
+        "Product create error:",
+        error,
+      );
+
+      return c.json(
+        {
+          success: false,
+          error:
+            "Unable to create product.",
+          details:
+            getDatabaseErrorMessage(
+              error,
+            ),
+        },
+        500,
+      );
     }
-
-    const slug = await createUniqueSlug(
-      name,
-      nullableString(body.slug) || nullableString(body.handle),
-    );
-
-    const product = buildProduct({
-      ...body,
-      name,
-      description,
-      price,
-      slug,
-    });
-
-    const saved = await insertProduct(product);
-
-    return c.json(
-      {
-        success: true,
-        data: saved,
-        message: "Product created successfully.",
-      },
-      201,
-    );
-  } catch (error) {
-    console.error("Product create error:", error);
-
-    const message = getDatabaseErrorMessage(error);
-
-    return c.json(
-      {
-        success: false,
-        error: message.includes("selected store does not exist")
-          ? message
-          : "Unable to create product.",
-        details: message,
-      },
-      message.includes("selected store does not exist") ? 400 : 500,
-    );
-  }
-});
+  },
+);
 
 /* -------------------------------------------------------------------------- */
 /* UPDATE PRODUCT                                                             */
 /* -------------------------------------------------------------------------- */
 
-products.patch("/:id", authMiddleware, async (c) => {
-  const id = c.req.param("id");
+products.patch(
+  "/:id",
+  authMiddleware,
+  async (c) => {
+    const id = c.req.param("id");
 
-  try {
-    const existing = await getProductById(id);
+    try {
+      const existing =
+        await getProductById(id);
 
-    if (!existing) {
-      return c.json(
-        { success: false, error: "Product not found." },
-        404,
-      );
-    }
-
-    const body = (await c.req.json()) as Record<string, unknown>;
-
-    const merged = {
-      ...existing,
-      ...body,
-    };
-
-    const name =
-      cleanString(body.name) ||
-      cleanString(body.title) ||
-      existing.name;
-
-    const description =
-      cleanString(body.description) ||
-      cleanString(body.bodyHtml) ||
-      cleanString(body.body) ||
-      existing.description;
-
-    if (!name) {
-      return c.json(
-        { success: false, error: "Product name/title is required." },
-        400,
-      );
-    }
-
-    if (!description) {
-      return c.json(
-        { success: false, error: "Product description is required." },
-        400,
-      );
-    }
-
-    const price =
-      body.price !== undefined
-        ? numberValue(body.price)
-        : existing.price;
-
-    if (price <= 0) {
-      return c.json(
-        { success: false, error: "Product price must be greater than 0." },
-        400,
-      );
-    }
-
-    const sku =
-      nullableString(body.sku) ||
-      nullableString(body.variant_sku) ||
-      existing.sku;
-
-    if (sku) {
-      const duplicate = db
-        .prepare(`
-          SELECT id
-          FROM products
-          WHERE sku = ? AND id != ?
-          LIMIT 1
-        `)
-        .get(sku, id) as { id: string } | undefined;
-
-      if (duplicate) {
+      if (!existing) {
         return c.json(
           {
             success: false,
-            error: "Another product already uses this SKU.",
-            details: `SKU "${sku}" belongs to product ${duplicate.id}.`,
+            error:
+              "Product not found.",
           },
-          409,
+          404,
         );
       }
-    }
 
-    let slug =
-      cleanString(body.slug) ||
-      cleanString(body.handle) ||
-      existing.slug;
+      const body =
+        (await c.req.json()) as Record<
+          string,
+          unknown
+        >;
 
-    if (
-      cleanString(body.name) ||
-      cleanString(body.title) ||
-      cleanString(body.handle) ||
-      cleanString(body.slug)
-    ) {
-      slug = await createUniqueSlug(name, slug, id);
-    }
+      const imageValidationError = validateUploadedImage(body.image_url ?? body.imageUrl);
+      if (imageValidationError) return c.json({ success: false, error: imageValidationError }, 400);
 
-    const product = buildProduct(
-      {
-        ...merged,
-        id,
-        name,
-        description,
-        price,
-        slug,
-      },
-      existing,
-    );
+      const merged = {
+        ...existing,
+        ...body,
+      };
 
-    const saved = await updateProductRecord(id, product);
+      const name =
+        cleanString(body.name) ||
+        cleanString(body.title) ||
+        existing.name;
 
-    if (!saved) {
+      const description =
+        cleanString(
+          body.description,
+        ) ||
+        cleanString(body.bodyHtml) ||
+        cleanString(body.body) ||
+        existing.description;
+
+      if (!name) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product name/title is required.",
+          },
+          400,
+        );
+      }
+
+      if (!description) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product description is required.",
+          },
+          400,
+        );
+      }
+
+      const price =
+        body.price !== undefined
+          ? numberValue(
+              body.price,
+              0,
+            )
+          : existing.price;
+
+      if (price <= 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product price must be greater than 0.",
+          },
+          400,
+        );
+      }
+
+      const sku =
+        nullableString(body.sku) ||
+        nullableString(
+          body.variant_sku,
+        ) ||
+        existing.sku;
+
+      if (sku) {
+        const duplicate =
+          db.prepare(
+            `
+            SELECT id
+            FROM products
+            WHERE sku = ?
+              AND id != ?
+            LIMIT 1
+            `,
+          ).get(
+            sku,
+            id,
+          ) as
+            | {
+                id: string;
+              }
+            | undefined;
+
+        if (duplicate) {
+          return c.json(
+            {
+              success: false,
+              error:
+                "Another product already uses this SKU.",
+              details: `SKU "${sku}" belongs to product ${duplicate.id}.`,
+            },
+            409,
+          );
+        }
+      }
+
+      let slug =
+        cleanString(
+          body.slug,
+        ) ||
+        cleanString(
+          body.handle,
+        ) ||
+        existing.slug;
+
+      if (
+        cleanString(body.name) ||
+        cleanString(body.title) ||
+        cleanString(body.handle) ||
+        cleanString(body.slug)
+      ) {
+        slug =
+          await createUniqueSlug(
+            name,
+            slug,
+            id,
+          );
+      }
+
+      const product =
+        buildProduct(
+          {
+            ...merged,
+            id,
+            name,
+            description,
+            price,
+            slug,
+          },
+          existing,
+        );
+
+      const saved =
+        await updateProductRecord(
+          id,
+          product,
+        );
+
+      return c.json({
+        success: true,
+        data: saved,
+        message:
+          "Product updated successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "Product update error:",
+        error,
+      );
+
       return c.json(
-        { success: false, error: "Product not found." },
-        404,
+        {
+          success: false,
+          error:
+            "Unable to update product.",
+          details:
+            getDatabaseErrorMessage(
+              error,
+            ),
+        },
+        500,
       );
     }
-
-    return c.json({
-      success: true,
-      data: saved,
-      message: "Product updated successfully.",
-    });
-  } catch (error) {
-    console.error("Product update error:", error);
-
-    const message = getDatabaseErrorMessage(error);
-
-    return c.json(
-      {
-        success: false,
-        error: message.includes("selected store does not exist")
-          ? message
-          : "Unable to update product.",
-        details: message,
-      },
-      message.includes("selected store does not exist") ? 400 : 500,
-    );
-  }
-});
+  },
+);
 
 /* -------------------------------------------------------------------------- */
 /* DELETE PRODUCT                                                             */
 /* -------------------------------------------------------------------------- */
 
-products.delete("/:id", authMiddleware, async (c) => {
-  const id = c.req.param("id");
+products.delete(
+  "/:id",
+  authMiddleware,
+  async (c) => {
+    const id = c.req.param("id");
 
-  try {
-    const existing = await getProductById(id);
+    try {
+      const existing =
+        await getProductById(id);
 
-    if (!existing) {
+      if (!existing) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "Product not found.",
+          },
+          404,
+        );
+      }
+
+      await deleteProductRecord(id);
+
+      return c.json({
+        success: true,
+        message:
+          "Product deleted successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "Product delete error:",
+        error,
+      );
+
       return c.json(
-        { success: false, error: "Product not found." },
-        404,
+        {
+          success: false,
+          error:
+            "Unable to delete product.",
+          details:
+            getDatabaseErrorMessage(
+              error,
+            ),
+        },
+        500,
       );
     }
-
-    await deleteProductRecord(id);
-
-    return c.json({
-      success: true,
-      message: "Product deleted successfully.",
-    });
-  } catch (error) {
-    console.error("Product delete error:", error);
-
-    return c.json(
-      {
-        success: false,
-        error: "Unable to delete product.",
-        details: getDatabaseErrorMessage(error),
-      },
-      500,
-    );
-  }
-});
+  },
+);
 
 export default products;

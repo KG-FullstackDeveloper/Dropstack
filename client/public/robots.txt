@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /nigeria-admin
+Disallow: /nigeria-admin/
+Sitemap: https://YOUR-PRODUCTION-DOMAIN/sitemap.xml

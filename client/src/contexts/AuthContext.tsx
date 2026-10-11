@@ -1,3 +1,4 @@
+
 import {
   createContext,
   useContext,
@@ -15,64 +16,68 @@ import {
 interface AuthContextValue {
   admin: AdminUser | null;
   loading: boolean;
-
-  login: (
-    email: string,
-    password: string
-  ) => Promise<void>;
-
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
-export const AuthContext =
-  createContext<AuthContextValue>({
-    admin: null,
-    loading: true,
-    login: async () => {},
-    logout: () => {},
-  });
+export const AuthContext = createContext<AuthContextValue>({
+  admin: null,
+  loading: true,
+  login: async () => {},
+  logout: () => {},
+});
 
 export function AuthProvider({
   children,
 }: {
   children: ReactNode;
 }) {
-  const [admin, setAdmin] =
-    useState<AdminUser | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Admin authentication must always begin from the login page
-    // when the application is opened/refreshed.
-    //
-    // Remove any previously stored authentication token so that
-    // an old session cannot automatically bypass the login page.
-    localStorage.removeItem("admin_token");
+    let cancelled = false;
 
-    setAdmin(null);
-    setLoading(false);
+    async function restoreSession() {
+      const token = localStorage.getItem("admin_token");
+
+      if (!token) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      try {
+        // Validate the saved session with your backend.
+        // This requires a session-validation function in adminApi.
+        const restoredAdmin = await validateSavedSession();
+
+        if (!cancelled) {
+          setAdmin(restoredAdmin);
+        }
+      } catch {
+        if (!cancelled) {
+          localStorage.removeItem("admin_token");
+          setAdmin(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function login(
-    email: string,
-    password: string
-  ) {
+  async function login(email: string, password: string) {
     setLoading(true);
 
     try {
-      const result =
-        await apiLogin(
-          email,
-          password
-        );
+      const result = await apiLogin(email, password);
 
-      localStorage.setItem(
-        "admin_token",
-        result.token
-      );
-
+      localStorage.setItem("admin_token", result.token);
       setAdmin(result.admin);
     } finally {
       setLoading(false);
@@ -80,26 +85,14 @@ export function AuthProvider({
   }
 
   function logout() {
-    localStorage.removeItem(
-      "admin_token"
-    );
-
+    localStorage.removeItem("admin_token");
     setAdmin(null);
 
-    void apiLogout().catch(() => {
-      // Local authentication state is already cleared.
-    });
+    void apiLogout().catch(() => {});
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        admin,
-        loading,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{ admin, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -107,4 +100,13 @@ export function AuthProvider({
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+/**
+ * Connect this to your backend's existing authenticated
+ * current-admin/session endpoint.
+ */
+async function validateSavedSession(): Promise<AdminUser> {
+  const { getCurrentAdmin } = await import("../services/adminApi");
+  return getCurrentAdmin();
 }

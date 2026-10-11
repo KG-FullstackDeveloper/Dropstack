@@ -1,187 +1,203 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
-  ArrowUpRight,
-  Globe2,
-  MoreHorizontal,
+  Archive,
+  Check,
+  Copy,
+  ExternalLink,
+  Globe,
+  LoaderCircle,
   Package,
+  Pencil,
   Plus,
   Search,
-  Settings2,
-  ShoppingBag,
   Store as StoreIcon,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
+type StoreStatus = "active" | "draft" | "archived";
 
 type StoreItem = {
   id: string;
   name: string;
   slug: string;
   niche: string;
-  status: "Active" | "Draft";
-  description: string;
-  logoUrl: string | null;
-  products: number;
+  domain: string;
+  status: StoreStatus;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-type StoreApiRecord = {
-  id?: string;
-  name?: string;
+type Product = {
+  id: string;
+  name: string;
   slug?: string;
-  niche?: string;
-  status?: string;
-  description?: string | null;
-  logo_url?: string | null;
-  logoUrl?: string | null;
-  product_count?: number;
-  productCount?: number;
-  created_at?: string;
-  updated_at?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  description?: string;
+  category?: string;
+  price: number;
+  currency?: string;
+  image_url?: string | null;
+  images?: string[] | string | null;
+  sku?: string | null;
+  stock?: number;
+  active?: number;
+};
+
+type ApiResult<T> = {
+  success?: boolean;
+  data?: T;
+  error?: string;
 };
 
 const API_BASE = (
   import.meta.env.VITE_API_URL || "http://localhost:4000/api"
 ).replace(/\/+$/, "");
 
-function getToken(): string {
-  return localStorage.getItem("admin_token") || "";
-}
-
-async function storeRequest<T>(
-  path: string,
-  options: RequestInit = {},
+async function apiRequest<T>(
+  endpoint: string,
+  init: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
+  const headers = new Headers(init.headers);
+  const token = localStorage.getItem("admin_token");
 
-  const response = await fetch(`${API_BASE}/store${path}`, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (init.body && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...init,
+    headers,
+    credentials: "include",
   });
 
-  const payload = await response.json().catch(() => null);
+  const result = (await response.json().catch(() => ({}))) as ApiResult<T>;
 
-  if (!response.ok) {
-    throw new Error(
-      payload?.error ||
-        payload?.message ||
-        `Store request failed (${response.status}).`,
-    );
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || `Request failed (${response.status}).`);
   }
 
-  if (payload?.success === false) {
-    throw new Error(payload?.error || payload?.message || "Store request failed.");
+  // Some APIs return { success, data }, while others return the payload directly.
+  if (Object.prototype.hasOwnProperty.call(result, "data")) {
+    return result.data as T;
   }
-
-  return payload as T;
+  return result as T;
 }
 
-function extractStores(payload: unknown): StoreApiRecord[] {
-  if (Array.isArray(payload)) {
-    return payload as StoreApiRecord[];
+function normalizeStatus(status?: string): StoreStatus {
+  const value = (status || "draft").toLowerCase();
+  if (value === "active") return "active";
+  if (value === "archived") return "archived";
+  return "draft";
+}
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+}
+
+function money(price: number, currency = "USD") {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(Number(price) || 0);
+  } catch {
+    return `${currency} ${(Number(price) || 0).toFixed(2)}`;
   }
+}
 
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const record = payload as Record<string, unknown>;
-
-  if (Array.isArray(record.data)) {
-    return record.data as StoreApiRecord[];
-  }
-
-  if (record.data && typeof record.data === "object") {
-    const data = record.data as Record<string, unknown>;
-
-    if (Array.isArray(data.stores)) {
-      return data.stores as StoreApiRecord[];
+function getProductImage(product: Product): string | undefined {
+  if (product.image_url) return product.image_url;
+  if (Array.isArray(product.images)) return product.images[0] || undefined;
+  if (typeof product.images === "string") {
+    try {
+      const parsed: unknown = JSON.parse(product.images);
+      if (Array.isArray(parsed) && typeof parsed[0] === "string") {
+        return parsed[0];
+      }
+    } catch {
+      if (product.images.trim()) return product.images;
     }
   }
+  return undefined;
+}
 
-  if (Array.isArray(record.stores)) {
-    return record.stores as StoreApiRecord[];
+function unwrapList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && "items" in value) {
+    const items = (value as { items?: unknown }).items;
+    if (Array.isArray(items)) return items as T[];
   }
-
   return [];
 }
 
-function mapStore(record: StoreApiRecord): StoreItem {
-  const slug = record.slug || record.id || "";
-
-  return {
-    id: record.id || slug,
-    name: record.name || "Untitled store",
-    slug,
-    niche: record.niche || "Other",
-    status:
-      String(record.status).toLowerCase() === "active" ? "Active" : "Draft",
-    description: record.description || "",
-    logoUrl: record.logo_url ?? record.logoUrl ?? null,
-    products: Number(record.product_count ?? record.productCount ?? 0),
-    createdAt: record.created_at || record.createdAt || "",
-    updatedAt: record.updated_at || record.updatedAt || "",
-  };
-}
-
-function formatDate(value: string): string {
-  if (!value) return "Recently";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Recently";
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-  }).format(date);
-}
-
-function getStoreUrl(slug: string): string {
-  return `${window.location.origin}/store/${encodeURIComponent(slug)}`;
-}
-
 export default function Stores() {
-  const navigate = useNavigate();
-
   const [stores, setStores] = useState<StoreItem[]>([]);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"All" | "Active" | "Draft">("All");
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newStoreName, setNewStoreName] = useState("");
-  const [newStoreNiche, setNewStoreNiche] = useState("Beauty & Skincare");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
-  const [createError, setCreateError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "draft">("all");
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingStore, setEditingStore] = useState<StoreItem | null>(null);
+  const [actionStore, setActionStore] = useState<string | null>(null);
+  const [copiedStore, setCopiedStore] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [niche, setNiche] = useState("General");
+  const [description, setDescription] = useState("");
+  const [domain, setDomain] = useState("");
+  const [status, setStatus] = useState<StoreStatus>("draft");
 
   const loadStores = useCallback(async () => {
     setLoading(true);
     setError("");
-
     try {
-      const payload = await storeRequest<unknown>("/", {
-        method: "GET",
-      });
-
-      setStores(extractStores(payload).map(mapStore));
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load stores.",
+      const response = await apiRequest<unknown>("/stores");
+      const data = unwrapList<StoreItem>(response);
+      setStores(
+        data.map((store) => ({
+          ...store,
+          niche: store.niche || "General",
+          domain: store.domain || "",
+          status: normalizeStatus(store.status),
+          createdAt: store.createdAt || "",
+          updatedAt: store.updatedAt || "",
+        })),
       );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load stores.");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const response = await apiRequest<unknown>("/products");
+      setProducts(unwrapList<Product>(response));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? `Could not load products: ${err.message}`
+          : "Could not load products.",
+      );
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
     }
   }, []);
 
@@ -191,478 +207,540 @@ export default function Stores() {
 
   const filteredStores = useMemo(() => {
     const query = search.trim().toLowerCase();
-
     return stores.filter((store) => {
-      const matchesSearch =
-        !query ||
-        store.name.toLowerCase().includes(query) ||
-        store.niche.toLowerCase().includes(query) ||
-        store.slug.toLowerCase().includes(query);
+      const matchesSearch = [
+        store.name || "",
+        store.slug || "",
+        store.niche || "",
+        store.domain || "",
+      ].some((value) => value.toLowerCase().includes(query));
 
-      const matchesFilter = filter === "All" || store.status === filter;
-
-      return matchesSearch && matchesFilter;
+      return matchesSearch && (filter === "all" || store.status === filter);
     });
   }, [stores, search, filter]);
 
-  async function createStore() {
-    const name = newStoreName.trim();
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+    return products.filter((product) =>
+      [product.name || "", product.category || "", product.sku || ""].some(
+        (value) => value.toLowerCase().includes(query),
+      ),
+    );
+  }, [products, productSearch]);
 
-    if (!name || creating) return;
+  function resetForm() {
+    setName("");
+    setNiche("General");
+    setDescription("");
+    setDomain("");
+    setStatus("draft");
+    setSelectedProducts([]);
+    setEditingStore(null);
+    setProductSearch("");
+  }
 
-    setCreating(true);
-    setCreateError("");
+  async function openCreateForm() {
+    resetForm();
+    setError("");
+    setNotice("");
+    setShowForm(true);
+    await loadProducts();
+  }
+
+  async function openEditForm(store: StoreItem) {
+    resetForm();
+    setError("");
+    setNotice("");
+    setEditingStore(store);
+    setName(store.name || "");
+    setNiche(store.niche || "General");
+    setDescription(store.description || "");
+    setDomain(store.domain === `${store.slug}.localhost` ? "" : store.domain || "");
+    setStatus(normalizeStatus(store.status));
+    setShowForm(true);
+
+    await Promise.all([
+      loadProducts(),
+      (async () => {
+        try {
+          const response = await apiRequest<unknown>(
+            `/stores/${encodeURIComponent(store.id)}/products`,
+          );
+          const payload = response as {
+            productIds?: unknown;
+            products?: unknown;
+            data?: unknown;
+          };
+          let ids: string[] = [];
+
+          if (Array.isArray(payload?.productIds)) {
+            ids = payload.productIds.map(String);
+          } else if (Array.isArray(payload?.products)) {
+            ids = (payload.products as Array<string | Product>).map((item) =>
+              typeof item === "string" ? item : String(item.id),
+            );
+          } else if (Array.isArray(payload?.data)) {
+            ids = (payload.data as Array<string | Product>).map((item) =>
+              typeof item === "string" ? item : String(item.id),
+            );
+          } else if (Array.isArray(response)) {
+            ids = (response as Array<string | Product>).map((item) =>
+              typeof item === "string" ? item : String(item.id),
+            );
+          }
+          setSelectedProducts(ids.filter(Boolean));
+        } catch {
+          // Older backend versions may not yet expose store-product assignments.
+          setSelectedProducts([]);
+        }
+      })(),
+      (async () => {
+        try {
+          const config = await apiRequest<{
+            description?: string;
+            data?: { description?: string };
+          }>(`/store/${encodeURIComponent(store.id)}`);
+          const details = config as { description?: string; data?: { description?: string } };
+          if (details.description || details.data?.description) {
+            setDescription(details.description || details.data?.description || "");
+          }
+        } catch {
+          // Store description is optional; keep the value already in the store record.
+        }
+      })(),
+    ]);
+  }
+
+  function toggleProduct(id: string) {
+    setSelectedProducts((current) =>
+      current.includes(id)
+        ? current.filter((productId) => productId !== id)
+        : [...current, id],
+    );
+  }
+
+  function selectAllShown() {
+    setSelectedProducts((current) => {
+      const combined = new Set(current);
+      filteredProducts.forEach((product) => combined.add(product.id));
+      return [...combined];
+    });
+  }
+
+  async function submitStore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError("Enter a store name.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    const payload = {
+      name: name.trim(),
+      niche: niche.trim() || "General",
+      description: description.trim(),
+      domain: domain.trim() || null,
+      status,
+      productIds: selectedProducts,
+    };
 
     try {
-      await storeRequest<unknown>("/", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          niche: newStoreNiche,
-          status: "Draft",
-        }),
-      });
+      if (editingStore) {
+        await apiRequest<StoreItem>(
+          `/stores/${encodeURIComponent(editingStore.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          },
+        );
+        setNotice("Store details and product selections saved.");
+      } else {
+        await apiRequest<StoreItem>("/stores", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        setNotice(
+          selectedProducts.length
+            ? `Store created with ${selectedProducts.length} selected product(s).`
+            : "Store created successfully.",
+        );
+      }
 
-      setNewStoreName("");
-      setNewStoreNiche("Beauty & Skincare");
-      setShowCreate(false);
-
+      setShowForm(false);
+      resetForm();
       await loadStores();
-    } catch (requestError) {
-      setCreateError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to create this store.",
-      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save store.");
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   }
 
-  function openStore(store: StoreItem) {
-    navigate(`/store/${encodeURIComponent(store.slug)}`);
-  }
-
-  function previewStore(store: StoreItem) {
-    window.open(getStoreUrl(store.slug), "_blank", "noopener,noreferrer");
-  }
-
-  async function copyStoreUrl(store: StoreItem) {
+  async function updateStatus(store: StoreItem, nextStatus: StoreStatus) {
+    setActionStore(null);
+    setError("");
+    setNotice("");
     try {
-      await navigator.clipboard.writeText(getStoreUrl(store.slug));
-      setMenuOpen(null);
-    } catch {
-      setError("Unable to copy the store URL. Please copy it from the address bar.");
+      await apiRequest<StoreItem>(
+        `/stores/${encodeURIComponent(store.id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: nextStatus }),
+        },
+      );
+      setNotice(`${store.name} updated.`);
+      await loadStores();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update store.");
     }
   }
+
+  async function archiveStore(store: StoreItem) {
+    if (store.id === "default") {
+      setError("The default store cannot be archived here.");
+      return;
+    }
+    if (!window.confirm(`Archive "${store.name}"?`)) return;
+
+    setActionStore(null);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(`/stores/${encodeURIComponent(store.id)}`, {
+        method: "DELETE",
+      });
+      setNotice(`${store.name} archived.`);
+      await loadStores();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to archive store.");
+    }
+  }
+
+  function getStoreUrl(store: StoreItem) {
+    const localDomain = `${store.slug}.localhost`;
+    if (store.domain && store.domain !== localDomain) {
+      return /^https?:\/\//i.test(store.domain)
+        ? store.domain
+        : `https://${store.domain}`;
+    }
+    return `http://${localDomain}:5173`;
+  }
+
+  async function copyStoreLink(store: StoreItem) {
+    const url = getStoreUrl(store);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedStore(store.id);
+      setNotice("Store link copied.");
+      window.setTimeout(() => {
+        setCopiedStore((current) => (current === store.id ? null : current));
+      }, 1800);
+    } catch {
+      setError(`Copy was blocked by the browser. Store link: ${url}`);
+    }
+  }
+
+  const totalStores = stores.filter((store) => store.status !== "archived").length;
+  const activeStores = stores.filter((store) => store.status === "active").length;
+  const draftStores = stores.filter((store) => store.status === "draft").length;
 
   return (
-    <div className="min-h-full bg-[#f7f7f8]">
-      <div className="mx-auto max-w-[1500px]">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-6 py-7 sm:px-8">
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  <StoreIcon size={14} />
-                  Commerce
-                </div>
-
-                <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                  Stores
-                </h1>
-
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  Create, manage, preview and organize every storefront from one place.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateError("");
-                  setShowCreate(true);
-                }}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                <Plus size={18} />
-                Create store
-              </button>
-            </div>
+    <main className="min-h-full bg-slate-50 p-4 sm:p-7">
+      <div className="mx-auto max-w-[1500px] space-y-6">
+        <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-400">
+              Dashboard / Store Management
+            </p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+              Store Management
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Build and manage storefronts from one workspace.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => void openCreateForm()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+          >
+            <Plus size={17} />
+            Create Store
+          </button>
+        </header>
 
-          <div className="border-b border-slate-200 px-6 py-4 sm:px-8">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="relative w-full lg:max-w-md">
-                <Search
-                  size={17}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                />
+        {error && (
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <span className="break-words">{error}</span>
+            <button type="button" onClick={() => setError("")} aria-label="Dismiss error">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {notice && (
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice("")} aria-label="Dismiss notice">
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Total stores", value: totalStores, hint: "Managed storefronts", icon: StoreIcon },
+            { label: "Active stores", value: activeStores, hint: "Published status", icon: Globe },
+            { label: "Draft stores", value: draftStores, hint: "Not yet published", icon: Archive },
+            { label: "Available products", value: products.length, hint: "From your Products API", icon: Package },
+          ].map(({ label, value, hint, icon: Icon }) => (
+            <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-500">{label}</p>
+                <Icon size={19} className="text-slate-400" />
+              </div>
+              <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+                {loading ? "—" : value}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{hint}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Your Stores</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Edit store details, copy links, and manage publication status.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search stores..."
-                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 sm:w-64"
                 />
               </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto">
-                {(["All", "Active", "Draft"] as const).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setFilter(item)}
-                    className={`min-h-11 shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      filter === item
-                        ? "bg-slate-950 text-white"
-                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as typeof filter)}
+                className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              >
+                <option value="all">All stores</option>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+              </select>
             </div>
           </div>
 
-          <div className="px-6 py-6 sm:px-8">
-            {error && (
-              <div
-                role="alert"
-                className="mb-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <p>{error}</p>
-                <button
-                  type="button"
-                  onClick={() => void loadStores()}
-                  className="min-h-10 shrink-0 rounded-lg border border-red-200 px-3 font-semibold hover:bg-red-100"
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
+          <div className="space-y-3 p-4 sm:p-5">
             {loading ? (
-              <div className="py-20 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
-                <p className="mt-4 text-sm text-slate-500">Loading your stores...</p>
+              <div className="flex items-center justify-center gap-2 py-14 text-sm text-slate-500">
+                <LoaderCircle className="animate-spin" size={18} />
+                Loading stores...
               </div>
             ) : filteredStores.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-16 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-                  <StoreIcon size={24} className="text-slate-400" />
-                </div>
-
-                <h2 className="mt-5 text-lg font-semibold text-slate-950">
-                  {stores.length === 0 ? "Create your first store" : "No stores found"}
-                </h2>
-
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  {stores.length === 0
-                    ? "Create a storefront to start organizing its products and public store page."
-                    : "Try another search or filter, or create a new store."}
+              <div className="rounded-xl border border-dashed border-slate-300 px-5 py-14 text-center">
+                <StoreIcon className="mx-auto text-slate-300" size={32} />
+                <h3 className="mt-3 font-semibold text-slate-900">No stores found</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Create a store or change your search filters.
                 </p>
-
-                {stores.length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCreate(true)}
-                    className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-                  >
-                    <Plus size={17} />
-                    Create store
-                  </button>
-                )}
               </div>
             ) : (
-              <div className="grid gap-5 xl:grid-cols-2">
-                {filteredStores.map((store) => (
-                  <article
-                    key={store.id}
-                    className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg"
-                  >
-                    <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#f7f2ec_0%,#f2f3ef_48%,#ece9e4_100%)] p-6">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-4">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 text-white shadow-sm">
-                            {store.logoUrl ? (
-                              <img
-                                src={store.logoUrl}
-                                alt={`${store.name} logo`}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <StoreIcon size={22} />
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">
-                                {store.name}
-                              </h2>
-
-                              <span
-                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                  store.status === "Active"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-amber-100 text-amber-700"
-                                }`}
-                              >
-                                {store.status}
-                              </span>
-                            </div>
-
-                            <p className="mt-1 text-sm text-slate-500">{store.niche}</p>
-                          </div>
-                        </div>
-
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMenuOpen(menuOpen === store.id ? null : store.id)
-                            }
-                            className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white hover:text-slate-950"
-                            aria-label={`More options for ${store.name}`}
-                            aria-expanded={menuOpen === store.id}
-                          >
-                            <MoreHorizontal size={20} />
-                          </button>
-
-                          {menuOpen === store.id && (
-                            <div className="absolute right-0 top-12 z-20 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuOpen(null);
-                                  openStore(store);
-                                }}
-                                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                              >
-                                <Settings2 size={16} />
-                                Manage
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuOpen(null);
-                                  previewStore(store);
-                                }}
-                                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                              >
-                                <ArrowUpRight size={16} />
-                                Preview
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => void copyStoreUrl(store)}
-                                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                              >
-                                <Globe2 size={16} />
-                                Copy store URL
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex min-h-11 items-center gap-2 rounded-xl bg-white/80 px-3 py-2.5">
-                        <Globe2 size={16} className="shrink-0 text-slate-400" />
-                        <span className="truncate text-sm text-slate-600">
-                          {getStoreUrl(store.slug)}
+              filteredStores.map((store) => (
+                <article
+                  key={store.id}
+                  className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:shadow-sm sm:flex-row sm:items-center"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                      <StoreIcon size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-slate-950">{store.name}</h3>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          store.status === "active"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : store.status === "draft"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-100 text-slate-500"
+                        }`}>
+                          {store.status.charAt(0).toUpperCase() + store.status.slice(1)}
                         </span>
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 divide-x divide-slate-100">
-                      <Metric
-                        icon={Package}
-                        label="Products"
-                        value={store.products.toLocaleString()}
-                      />
-
-                      <Metric icon={ShoppingBag} label="Orders" value="—" />
-
-                      <Metric icon={ArrowUpRight} label="Revenue" value="—" />
-                    </div>
-
-                    <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-slate-400">
-                        Created {formatDate(store.createdAt)}
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {store.domain || `${store.slug}.localhost`} · {store.niche}
                       </p>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => previewStore(store)}
-                          className="min-h-11 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          Preview
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => openStore(store)}
-                          className="min-h-11 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                        >
-                          Manage store
-                        </button>
-                      </div>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Slug: {store.slug} · Created {formatDate(store.createdAt)}
+                      </p>
                     </div>
-                  </article>
-                ))}
-              </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" title="Copy store link" onClick={() => void copyStoreLink(store)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm text-slate-600 hover:bg-slate-50">
+                      {copiedStore === store.id ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedStore === store.id ? "Copied" : "Copy link"}
+                    </button>
+                    <button type="button" title="Open storefront" onClick={() => window.open(getStoreUrl(store), "_blank", "noopener,noreferrer")} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+                      <ExternalLink size={17} />
+                    </button>
+                    <button type="button" title="Edit store" onClick={() => void openEditForm(store)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+                      <Pencil size={17} />
+                    </button>
+                    <div className="relative">
+                      <button type="button" title="More store actions" onClick={() => setActionStore(actionStore === store.id ? null : store.id)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+                        <Archive size={17} />
+                      </button>
+                      {actionStore === store.id && (
+                        <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                          {store.status !== "active" && (
+                            <button type="button" onClick={() => void updateStatus(store, "active")} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50">
+                              Mark active
+                            </button>
+                          )}
+                          {store.status !== "draft" && (
+                            <button type="button" onClick={() => void updateStatus(store, "draft")} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50">
+                              Move to draft
+                            </button>
+                          )}
+                          {store.status !== "archived" && (
+                            <button type="button" onClick={() => void archiveStore(store)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">
+                              Archive store
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))
             )}
           </div>
         </section>
-
-        <div className="mt-5 flex items-center justify-between px-1 text-xs text-slate-400">
-          <span>
-            {stores.length} {stores.length === 1 ? "store" : "stores"} total
-          </span>
-          <span>Store management</span>
-        </div>
       </div>
 
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-store-title"
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
-          >
-            <div className="flex items-start justify-between gap-4">
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 sm:items-center"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) {
+              setShowForm(false);
+              resetForm();
+            }
+          }}
+        >
+          <form onSubmit={submitStore} className="my-5 w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  New storefront
-                </p>
-
-                <h2
-                  id="create-store-title"
-                  className="mt-2 text-2xl font-semibold tracking-tight text-slate-950"
-                >
-                  Create a store
+                <h2 className="text-xl font-bold text-slate-950">
+                  {editingStore ? "Edit store" : "Create your storefront"}
                 </h2>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Set the basic identity of your storefront. You can configure it further after creation.
+                <p className="mt-1 text-sm text-slate-500">
+                  Configure the basics and choose products from your catalogue.
                 </p>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-950"
-                aria-label="Close create store dialog"
-              >
-                ×
+              <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Close">
+                <X size={18} />
               </button>
             </div>
 
-            <form
-              className="mt-7 space-y-5"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void createStore();
-              }}
-            >
-              <div>
-                <label
-                  htmlFor="store-name"
-                  className="mb-2 block text-sm font-semibold text-slate-800"
-                >
-                  Store name
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Store name *
+                <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Beauty Bliss" className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 px-3 outline-none focus:border-emerald-500" />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Store category
+                <input value={niche} onChange={(event) => setNiche(event.target.value)} placeholder="Beauty, fashion, electronics..." className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 px-3 outline-none focus:border-emerald-500" />
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Store description
+                <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe your store and what customers can find here..." rows={3} className="mt-1.5 w-full rounded-lg border border-slate-200 p-3 outline-none focus:border-emerald-500" />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Domain (optional)
+                <input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="shop.example.com" className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 px-3 outline-none focus:border-emerald-500" />
+              </label>
+              {editingStore && (
+                <label className="text-sm font-medium text-slate-700">
+                  Status
+                  <select value={status} onChange={(event) => setStatus(event.target.value as StoreStatus)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3">
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                    <option value="archived">Archived</option>
+                  </select>
                 </label>
-
-                <input
-                  id="store-name"
-                  value={newStoreName}
-                  onChange={(event) => setNewStoreName(event.target.value)}
-                  placeholder="e.g. Glow Skin"
-                  maxLength={100}
-                  required
-                  className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base outline-none focus:border-slate-400"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="store-niche"
-                  className="mb-2 block text-sm font-semibold text-slate-800"
-                >
-                  Business category
-                </label>
-
-                <select
-                  id="store-niche"
-                  value={newStoreNiche}
-                  onChange={(event) => setNewStoreNiche(event.target.value)}
-                  className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base outline-none focus:border-slate-400"
-                >
-                  <option>Beauty &amp; Skincare</option>
-                  <option>Electronics &amp; Devices</option>
-                  <option>Pet Products</option>
-                  <option>Shapewear</option>
-                  <option>Fashion</option>
-                  <option>Home &amp; Lifestyle</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-              {createError && (
-                <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
-                  {createError}
-                </p>
               )}
+            </div>
 
-              <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  disabled={creating}
-                  className="min-h-12 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={!newStoreName.trim() || creating}
-                  className="min-h-12 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {creating ? "Creating..." : "Create store"}
-                </button>
+            <section className="mt-7 rounded-xl border border-slate-200">
+              <div className="border-b border-slate-100 p-4">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div>
+                    <h3 className="font-semibold text-slate-900">Import products</h3>
+                    <p className="mt-1 text-sm text-slate-500">{selectedProducts.length} product(s) selected</p>
+                  </div>
+                  <button type="button" onClick={selectAllShown} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">
+                    Select all shown
+                  </button>
+                </div>
+                <div className="relative mt-3">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products by name, category or SKU..." className="min-h-10 w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500" />
+                </div>
               </div>
-            </form>
-          </div>
+
+              <div className="max-h-72 space-y-2 overflow-y-auto p-3">
+                {productsLoading ? (
+                  <div className="flex justify-center py-8 text-slate-500"><LoaderCircle size={20} className="animate-spin" /></div>
+                ) : filteredProducts.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-500">No products found. Add products in Product Management first.</p>
+                ) : (
+                  filteredProducts.map((product) => {
+                    const image = getProductImage(product);
+                    const selected = selectedProducts.includes(product.id);
+                    return (
+                      <label key={product.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${selected ? "border-emerald-300 bg-emerald-50/50" : "border-slate-100 hover:bg-slate-50"}`}>
+                        <input type="checkbox" checked={selected} onChange={() => toggleProduct(product.id)} className="h-4 w-4 accent-emerald-600" />
+                        {image ? (
+                          <img src={image} alt={product.name} className="h-14 w-14 rounded-lg border border-slate-100 object-cover" />
+                        ) : (
+                          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><Package size={22} /></div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{product.category || "General"} · SKU {product.sku || "—"}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-800">{money(product.price, product.currency)}</p>
+                        </div>
+                        {typeof product.stock === "number" && <span className="hidden text-xs text-slate-500 sm:block">Stock: {product.stock}</span>}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
+              <button type="button" disabled={saving} onClick={() => { setShowForm(false); resetForm(); }} className="min-h-11 rounded-lg border border-slate-200 px-5 text-sm font-semibold text-slate-700">
+                Cancel
+              </button>
+              <button disabled={saving || !name.trim()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                {saving && <LoaderCircle size={16} className="animate-spin" />}
+                {editingStore ? "Save changes" : "Create store"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
-    </div>
-  );
-}
-
-function Metric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Package;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0 px-3 py-5 sm:px-4">
-      <div className="flex items-center gap-2 text-slate-400">
-        <Icon size={15} />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-
-      <p className="mt-2 truncate text-base font-semibold text-slate-950">{value}</p>
-    </div>
+    </main>
   );
 }

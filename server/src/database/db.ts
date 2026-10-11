@@ -1,3 +1,4 @@
+
 import Database from "better-sqlite3";
 import bcryptjs from "bcryptjs";
 import path from "path";
@@ -153,81 +154,64 @@ CREATE TABLE IF NOT EXISTS login_events (
 );
 
 CREATE TABLE IF NOT EXISTS inventory_movements (
-id TEXT PRIMARY KEY,
-product_id TEXT NOT NULL,
-previous_stock INTEGER NOT NULL DEFAULT 0,
-change_amount INTEGER NOT NULL DEFAULT 0,
-new_stock INTEGER NOT NULL DEFAULT 0,
-reason TEXT NOT NULL DEFAULT 'Correction',
-note TEXT,
-admin_id TEXT,
-created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  id TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL,
+  previous_stock INTEGER NOT NULL DEFAULT 0,
+  change_amount INTEGER NOT NULL DEFAULT 0,
+  new_stock INTEGER NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL DEFAULT 'Correction',
+  note TEXT,
+  admin_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_id
-ON inventory_movements(product_id
-);
+ON inventory_movements(product_id);
 
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_created_at
-ON inventory_movements(created_at
-);
-
+ON inventory_movements(created_at);
 `);
+
+/*
+SAFE COLUMN MIGRATION HELPER
+--------------------------------------------------------------------------
+Checks the actual database schema before adding a column.
+Existing tables and records are preserved.
+--------------------------------------------------------------------------
+*/
+
+function ensureColumn(
+  tableName: string,
+  columnName: string,
+  definition: string,
+): void {
+  // Table and column names passed here are internal constants only.
+  const columns = db
+    .prepare(`PRAGMA table_info("${tableName}")`)
+    .all() as Array<{ name: string }>;
+
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(
+      `ALTER TABLE "${tableName}" ADD COLUMN "${columnName}" ${definition}`,
+    );
+  }
+}
 
 /*
 SAFE ADMIN USER MIGRATION
 --------------------------------------------------------------------------
 */
 
-const adminColumns = db
-  .prepare("PRAGMA table_info(admin_users)")
-  .all() as Array<{
-    name: string;
-  }>;
+ensureColumn("admin_users", "phone", "TEXT");
 
-const adminColumnNames = new Set(
-  adminColumns.map((column) => column.name)
+ensureColumn(
+  "admin_users",
+  "two_factor_enabled",
+  "INTEGER NOT NULL DEFAULT 1",
 );
 
-if (!adminColumnNames.has("phone")) {
-  db.exec(`
-    ALTER TABLE admin_users
-    ADD COLUMN phone TEXT
-  `);
-}
-
-if (!adminColumnNames.has("two_factor_enabled")) {
-  db.exec(`
-    ALTER TABLE admin_users
-    ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 1
-  `);
-}
-
-if (!adminColumnNames.has("created_at")) {
-  db.exec(`
-    ALTER TABLE admin_users
-    ADD COLUMN created_at TEXT
-  `);
-
-  db.exec(`
-    UPDATE admin_users
-    SET created_at = datetime('now')
-    WHERE created_at IS NULL
-  `);
-}
-
-if (!adminColumnNames.has("updated_at")) {
-  db.exec(`
-    ALTER TABLE admin_users
-    ADD COLUMN updated_at TEXT
-  `);
-
-  db.exec(`
-    UPDATE admin_users
-    SET updated_at = datetime('now')
-    WHERE updated_at IS NULL
-  `);
-}
+ensureColumn("admin_users", "created_at", "TEXT");
+ensureColumn("admin_users", "updated_at", "TEXT");
 
 db.exec(`
 UPDATE admin_users
@@ -246,149 +230,45 @@ WHERE updated_at IS NULL;
 /*
 SAFE PRODUCT MIGRATION
 --------------------------------------------------------------------------
-Existing databases may have been created with an older products table.
-Every column used by the current product API is checked and added
-individually so existing product data is preserved.
---------------------------------------------------------------------------
 */
 
-function ensureProductColumn(
-  columnName: string,
-  definition: string,
-): void {
-  const columns = db
-    .prepare("PRAGMA table_info(products)")
-    .all() as Array<{
-      name: string;
-    }>;
-
-  const names = new Set(
-    columns.map((column) => column.name)
-  );
-
-  if (!names.has(columnName)) {
-    db.exec(`
-      ALTER TABLE products
-      ADD COLUMN ${columnName} ${definition}
-    `);
-  }
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* MULTI-STORE FOUNDATION                                                     */
-/* -------------------------------------------------------------------------- */
+ensureColumn("products", "sku", "TEXT");
+ensureColumn("products", "images", "TEXT DEFAULT '[]'");
+ensureColumn("products", "video_url", "TEXT");
+ensureColumn("products", "supplier_name", "TEXT");
+ensureColumn("products", "supplier_product_id", "TEXT");
+ensureColumn("products", "warehouse_country", "TEXT");
+ensureColumn("products", "processing_time", "TEXT");
+ensureColumn("products", "delivery_time", "TEXT");
+ensureColumn("products", "supplier_cost", "REAL DEFAULT 0");
+ensureColumn("products", "shipping_cost", "REAL DEFAULT 0");
+ensureColumn("products", "other_cost", "REAL DEFAULT 0");
+ensureColumn("products", "profit_per_unit", "REAL DEFAULT 0");
+ensureColumn("products", "profit_margin", "REAL DEFAULT 0");
+ensureColumn("products", "stock", "INTEGER DEFAULT 0");
+ensureColumn("products", "low_stock_threshold", "INTEGER DEFAULT 0");
+ensureColumn("products", "variants", "TEXT DEFAULT '[]'");
+ensureColumn("products", "active", "INTEGER DEFAULT 1");
+ensureColumn("products", "created_at", "TEXT");
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS stores (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    niche TEXT NOT NULL DEFAULT 'Other',
-    status TEXT NOT NULL DEFAULT 'Draft'
-      CHECK (status IN ('Active', 'Draft')),
-    description TEXT,
-    logo_url TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-`);
-
-function ensureStoreColumn(
-  columnName: string,
-  definition: string,
-): void {
-  const columns = db
-    .prepare("PRAGMA table_info(products)")
-    .all() as Array<{ name: string }>;
-
-  if (!columns.some((column) => column.name === columnName)) {
-    db.exec(
-      `ALTER TABLE products ADD COLUMN ${columnName} ${definition}`,
-    );
-  }
-}
-
-ensureStoreColumn("store_id", "TEXT");
-
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_products_store_id
-  ON products(store_id);
-
-  CREATE INDEX IF NOT EXISTS idx_stores_status
-  ON stores(status);
-`);
-
-ensureProductColumn("sku", "TEXT");
-ensureProductColumn("images", "TEXT DEFAULT '[]'");
-ensureProductColumn("video_url", "TEXT");
-ensureProductColumn("supplier_name", "TEXT");
-ensureProductColumn("supplier_product_id", "TEXT");
-ensureProductColumn("warehouse_country", "TEXT");
-ensureProductColumn("processing_time", "TEXT");
-ensureProductColumn("delivery_time", "TEXT");
-ensureProductColumn("supplier_cost", "REAL DEFAULT 0");
-ensureProductColumn("shipping_cost", "REAL DEFAULT 0");
-ensureProductColumn("other_cost", "REAL DEFAULT 0");
-ensureProductColumn("profit_per_unit", "REAL DEFAULT 0");
-ensureProductColumn("profit_margin", "REAL DEFAULT 0");
-ensureProductColumn("stock", "INTEGER DEFAULT 0");
-ensureProductColumn("low_stock_threshold", "INTEGER DEFAULT 0");
-ensureProductColumn("variants", "TEXT DEFAULT '[]'");
-ensureProductColumn("active", "INTEGER DEFAULT 1");
-ensureProductColumn("created_at", "TEXT");
-
-db.exec(`
-UPDATE products
-SET images = '[]'
-WHERE images IS NULL;
-
-UPDATE products
-SET variants = '[]'
-WHERE variants IS NULL;
-
-UPDATE products
-SET supplier_cost = 0
-WHERE supplier_cost IS NULL;
-
-UPDATE products
-SET shipping_cost = 0
-WHERE shipping_cost IS NULL;
-
-UPDATE products
-SET other_cost = 0
-WHERE other_cost IS NULL;
-
-UPDATE products
-SET profit_per_unit = 0
-WHERE profit_per_unit IS NULL;
-
-UPDATE products
-SET profit_margin = 0
-WHERE profit_margin IS NULL;
-
-UPDATE products
-SET stock = 0
-WHERE stock IS NULL;
-
-UPDATE products
-SET low_stock_threshold = 0
-WHERE low_stock_threshold IS NULL;
-
-UPDATE products
-SET active = 1
-WHERE active IS NULL;
-
-UPDATE products
-SET created_at = datetime('now')
-WHERE created_at IS NULL;
+UPDATE products SET images = '[]' WHERE images IS NULL;
+UPDATE products SET variants = '[]' WHERE variants IS NULL;
+UPDATE products SET supplier_cost = 0 WHERE supplier_cost IS NULL;
+UPDATE products SET shipping_cost = 0 WHERE shipping_cost IS NULL;
+UPDATE products SET other_cost = 0 WHERE other_cost IS NULL;
+UPDATE products SET profit_per_unit = 0 WHERE profit_per_unit IS NULL;
+UPDATE products SET profit_margin = 0 WHERE profit_margin IS NULL;
+UPDATE products SET stock = 0 WHERE stock IS NULL;
+UPDATE products SET low_stock_threshold = 0 WHERE low_stock_threshold IS NULL;
+UPDATE products SET active = 1 WHERE active IS NULL;
+UPDATE products SET created_at = datetime('now') WHERE created_at IS NULL;
 `);
 
 /*
 REMOVE OLD HARDCODED DEMO PRODUCTS
 --------------------------------------------------------------------------
-Only the known demo SKUs are removed.
-User-created products are untouched.
+Only known demo SKUs are removed. Other products are preserved.
 --------------------------------------------------------------------------
 */
 
@@ -403,7 +283,7 @@ db.prepare(`
 `).run();
 
 /*
-AUTH INDEXES
+AUTH AND PRODUCT INDEXES
 --------------------------------------------------------------------------
 */
 
@@ -451,18 +331,17 @@ if (adminCount === 0) {
   const bootstrapEmail =
     process.env.OWNER_EMAIL?.trim().toLowerCase();
 
-  const bootstrapPassword =
-    process.env.OWNER_PASSWORD;
+  const bootstrapPassword = process.env.OWNER_PASSWORD;
 
   if (!bootstrapEmail || !bootstrapPassword) {
     throw new Error(
-      "No admin exists. Set OWNER_EMAIL and OWNER_PASSWORD in the server .env file before starting the API."
+      "No admin exists. Set OWNER_EMAIL and OWNER_PASSWORD in the server .env file before starting the API.",
     );
   }
 
   if (bootstrapPassword.length < 12) {
     throw new Error(
-      "OWNER_PASSWORD must be at least 12 characters long."
+      "OWNER_PASSWORD must be at least 12 characters long.",
     );
   }
 
@@ -483,19 +362,16 @@ if (adminCount === 0) {
   `).run(
     "admin-1",
     bootstrapEmail,
-    bcryptjs.hashSync(
-      bootstrapPassword,
-      12
-    ),
+    bcryptjs.hashSync(bootstrapPassword, 12),
     "Store Owner",
     null,
     1,
     now,
-    now
+    now,
   );
 
   console.log(
-    `Created initial owner account for ${bootstrapEmail}.`
+    `Created initial owner account for ${bootstrapEmail}.`,
   );
 }
 
@@ -514,26 +390,10 @@ if (storeConfigCount === 0) {
   const now = new Date().toISOString();
 
   const defaultNavigation = JSON.stringify([
-    {
-      label: "Home",
-      page: "home",
-      enabled: true,
-    },
-    {
-      label: "Catalog",
-      page: "catalog",
-      enabled: true,
-    },
-    {
-      label: "Contact",
-      page: "contact",
-      enabled: true,
-    },
-    {
-      label: "Cart",
-      page: "cart",
-      enabled: true,
-    },
+    { label: "Home", page: "home", enabled: true },
+    { label: "Catalog", page: "catalog", enabled: true },
+    { label: "Contact", page: "contact", enabled: true },
+    { label: "Cart", page: "cart", enabled: true },
   ]);
 
   const defaultSettings = JSON.stringify({
@@ -578,8 +438,129 @@ if (storeConfigCount === 0) {
     "#0f172a",
     "#3b82f6",
     "Inter",
-    now
+    now,
   );
 
   console.log("Created default store configuration.");
+}
+
+/*
+MULTI-STORE REGISTRY MIGRATION
+--------------------------------------------------------------------------
+Adds missing columns to existing stores tables without deleting records.
+--------------------------------------------------------------------------
+*/
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS stores (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'MEO Store',
+    slug TEXT NOT NULL DEFAULT 'meo-store',
+    niche TEXT NOT NULL DEFAULT 'General',
+    domain TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+/*
+STORE PRODUCT ASSIGNMENTS
+*/
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS store_products (
+    store_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (store_id, product_id),
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_store_products_store_id
+    ON store_products(store_id);
+
+  CREATE INDEX IF NOT EXISTS idx_store_products_product_id
+    ON store_products(product_id);
+`);
+
+// Add every column individually in case an older stores table exists.
+ensureColumn("stores", "name", "TEXT NOT NULL DEFAULT 'MEO Store'");
+ensureColumn("stores", "slug", "TEXT NOT NULL DEFAULT 'meo-store'");
+ensureColumn("stores", "niche", "TEXT NOT NULL DEFAULT 'General'");
+ensureColumn("stores", "domain", "TEXT");
+ensureColumn("stores", "status", "TEXT NOT NULL DEFAULT 'draft'");
+ensureColumn("stores", "created_at", "TEXT");
+ensureColumn("stores", "updated_at", "TEXT");
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_stores_status
+  ON stores(status);
+`);
+
+db.exec(`
+  UPDATE stores
+  SET created_at = COALESCE(created_at, datetime('now'))
+  WHERE created_at IS NULL;
+
+  UPDATE stores
+  SET updated_at = COALESCE(updated_at, datetime('now'))
+  WHERE updated_at IS NULL;
+`);
+
+/*
+REGISTER DEFAULT STOREFRONT
+--------------------------------------------------------------------------
+INSERT OR IGNORE avoids duplicate registration on later server starts.
+--------------------------------------------------------------------------
+*/
+
+const defaultStoreConfig = db
+  .prepare(`
+    SELECT id, name, updated_at
+    FROM store_config
+    WHERE id = 'default'
+  `)
+  .get() as
+  | { id: string; name: string; updated_at: string }
+  | undefined;
+
+if (defaultStoreConfig) {
+  const existingDefaultStore = db
+    .prepare(`
+      SELECT id
+      FROM stores
+      WHERE id = 'default' OR slug = 'meo-store'
+      LIMIT 1
+    `)
+    .get();
+
+  if (!existingDefaultStore) {
+    const timestamp =
+      defaultStoreConfig.updated_at || new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO stores (
+        id,
+        name,
+        slug,
+        niche,
+        domain,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "default",
+      defaultStoreConfig.name || "MEO Store",
+      "meo-store",
+      "General",
+      null,
+      "Active",
+      timestamp,
+      timestamp,
+    );
+  }
 }
