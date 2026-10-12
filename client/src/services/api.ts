@@ -14,19 +14,25 @@ export interface PublicStore {
   name: string;
   slug: string;
   niche: string;
-  description: string | null;
-  logo_url: string | null;
+  domain?: string | null;
+  status?: string;
+  description?: string | null;
+  logo_url?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiResponse<T> {
+  success?: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
 }
 
 async function handleResponse<T>(
   response: Response,
 ): Promise<T> {
-  let result: {
-    success?: boolean;
-    data?: T;
-    error?: string;
-    message?: string;
-  };
+  let result: ApiResponse<T>;
 
   try {
     result = await response.json();
@@ -36,7 +42,9 @@ async function handleResponse<T>(
 
   if (!response.ok || !result.success) {
     throw new Error(
-      result.error || result.message || "Something went wrong.",
+      result.error ||
+        result.message ||
+        "Something went wrong.",
     );
   }
 
@@ -51,16 +59,19 @@ function adminHeaders(): HeadersInit {
     : {};
 }
 
-/** Global product endpoint retained for platform features. */
+/** Retrieve global products for platform-level features. */
 export async function getProducts(): Promise<Product[]> {
   const response = await fetch(`${API_URL}/api/products`);
   return handleResponse<Product[]>(response);
 }
 
-export async function getProduct(id: string): Promise<Product> {
+export async function getProduct(
+  id: string,
+): Promise<Product> {
   const response = await fetch(
     `${API_URL}/api/products/${encodeURIComponent(id)}`,
   );
+
   return handleResponse<Product>(response);
 }
 
@@ -70,26 +81,29 @@ export async function getProductBySlug(
   const response = await fetch(
     `${API_URL}/api/products/slug/${encodeURIComponent(slug)}`,
   );
+
   return handleResponse<Product>(response);
 }
 
-/** Public multi-store endpoint registered at /api/stores. */
+/** Retrieve public information for one store. */
 export async function getPublicStore(
   slug: string,
 ): Promise<PublicStore> {
   const response = await fetch(
     `${API_URL}/api/stores/public/${encodeURIComponent(slug)}`,
   );
+
   return handleResponse<PublicStore>(response);
 }
 
-/** Returns products assigned to this store only. */
+/** Retrieve products assigned to the requested store. */
 export async function getStoreProducts(
   slug: string,
 ): Promise<Product[]> {
   const response = await fetch(
     `${API_URL}/api/stores/public/${encodeURIComponent(slug)}/products`,
   );
+
   return handleResponse<Product[]>(response);
 }
 
@@ -98,18 +112,23 @@ export async function createCheckout(
 ): Promise<CheckoutResponse> {
   const response = await fetch(`${API_URL}/api/checkout`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(data),
   });
+
   return handleResponse<CheckoutResponse>(response);
 }
 
-/** Existing single-store configuration; kept separate from multi-store APIs. */
+/** Retrieve the default store configuration. */
 export async function getStoreConfig(): Promise<StoreConfig> {
   const response = await fetch(`${API_URL}/api/store`);
+
   return handleResponse<StoreConfig>(response);
 }
 
+/** Save the default store configuration. */
 export async function updateStoreConfig(
   store: StoreConfig,
 ): Promise<StoreConfig> {
@@ -121,5 +140,6 @@ export async function updateStoreConfig(
     },
     body: JSON.stringify(store),
   });
+
   return handleResponse<StoreConfig>(response);
 }

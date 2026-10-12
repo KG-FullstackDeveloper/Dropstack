@@ -1,9 +1,38 @@
+﻿<<<<<<< HEAD
 ﻿
 import {
   BarChart3, Bell, Box, Check, ChevronDown, ChevronRight, Command,
   CreditCard, ExternalLink, LayoutDashboard, LogOut, Menu, Package,
   PackageCheck, Search, Settings, ShoppingCart, Sparkles, Store, Truck,
   User, Users, X, ArrowUpRight, Activity, ShieldCheck, Globe2,
+=======
+﻿import {
+  BarChart3,
+  Bell,
+  Box,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Command,
+  CreditCard,
+  ExternalLink,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  PackageCheck,
+  Palette,
+  Search,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  Sparkles,
+  Store,
+  Truck,
+  User,
+  Users,
+  X,
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -224,9 +253,13 @@ export default function Admin() {
     return (
       <div className="mb-6">
         {!sidebarCollapsed && (
+<<<<<<< HEAD
           <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             {title}
           </p>
+=======
+          <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">{title}</p>
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
         )}
         <div className="space-y-1">
           {items.map((item) => {
@@ -236,10 +269,18 @@ export default function Admin() {
               <button key={item.label} type="button"
                 title={sidebarCollapsed ? item.label : undefined}
                 onClick={() => navigate(item.label as PageKey)}
+<<<<<<< HEAD
                 aria-current={selected ? "page" : undefined}
                 className={navClass(selected, sidebarCollapsed)}>
                 {selected && <span className="absolute -left-3 h-6 w-1 rounded-r-full bg-indigo-500" />}
                 <Icon size={17} strokeWidth={selected ? 2.3 : 1.8} />
+=======
+                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
+                  selected ? "bg-white text-slate-950 shadow-lg shadow-black/20" : "text-slate-400 hover:bg-white/[.07] hover:text-white"
+                } ${sidebarCollapsed ? "justify-center" : ""}`}
+              >
+                <Icon size={17} strokeWidth={selected ? 2.2 : 1.9} />
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
                 {!sidebarCollapsed && <span className="flex-1">{item.label}</span>}
                 {!sidebarCollapsed && selected && <span className="h-1.5 w-1.5 rounded-full bg-indigo-300" />}
               </button>
@@ -251,6 +292,7 @@ export default function Admin() {
   }
 
   const sidebar = (
+<<<<<<< HEAD
     <aside className={`flex h-full flex-col border-r border-slate-200/80 bg-white transition-[width] duration-300 ${sidebarCollapsed ? "w-[78px]" : "w-[270px]"}`}>
       <div className="border-b border-slate-100 px-4 py-5">
         <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`}>
@@ -272,6 +314,38 @@ export default function Admin() {
               <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-900">Global Ecommerce</p><p className="mt-0.5 text-[10px] text-slate-400">Main workspace</p></div>
               <ChevronDown size={15} className={`text-slate-400 transition ${storeOpen ? "rotate-180" : ""}`} />
             </>}
+=======
+    <aside className={`flex h-full flex-col border-r border-white/10 bg-[#0a0d12] text-white shadow-2xl shadow-slate-950/20 transition-[width] duration-200 ${sidebarCollapsed ? "w-[76px]" : "w-[284px]"}`}>
+      <div className="border-b border-white/10 px-3 py-4">
+        <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : "px-2"}`}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#d8ff3e] text-sm font-black text-slate-950 shadow-[0_0_28px_rgba(216,255,62,.18)]">M</div>
+          {!sidebarCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-black tracking-tight text-white">MEO Commerce</p>
+              <p className="text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">Command center</p>
+            </div>
+          )}
+          <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={18} /></button>
+        </div>
+
+        <div ref={storeRef} className="relative mt-4">
+          <button
+            type="button"
+            title={sidebarCollapsed ? "Switch workspace" : undefined}
+            onClick={() => setStoreOpen((value) => !value)}
+            className={`flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[.055] p-2.5 text-left transition hover:bg-white/[.09] ${sidebarCollapsed ? "justify-center" : ""}`}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[#d8ff3e]"><Store size={17} /></div>
+            {!sidebarCollapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-white">Global Ecommerce</p>
+                  <p className="truncate text-[11px] text-slate-500">Live operations</p>
+                </div>
+                <ChevronDown size={16} className={`text-slate-400 transition ${storeOpen ? "rotate-180" : ""}`} />
+              </>
+            )}
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
           </button>
 
           {storeOpen && <div className={`absolute top-[calc(100%+8px)] z-[80] w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/10 ${sidebarCollapsed ? "left-14" : "left-0"}`}>
@@ -289,6 +363,7 @@ export default function Admin() {
         </div>
       </div>
 
+<<<<<<< HEAD
       <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         {renderNavGroup("Workspace", primaryNavigation.slice(0, 1))}
 
@@ -369,15 +444,80 @@ export default function Admin() {
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-950 text-xs font-black text-white">{initials}</div>
           {!sidebarCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-900">{profileName}</p><p className="mt-0.5 text-[10px] text-slate-400">Workspace administrator</p></div>}
           {!sidebarCollapsed && <ChevronDown size={14} className="text-slate-300" />}
+=======
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-5 [scrollbar-color:#334155_transparent]">
+        {renderNavGroup("Sales", primaryNavigation)}
+        {renderNavGroup("Operations", operationsNavigation)}
+        {renderNavGroup("Online store", storeNavigation)}
+
+        <div className="mb-4">
+          <button
+            type="button"
+            title={sidebarCollapsed ? "Settings" : undefined}
+            onClick={() => setSettingsOpen((value) => !value)}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${active === "Settings" ? "bg-white text-slate-950" : "text-slate-400 hover:bg-white/[.07] hover:text-white"} ${sidebarCollapsed ? "justify-center" : ""}`}
+          >
+            <Settings size={17} />
+            {!sidebarCollapsed && <><span className="flex-1">Settings</span><ChevronRight size={16} className={`transition ${settingsOpen ? "rotate-90" : ""}`} /></>}
+          </button>
+
+          {settingsOpen && !sidebarCollapsed && (
+            <div className="ml-5 mt-1 border-l border-white/10 pl-2">
+              {settingsNavigation.map((item) => {
+                const selected = active === "Settings" && settingsSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigateSetting(item.id)}
+                    className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${selected ? "bg-white/10" : "hover:bg-white/[.05]"}`}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-[#d8ff3e]" : "bg-slate-700 group-hover:bg-slate-500"}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block text-xs font-semibold ${selected ? "text-white" : "text-slate-400"}`}>{item.label}</span>
+                      <span className="hidden text-[10px] leading-4 text-slate-600 xl:block">{item.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </nav>
+
+      <div className="border-t border-white/10 p-3">
+        <div className={`mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/10 bg-emerald-400/[.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[.14em] text-emerald-300 ${sidebarCollapsed ? "justify-center px-1" : ""}`}><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399]" />{!sidebarCollapsed && "Systems operational"}</div>
+        <Link to="/admin/profile" className={`flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-white/[.06] ${sidebarCollapsed ? "justify-center" : ""}`}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white">{initials}</div>
+          {!sidebarCollapsed && <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{profileName}</p><p className="truncate text-[11px] text-slate-500">Store Owner</p></div>}
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
         </Link>
       </div>
     </aside>
   );
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen bg-[#f5f6fa] text-slate-950">
       {sidebarOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-50 transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>{sidebar}</div>
+=======
+    <div className="min-h-screen bg-[#f3f4f6] text-slate-950">
+      {sidebarOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      <div className={`fixed inset-y-0 left-0 z-50 transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        {sidebar}
+      </div>
+
+      <div className={`min-h-screen transition-[padding] duration-200 ${sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[284px]"}`}>
+        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 shadow-[0_1px_0_rgba(15,23,42,.02)] backdrop-blur-xl">
+          <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
+
+            <button type="button" onClick={() => setSidebarCollapsed((value) => !value)} className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:block" title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+              <Menu size={19} />
+            </button>
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
 
       <div className={`min-h-screen transition-[padding] duration-300 ${sidebarCollapsed ? "lg:pl-[78px]" : "lg:pl-[270px]"}`}>
         <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
@@ -435,11 +575,15 @@ export default function Admin() {
           </div>}
         </header>
 
+<<<<<<< HEAD
         <main className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-9 lg:py-8">{renderPage()}</main>
         <footer className="flex flex-col gap-2 border-t border-slate-200/70 px-6 py-4 text-[11px] text-slate-400 sm:flex-row sm:items-center sm:justify-between lg:px-9">
           <span>© {new Date().getFullYear()} MEO Commerce. Your business, in focus.</span>
           <span className="flex items-center gap-1.5"><ShieldCheck size={13} />Private workspace</span>
         </footer>
+=======
+        <main className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 lg:px-9 lg:py-9">{renderPage()}</main>
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
       </div>
     </div>
   );
@@ -475,6 +619,7 @@ function Overview() {
   const currency = (value: number) => `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
+<<<<<<< HEAD
     <div className="space-y-7">
       <section className="relative overflow-hidden rounded-[28px] bg-slate-950 px-6 py-7 text-white shadow-xl shadow-slate-900/10 sm:px-9 sm:py-9">
         <div className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full bg-indigo-500/20 blur-3xl" />
@@ -505,6 +650,20 @@ function Overview() {
           <Stat title="Profit margin" value={`${margin.toFixed(2)}%`} icon={Activity} accent="violet" description="Profit relative to revenue" />
         </div>
       </section>
+=======
+    <div>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div><div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400"><ShieldCheck size={14} className="text-emerald-600" /> Operations overview</div><h1 className="mt-3 text-3xl font-black tracking-[-0.04em] sm:text-4xl">Commerce command center</h1><p className="mt-2 text-sm text-slate-500">Live commercial health, orders, profit and storefront operations.</p></div>
+        <Link to="/store" target="_blank" className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50"><ExternalLink size={16} /> View store</Link>
+      </div>
+
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat title="Gross sales · 30 days" value={`$${revenue.toFixed(2)}`} detail="Confirmed order revenue" />
+        <Stat title="Orders processed" value={orders.toString()} detail="Current reporting period" />
+        <Stat title="Net operating profit" value={`$${profit.toFixed(2)}`} detail="After recorded product costs" />
+        <Stat title="Profit margin" value={`${margin.toFixed(2)}%`} detail="Blended across confirmed sales" />
+      </div>
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
 
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><strong className="font-bold">Business health unavailable.</strong><p className="mt-1">{error}</p></div>}
 
@@ -546,6 +705,7 @@ function Overview() {
   );
 }
 
+<<<<<<< HEAD
 function Stat({
   title, value, icon: Icon, accent, description,
 }: {
@@ -578,3 +738,8 @@ function BusinessMetric({ label, value }: { label: string; value: string }) {
 function Status({ label }: { label: string }) {
   return <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-3 text-sm last:border-0"><span className="text-xs font-medium text-slate-600">{label}</span><span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold tabular-nums text-slate-600">0</span></div>;
 }
+=======
+function Stat({ title, value, detail }: { title: string; value: string; detail: string }) { return <div className="admin-panel group relative overflow-hidden p-5 transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"><div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-slate-950 via-slate-600 to-transparent opacity-70" /><div className="flex items-start justify-between gap-3"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-400">{title}</p><span className="h-2 w-2 rounded-full bg-emerald-400 ring-4 ring-emerald-50" /></div><p className="mt-5 text-3xl font-black tracking-[-0.04em] text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></div>; }
+function BusinessMetric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-2 text-lg font-bold text-slate-950">{value}</p></div>; }
+function Status({ label }: { label: string }) { return <div className="flex justify-between border-b border-slate-100 pb-3 text-sm"><span className="text-slate-600">{label}</span><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">0</span></div>; }
+>>>>>>> 5095110c003cc39fcdb7e559c7dbc06833130cf1
