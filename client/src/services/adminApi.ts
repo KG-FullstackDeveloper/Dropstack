@@ -1,6 +1,7 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000/api";
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:4000")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
+const API_URL = `${API_ORIGIN}/api`;
 
 export interface AdminUser {
   id: string;
@@ -34,9 +35,7 @@ export interface LoginTwoFactorRequired {
   };
 }
 
-export type LoginResult =
-  | LoginSuccess
-  | LoginTwoFactorRequired;
+export type LoginResult = LoginSuccess | LoginTwoFactorRequired;
 
 interface LoginApiResult {
   requiresTwoFactor?: boolean;
@@ -73,10 +72,7 @@ export interface ResetForgotPasswordResult {
 /* Product types                                                              */
 /* -------------------------------------------------------------------------- */
 
-import type {
-  Product,
-  ProductVariant,
-} from "../types/product";
+import type { Product, ProductVariant } from "../types/product";
 
 export type AdminProduct = Product & {
   title?: string;
@@ -142,9 +138,7 @@ export interface ProductImportResult {
   message?: string;
 }
 
-function normalizeAdminProduct(
-  product: Product,
-): AdminProduct {
+function normalizeAdminProduct(product: Product): AdminProduct {
   return {
     ...product,
     title: product.name,
@@ -152,48 +146,29 @@ function normalizeAdminProduct(
     imageUrl: product.image_url ?? null,
     videoUrl: product.video_url ?? null,
     supplierName: product.supplier_name ?? null,
-    supplierProductId:
-      product.supplier_product_id ?? null,
-    warehouseCountry:
-      product.warehouse_country ?? null,
-    processingTime:
-      product.processing_time ?? null,
-    deliveryTime:
-      product.delivery_time ?? null,
-    supplierCost: Number(
-      product.supplier_cost ?? 0,
-    ),
-    shippingCost: Number(
-      product.shipping_cost ?? 0,
-    ),
-    otherCost: Number(
-      product.other_cost ?? 0,
-    ),
-    profitPerUnit: Number(
-      product.profit_per_unit ?? 0,
-    ),
-    profitMargin: Number(
-      product.profit_margin ?? 0,
-    ),
-    lowStockThreshold: Number(
-      product.low_stock_threshold ?? 0,
-    ),
+    supplierProductId: product.supplier_product_id ?? null,
+    warehouseCountry: product.warehouse_country ?? null,
+    processingTime: product.processing_time ?? null,
+    deliveryTime: product.delivery_time ?? null,
+    supplierCost: Number(product.supplier_cost ?? 0),
+    shippingCost: Number(product.shipping_cost ?? 0),
+    otherCost: Number(product.other_cost ?? 0),
+    profitPerUnit: Number(product.profit_per_unit ?? 0),
+    profitMargin: Number(product.profit_margin ?? 0),
+    lowStockThreshold: Number(product.low_stock_threshold ?? 0),
     createdAt: product.created_at,
   };
 }
 
 /* -------------------------------------------------------------------------- */
-/* Authentication and shared request helper                                   */
+/* Authentication and shared request helper                                  */
 /* -------------------------------------------------------------------------- */
 
 function getToken(): string | null {
   return localStorage.getItem("admin_token");
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers = new Headers(options.headers);
 
@@ -202,30 +177,20 @@ async function request<T>(
     !(options.body instanceof FormData) &&
     !headers.has("Content-Type")
   ) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
+    headers.set("Content-Type", "application/json");
   }
 
   if (token) {
-    headers.set(
-      "Authorization",
-      "Bearer " + token,
-    );
+    headers.set("Authorization", "Bearer " + token);
   }
 
-  const response = await fetch(
-    API_URL + path,
-    {
-      ...options,
-      headers,
-      credentials: "include",
-    },
-  );
+  const response = await fetch(API_URL + path, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
 
-  const contentType =
-    response.headers.get("content-type") || "";
+  const contentType = response.headers.get("content-type") || "";
 
   let result: unknown;
 
@@ -236,19 +201,12 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    let errorMessage =
-      "Request failed with status " +
-      response.status +
-      ".";
+    let errorMessage = "Request failed with status " + response.status + ".";
 
     let details = "";
 
-    if (
-      result &&
-      typeof result === "object"
-    ) {
-      const body =
-        result as ApiResponse<unknown>;
+    if (result && typeof result === "object") {
+      const body = result as ApiResponse<unknown>;
 
       if (body.error) {
         errorMessage = body.error;
@@ -269,42 +227,23 @@ async function request<T>(
       path === "/auth/forgot-password/verify" ||
       path === "/auth/forgot-password/reset";
 
-    if (
-      response.status === 401 &&
-      !isAuthRequest
-    ) {
+    if (response.status === 401 && !isAuthRequest) {
       localStorage.removeItem("admin_token");
     }
 
-    throw new Error(
-      details
-        ? errorMessage + " " + details
-        : errorMessage,
-    );
+    throw new Error(details ? errorMessage + " " + details : errorMessage);
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
+  if (result && typeof result === "object") {
     const body = result as ApiResponse<T>;
 
     if (body.success === false) {
-      const message =
-        body.error ||
-        body.message ||
-        "Request failed.";
+      const message = body.error || body.message || "Request failed.";
 
       const details =
-        typeof body.details === "string"
-          ? body.details.trim()
-          : "";
+        typeof body.details === "string" ? body.details.trim() : "";
 
-      throw new Error(
-        details
-          ? message + " " + details
-          : message,
-      );
+      throw new Error(details ? message + " " + details : message);
     }
 
     if ("data" in body) {
@@ -325,22 +264,15 @@ export async function login(
   email: string,
   password: string,
 ): Promise<LoginSuccess> {
-  const result =
-    await request<LoginApiResult>(
-      "/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      },
-    );
+  const result = await request<LoginApiResult>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
 
-  if (
-    result.requiresTwoFactor &&
-    result.challenge
-  ) {
+  if (result.requiresTwoFactor && result.challenge) {
     return {
       requiresTwoFactor: true,
       challenge: result.challenge,
@@ -348,15 +280,10 @@ export async function login(
   }
 
   if (!result.token || !result.admin) {
-    throw new Error(
-      "The server returned an incomplete login response.",
-    );
+    throw new Error("The server returned an incomplete login response.");
   }
 
-  localStorage.setItem(
-    "admin_token",
-    result.token,
-  );
+  localStorage.setItem("admin_token", result.token);
 
   return {
     token: result.token,
@@ -368,95 +295,75 @@ export async function verifyLoginTwoFactor(
   adminId: string,
   code: string,
 ): Promise<VerifyTwoFactorResult> {
-  const result =
-    await request<VerifyTwoFactorResult>(
-      "/auth/login/verify",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          adminId,
-          code,
-        }),
-      },
-    );
+  const result = await request<VerifyTwoFactorResult>("/auth/login/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      adminId,
+      code,
+    }),
+  });
 
   if (!result.token || !result.admin) {
-    throw new Error(
-      "The server returned an incomplete verification response.",
-    );
+    throw new Error("The server returned an incomplete verification response.");
   }
 
-  localStorage.setItem(
-    "admin_token",
-    result.token,
-  );
+  localStorage.setItem("admin_token", result.token);
 
   return result;
 }
 
-export async function resendLoginTwoFactor(
-  adminId: string,
-): Promise<{
+export async function resendLoginTwoFactor(adminId: string): Promise<{
   method: "email" | "email_and_sms";
   expiresInSeconds: number;
 }> {
-  return request(
-    "/auth/login/resend",
-    {
-      method: "POST",
-      body: JSON.stringify({ adminId }),
-    },
-  );
+  return request("/auth/login/resend", {
+    method: "POST",
+    body: JSON.stringify({ adminId }),
+  });
 }
 
 export async function logout(): Promise<void> {
   try {
-    await request(
-      "/auth/logout",
-      { method: "POST" },
-    );
+    await request("/auth/logout", { method: "POST" });
   } finally {
     localStorage.removeItem("admin_token");
   }
 }
 
 export async function getMe(): Promise<AdminUser> {
-  return request<AdminUser>(
-    "/auth/me",
-    { method: "GET" },
-  );
+  return request<AdminUser>("/auth/me", { method: "GET" });
+}
+
+// Keep the existing /auth/me endpoint and expose the name
+// that AuthContext.tsx expects.
+export async function getCurrentAdmin(): Promise<AdminUser> {
+  return getMe();
 }
 
 export async function updateProfile(
   name: string,
   phone?: string | null,
 ): Promise<AdminUser> {
-  return request<AdminUser>(
-    "/auth/profile",
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        name,
-        phone: phone ?? null,
-      }),
-    },
-  );
+  return request<AdminUser>("/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify({
+      name,
+      phone: phone ?? null,
+    }),
+  });
 }
 
 export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<{ message: string }> {
-  return request(
-    "/auth/change-password",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        currentPassword,
-        newPassword,
-      }),
-    },
-  );
+  return request("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({
+      currentPassword,
+      newPassword,
+    }),
+  });
 }
 
 export async function changeEmail(
@@ -466,16 +373,13 @@ export async function changeEmail(
   message: string;
   email: string;
 }> {
-  return request(
-    "/auth/change-email",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        currentPassword,
-        newEmail,
-      }),
-    },
-  );
+  return request("/auth/change-email", {
+    method: "POST",
+    body: JSON.stringify({
+      currentPassword,
+      newEmail,
+    }),
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -485,30 +389,26 @@ export async function changeEmail(
 export async function forgotPassword(
   email: string,
 ): Promise<ForgotPasswordResult> {
-  return request<ForgotPasswordResult>(
-    "/auth/forgot-password",
-    {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    },
-  );
+  return request<ForgotPasswordResult>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function verifyForgotPassword(
   email: string,
   code: string,
 ): Promise<VerifyForgotPasswordResult> {
-  const result =
-    await request<VerifyForgotPasswordResult>(
-      "/auth/forgot-password/verify",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          code,
-        }),
-      },
-    );
+  const result = await request<VerifyForgotPasswordResult>(
+    "/auth/forgot-password/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        code,
+      }),
+    },
+  );
 
   if (!result.resetToken) {
     throw new Error(
@@ -523,86 +423,63 @@ export async function resetForgotPassword(
   resetToken: string,
   newPassword: string,
 ): Promise<ResetForgotPasswordResult> {
-  return request<ResetForgotPasswordResult>(
-    "/auth/forgot-password/reset",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        resetToken,
-        newPassword,
-      }),
-    },
-  );
+  return request<ResetForgotPasswordResult>("/auth/forgot-password/reset", {
+    method: "POST",
+    body: JSON.stringify({
+      resetToken,
+      newPassword,
+    }),
+  });
 }
 
 /* -------------------------------------------------------------------------- */
 /* Generic API                                                                */
 /* -------------------------------------------------------------------------- */
 
-export async function apiGet<T>(
-  path: string,
-): Promise<T> {
-  return request<T>(
-    path,
-    { method: "GET" },
-  );
+export async function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "GET" });
 }
 
-export async function apiPost<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: "POST",
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
 
-export async function apiPut<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: "PUT",
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+export interface CloudinaryUploadSignature {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  resourceType: "image" | "video";
 }
 
-export async function apiPatch<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: "PATCH",
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+export async function getCloudinaryUploadSignature(
+  resourceType: CloudinaryUploadSignature["resourceType"],
+): Promise<CloudinaryUploadSignature> {
+  return apiPost<CloudinaryUploadSignature>("/media/signature", {
+    resourceType,
+  });
 }
 
-export async function apiDelete<T>(
-  path: string,
-): Promise<T> {
-  return request<T>(
-    path,
-    { method: "DELETE" },
-  );
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "DELETE" });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -614,13 +491,10 @@ export async function apiUpload<T>(
   formData: FormData,
   method: "POST" | "PUT" | "PATCH" = "POST",
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method,
-      body: formData,
-    },
-  );
+  return request<T>(path, {
+    method,
+    body: formData,
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -644,19 +518,14 @@ export const apiClient = {
 /* -------------------------------------------------------------------------- */
 
 export async function getAdminOrders(): Promise<any[]> {
-  const result =
-    await apiGet<unknown>("/admin/orders");
+  const result = await apiGet<unknown>("/admin/orders");
 
   if (Array.isArray(result)) {
     return result;
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
-    const data =
-      result as Record<string, unknown>;
+  if (result && typeof result === "object") {
+    const data = result as Record<string, unknown>;
 
     if (Array.isArray(data.orders)) {
       return data.orders;
@@ -667,19 +536,14 @@ export async function getAdminOrders(): Promise<any[]> {
 }
 
 export async function getCustomers(): Promise<any[]> {
-  const result =
-    await apiGet<unknown>("/customers");
+  const result = await apiGet<unknown>("/customers");
 
   if (Array.isArray(result)) {
     return result;
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
-    const data =
-      result as Record<string, unknown>;
+  if (result && typeof result === "object") {
+    const data = result as Record<string, unknown>;
 
     if (Array.isArray(data.customers)) {
       return data.customers;
@@ -702,19 +566,14 @@ export async function getAdminStats(): Promise<any> {
 /* -------------------------------------------------------------------------- */
 
 export async function getProducts(): Promise<AdminProduct[]> {
-  const result =
-    await apiGet<unknown>("/products/all");
+  const result = await apiGet<unknown>("/products/all");
 
   let rows: Product[] = [];
 
   if (Array.isArray(result)) {
     rows = result as Product[];
-  } else if (
-    result &&
-    typeof result === "object"
-  ) {
-    const data =
-      result as Record<string, unknown>;
+  } else if (result && typeof result === "object") {
+    const data = result as Record<string, unknown>;
 
     if (Array.isArray(data.products)) {
       rows = data.products as Product[];
@@ -731,49 +590,33 @@ export async function getAdminProducts(): Promise<AdminProduct[]> {
 }
 
 export async function createProduct(
-  product:
-    | CreateProductInput
-    | Record<string, unknown>,
+  product: CreateProductInput | Record<string, unknown>,
 ): Promise<AdminProduct> {
-  const result =
-    await apiPost<Product>(
-      "/products",
-      product,
-    );
+  const result = await apiPost<Product>("/products", product);
 
   return normalizeAdminProduct(result);
 }
 
 export async function updateProduct(
   productId: string,
-  product:
-    | Partial<CreateProductInput>
-    | Record<string, unknown>,
+  product: Partial<CreateProductInput> | Record<string, unknown>,
 ): Promise<AdminProduct> {
-  const result =
-    await apiPatch<Product>(
-      "/products/" +
-        encodeURIComponent(productId),
-      product,
-    );
+  const result = await apiPatch<Product>(
+    "/products/" + encodeURIComponent(productId),
+    product,
+  );
 
   return normalizeAdminProduct(result);
 }
 
-export async function deleteProduct(
-  productId: string,
-): Promise<any> {
-  return apiDelete(
-    "/products/" +
-      encodeURIComponent(productId),
-  );
+export async function deleteProduct(productId: string): Promise<any> {
+  return apiDelete("/products/" + encodeURIComponent(productId));
 }
 
 export async function findProductBySku(
   sku: string,
 ): Promise<AdminProduct | null> {
-  const normalizedSku =
-    sku.trim().toLowerCase();
+  const normalizedSku = sku.trim().toLowerCase();
 
   if (!normalizedSku) {
     return null;
@@ -794,8 +637,7 @@ export async function findProductBySku(
 export async function findProductByHandle(
   handle: string,
 ): Promise<AdminProduct | null> {
-  const normalizedHandle =
-    handle.trim().toLowerCase();
+  const normalizedHandle = handle.trim().toLowerCase();
 
   if (!normalizedHandle) {
     return null;
@@ -806,11 +648,7 @@ export async function findProductByHandle(
   return (
     products.find(
       (product) =>
-        String(
-          product.slug ||
-            product.handle ||
-            "",
-        )
+        String(product.slug || product.handle || "")
           .trim()
           .toLowerCase() === normalizedHandle,
     ) || null
@@ -833,17 +671,11 @@ export async function importProductsCsv(
   formData.append("file", file);
 
   if (options?.updateExisting !== undefined) {
-    formData.append(
-      "updateExisting",
-      String(options.updateExisting),
-    );
+    formData.append("updateExisting", String(options.updateExisting));
   }
 
   if (options?.skipExisting !== undefined) {
-    formData.append(
-      "skipExisting",
-      String(options.skipExisting),
-    );
+    formData.append("skipExisting", String(options.skipExisting));
   }
 
   return apiUpload<ProductImportResult>(
@@ -861,11 +693,7 @@ export async function updateOrder(
   orderId: string,
   update: unknown,
 ): Promise<any> {
-  return apiPatch(
-    "/orders/" +
-      encodeURIComponent(orderId),
-    update,
-  );
+  return apiPatch("/orders/" + encodeURIComponent(orderId), update);
 }
 
 export async function updateOrderStatus(
@@ -874,6 +702,8 @@ export async function updateOrderStatus(
     order_status?: string;
     payment_status?: string;
     tracking_number?: string;
+    supplier_name?: string;
+    supplier_order_reference?: string;
   },
 ): Promise<any> {
   return updateOrder(orderId, update);
@@ -896,10 +726,7 @@ export interface InventoryMovement {
   created_at: string;
 }
 
-export type InventoryAdjustmentMode =
-  | "add"
-  | "remove"
-  | "set";
+export type InventoryAdjustmentMode = "add" | "remove" | "set";
 
 export type InventoryAdjustmentReason =
   | "Restock"
@@ -932,28 +759,18 @@ export async function getInventoryHistory(
   limit = 100,
 ): Promise<InventoryMovement[]> {
   const safeLimit = Math.min(
-    Math.max(
-      Math.floor(Number(limit) || 100),
-      1,
-    ),
+    Math.max(Math.floor(Number(limit) || 100), 1),
     500,
   );
 
-  const result =
-    await apiGet<unknown>(
-      "/inventory?limit=" + safeLimit,
-    );
+  const result = await apiGet<unknown>("/inventory?limit=" + safeLimit);
 
   if (Array.isArray(result)) {
     return result as InventoryMovement[];
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
-    const data =
-      result as Record<string, unknown>;
+  if (result && typeof result === "object") {
+    const data = result as Record<string, unknown>;
 
     if (Array.isArray(data.movements)) {
       return data.movements as InventoryMovement[];
@@ -974,22 +791,16 @@ export async function getInventoryHistory(
 export async function getProductInventoryHistory(
   productId: string,
 ): Promise<InventoryMovement[]> {
-  const result =
-    await apiGet<unknown>(
-      "/inventory/product/" +
-        encodeURIComponent(productId),
-    );
+  const result = await apiGet<unknown>(
+    "/inventory/product/" + encodeURIComponent(productId),
+  );
 
   if (Array.isArray(result)) {
     return result as InventoryMovement[];
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
-    const data =
-      result as Record<string, unknown>;
+  if (result && typeof result === "object") {
+    const data = result as Record<string, unknown>;
 
     if (Array.isArray(data.movements)) {
       return data.movements as InventoryMovement[];
@@ -1010,40 +821,25 @@ export async function getProductInventoryHistory(
 export async function adjustInventory(
   input: InventoryAdjustmentInput,
 ): Promise<InventoryAdjustmentResult> {
-  if (
-    !input.productId ||
-    !input.productId.trim()
-  ) {
+  if (!input.productId || !input.productId.trim()) {
     throw new Error("Product ID is required.");
   }
 
-  if (
-    !["add", "remove", "set"].includes(input.mode)
-  ) {
-    throw new Error(
-      "Invalid inventory adjustment mode.",
-    );
+  if (!["add", "remove", "set"].includes(input.mode)) {
+    throw new Error("Invalid inventory adjustment mode.");
   }
 
-  if (
-    !Number.isFinite(input.amount) ||
-    input.amount < 0
-  ) {
-    throw new Error(
-      "Stock amount must be a valid non-negative number.",
-    );
+  if (!Number.isFinite(input.amount) || input.amount < 0) {
+    throw new Error("Stock amount must be a valid non-negative number.");
   }
 
-  return apiPost<InventoryAdjustmentResult>(
-    "/inventory/adjust",
-    {
-      productId: input.productId.trim(),
-      mode: input.mode,
-      amount: Math.floor(input.amount),
-      reason: input.reason || "Correction",
-      note: input.note?.trim() || "",
-    },
-  );
+  return apiPost<InventoryAdjustmentResult>("/inventory/adjust", {
+    productId: input.productId.trim(),
+    mode: input.mode,
+    amount: Math.floor(input.amount),
+    reason: input.reason || "Correction",
+    note: input.note?.trim() || "",
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1054,9 +850,7 @@ export async function getStore(): Promise<any> {
   return apiGet("/store");
 }
 
-export async function updateStore(
-  settings: unknown,
-): Promise<any> {
+export async function updateStore(settings: unknown): Promise<any> {
   return apiPut("/store", settings);
 }
 
@@ -1093,3 +887,106 @@ export async function sendAIMessage(
 }
 
 export { API_URL };
+
+/* -------------------------------------------------------------------------- */
+/* CJdropshipping                                                             */
+/* -------------------------------------------------------------------------- */
+
+// A product returned by the CJ catalogue search.
+export interface CJProduct {
+  pid?: string;
+  id?: string;
+  productId?: string;
+  productName?: string;
+  name?: string;
+  productImage?: string;
+  productImageSet?: string[];
+  productSku?: string;
+  categoryName?: string;
+  sellPrice?: string | number;
+  [key: string]: unknown;
+}
+
+// Search CJ's catalogue using the authenticated backend.
+// Your CJ API key stays on the server.
+
+export async function searchCJProducts(
+  keyword: string,
+  page = 1,
+  size = 20,
+  warehouse = "ALL",
+): Promise<unknown> {
+  const params = new URLSearchParams({
+    keyword,
+    page: String(page),
+    size: String(size),
+    warehouse,
+  });
+
+  return apiGet(`/cj/products?${params.toString()}`);
+}
+
+// Retrieve detailed information for a selected CJ product.
+export async function getCJProductDetails(
+  id: string,
+  warehouse = "ALL",
+): Promise<unknown> {
+  const params = new URLSearchParams({ warehouse });
+
+  return apiGet(`/cj/products/${encodeURIComponent(id)}?${params.toString()}`);
+}
+
+// Check whether the server has CJ credentials configured.
+export async function getCJStatus(): Promise<{
+  success: boolean;
+  configured: boolean;
+  provider: string;
+}> {
+  return apiGet<{
+    success: boolean;
+    configured: boolean;
+    provider: string;
+  }>("/cj/status");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Support inbox                                                              */
+/* -------------------------------------------------------------------------- */
+
+export interface SupportMessage {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: "new" | "in_review" | "resolved";
+  created_at: string;
+}
+
+export async function getSupportMessages(): Promise<SupportMessage[]> {
+  const result = await request<{ success?: boolean; data?: SupportMessage[] }>(
+    "/admin/support-messages",
+    { method: "GET" },
+  );
+
+  return result.data ?? [];
+}
+
+export async function updateSupportMessageStatus(
+  id: string,
+  status: SupportMessage["status"],
+): Promise<SupportMessage> {
+  const result = await request<{ success?: boolean; data?: SupportMessage }>(
+    "/admin/support-messages/" + encodeURIComponent(id),
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+  );
+
+  if (!result.data) {
+    throw new Error("The server did not return the updated message.");
+  }
+
+  return result.data;
+}
