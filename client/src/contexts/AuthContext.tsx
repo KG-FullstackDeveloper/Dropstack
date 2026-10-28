@@ -10,6 +10,7 @@ import {
 import {
   login as apiLogin,
   logout as apiLogout,
+  getMe,
   type AdminUser,
 } from "../services/adminApi";
 
@@ -42,25 +43,29 @@ export function AuthProvider({
       const token = localStorage.getItem("admin_token");
 
       if (!token) {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        // Validate the saved session with your backend.
-        // This requires a session-validation function in adminApi.
-        const restoredAdmin = await validateSavedSession();
+        // Ask the backend to validate the saved session.
+        const restoredAdmin = await getMe();
 
         if (!cancelled) {
           setAdmin(restoredAdmin);
         }
       } catch {
+        // Remove an invalid or expired session.
         if (!cancelled) {
           localStorage.removeItem("admin_token");
           setAdmin(null);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
@@ -77,6 +82,7 @@ export function AuthProvider({
     try {
       const result = await apiLogin(email, password);
 
+      // Save the token returned by the backend.
       localStorage.setItem("admin_token", result.token);
       setAdmin(result.admin);
     } finally {
@@ -85,14 +91,18 @@ export function AuthProvider({
   }
 
   function logout() {
+    // Clear the local session immediately.
     localStorage.removeItem("admin_token");
     setAdmin(null);
 
+    // The UI remains logged out if the request fails.
     void apiLogout().catch(() => {});
   }
 
   return (
-    <AuthContext.Provider value={{ admin, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ admin, loading, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -100,13 +110,4 @@ export function AuthProvider({
 
 export function useAuth() {
   return useContext(AuthContext);
-}
-
-/**
- * Connect this to your backend's existing authenticated
- * current-admin/session endpoint.
- */
-async function validateSavedSession(): Promise<AdminUser> {
-  const { getCurrentAdmin } = await import("../services/adminApi");
-  return getCurrentAdmin();
 }

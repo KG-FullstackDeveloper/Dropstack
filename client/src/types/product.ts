@@ -18,6 +18,7 @@ export interface Product {
 
   price: number;
   currency: string;
+  price_override?: number | null;
 
   image_url?: string | null;
   video_url?: string | null;

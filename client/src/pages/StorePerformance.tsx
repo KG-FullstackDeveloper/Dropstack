@@ -142,11 +142,7 @@ function itemCost(item: unknown, productMap: Map<string, ProductRow>): number {
 }
 
 function orderRevenue(order: RawOrder): number {
-  return firstNumber(
-    order.total,
-    order.amount,
-    order.subtotal,
-  );
+  return firstNumber(order.total, order.amount, order.subtotal);
 }
 
 function orderItems(order: RawOrder): unknown[] {
@@ -204,7 +200,12 @@ function getOrderStoreId(order: RawOrder): string | undefined {
   return undefined;
 }
 
-function lineChartPath(points: DailyPoint[], key: "revenue" | "profit", width: number, height: number) {
+function lineChartPath(
+  points: DailyPoint[],
+  key: "revenue" | "profit",
+  width: number,
+  height: number,
+) {
   if (!points.length) return "";
   const maxValue = Math.max(
     1,
@@ -212,7 +213,8 @@ function lineChartPath(points: DailyPoint[], key: "revenue" | "profit", width: n
   );
   return points
     .map((point, index) => {
-      const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
+      const x =
+        points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
       const y = height - (Math.max(0, point[key]) / maxValue) * height;
       return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
@@ -278,7 +280,11 @@ function MetricCard({
               positive ? "text-emerald-600" : "text-rose-600"
             }`}
           >
-            {positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+            {positive ? (
+              <ArrowUpRight size={14} />
+            ) : (
+              <ArrowDownRight size={14} />
+            )}
             {positive ? "Healthy" : "Negative"}
           </span>
         )}
@@ -301,9 +307,9 @@ export default function StorePerformance() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const API_URL =
-    import.meta.env.VITE_API_URL ||
-    "http://localhost:4000";
+  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:4000")
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "");
 
   async function getOrders(): Promise<RawOrder[]> {
     const response = await fetch(`${API_URL}/api/orders`);
@@ -340,11 +346,11 @@ export default function StorePerformance() {
 
       setStores([nextStore]);
       setProducts(
-  nextProducts.map((product) => ({
-    ...product,
-    storeId: "",
-  }))
-);
+        nextProducts.map((product) => ({
+          ...product,
+          storeId: "",
+        })),
+      );
       setOrders(nextOrders);
     } catch (loadError) {
       setError(
@@ -397,9 +403,12 @@ export default function StorePerformance() {
       if (!date || date.getTime() < start) continue;
       if (
         ACTIVE_STATUSES.has(
-          String(order.order_status ?? order.orderStatus ?? order.status ?? "").toLowerCase(),
+          String(
+            order.order_status ?? order.orderStatus ?? order.status ?? "",
+          ).toLowerCase(),
         )
-      ) continue;
+      )
+        continue;
 
       const metric = metricsByStore.get(storeId);
       if (!metric) continue;
@@ -439,18 +448,20 @@ export default function StorePerformance() {
         metric.supplierCost -
         metric.shippingCost -
         metric.gatewayFees;
-      metric.margin = metric.revenue > 0 ? (metric.profit / metric.revenue) * 100 : 0;
+      metric.margin =
+        metric.revenue > 0 ? (metric.profit / metric.revenue) * 100 : 0;
     }
 
     return Array.from(metricsByStore.values())
-      .filter((metric) => selectedStoreId === "all" || metric.store.id === selectedStoreId)
+      .filter(
+        (metric) =>
+          selectedStoreId === "all" || metric.store.id === selectedStoreId,
+      )
       .sort((a, b) => b.revenue - a.revenue);
   }, [orders, productMap, range, selectedStoreId, stores]);
 
   const allMetrics = useMemo<StoreMetric[]>(() => {
-    return metrics.length || selectedStoreId === "all"
-      ? metrics
-      : [];
+    return metrics.length || selectedStoreId === "all" ? metrics : [];
   }, [metrics, selectedStoreId]);
 
   const totals = useMemo(() => {
@@ -480,7 +491,8 @@ export default function StorePerformance() {
     return selected?.currency || stores[0]?.currency || "USD";
   }, [selectedStoreId, stores]);
 
-  const totalMargin = totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
+  const totalMargin =
+    totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
 
   const dailySeries = useMemo<DailyPoint[]>(() => {
     const days = Number(range);
@@ -490,7 +502,9 @@ export default function StorePerformance() {
 
     const selectedIds = new Set(
       stores
-        .filter((store) => selectedStoreId === "all" || store.id === selectedStoreId)
+        .filter(
+          (store) => selectedStoreId === "all" || store.id === selectedStoreId,
+        )
         .map((store) => store.id),
     );
 
@@ -501,7 +515,10 @@ export default function StorePerformance() {
       date.setDate(start.getDate() + index);
       const key = date.toISOString().slice(0, 10);
       map.set(key, {
-        label: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        label: date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        }),
         revenue: 0,
         profit: 0,
       });
@@ -512,9 +529,12 @@ export default function StorePerformance() {
       if (!storeId || !selectedIds.has(storeId)) continue;
       if (
         ACTIVE_STATUSES.has(
-          String(order.order_status ?? order.orderStatus ?? order.status ?? "").toLowerCase(),
+          String(
+            order.order_status ?? order.orderStatus ?? order.status ?? "",
+          ).toLowerCase(),
         )
-      ) continue;
+      )
+        continue;
 
       const date = getOrderDate(order);
       if (!date) continue;
@@ -554,8 +574,18 @@ export default function StorePerformance() {
   const barMax = Math.max(1, ...allMetrics.map((metric) => metric.revenue));
   const chartWidth = 720;
   const chartHeight = 220;
-  const revenuePath = lineChartPath(dailySeries, "revenue", chartWidth, chartHeight);
-  const profitPath = lineChartPath(dailySeries, "profit", chartWidth, chartHeight);
+  const revenuePath = lineChartPath(
+    dailySeries,
+    "revenue",
+    chartWidth,
+    chartHeight,
+  );
+  const profitPath = lineChartPath(
+    dailySeries,
+    "profit",
+    chartWidth,
+    chartHeight,
+  );
   const hasFinancialData = totals.revenue > 0 || totals.orders > 0;
 
   return (
@@ -571,13 +601,17 @@ export default function StorePerformance() {
               Store Performance
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Compare revenue, operating costs and net profit across every store from one place.
+              Compare revenue, operating costs and net profit across every store
+              from one place.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
-              <StoreIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+              <StoreIcon
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={17}
+              />
               <select
                 value={selectedStoreId}
                 onChange={(event) => setSelectedStoreId(event.target.value)}
@@ -590,7 +624,10 @@ export default function StorePerformance() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <ChevronDown
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={16}
+              />
             </div>
 
             <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 dark:border-white/[0.08] dark:bg-[#11151b]">
@@ -665,8 +702,12 @@ export default function StorePerformance() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-[#11151b]">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950 dark:text-white">Revenue by store</h2>
-                <p className="text-sm text-slate-500">Gross revenue generated by each store.</p>
+                <h2 className="text-lg font-bold text-slate-950 dark:text-white">
+                  Revenue by store
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Gross revenue generated by each store.
+                </p>
               </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
                 <TrendingUp size={15} />
@@ -675,14 +716,19 @@ export default function StorePerformance() {
             </div>
 
             {loading ? (
-              <div className="mt-6 grid h-72 place-items-center text-sm text-slate-400">Loading store performance…</div>
+              <div className="mt-6 grid h-72 place-items-center text-sm text-slate-400">
+                Loading store performance…
+              </div>
             ) : allMetrics.length === 0 ? (
               <div className="mt-6 grid h-72 place-items-center rounded-2xl bg-slate-50 text-center dark:bg-white/[0.03]">
                 <div>
                   <StoreIcon className="mx-auto text-slate-300" size={34} />
-                  <p className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">No store performance data yet</p>
+                  <p className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    No store performance data yet
+                  </p>
                   <p className="mt-1 max-w-sm text-xs text-slate-500">
-                    Completed orders will appear here automatically once your stores start receiving sales.
+                    Completed orders will appear here automatically once your
+                    stores start receiving sales.
                   </p>
                 </div>
               </div>
@@ -704,34 +750,56 @@ export default function StorePerformance() {
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-[#11151b]">
             <div>
-              <h2 className="text-lg font-bold text-slate-950 dark:text-white">Store profit comparison</h2>
-              <p className="text-sm text-slate-500">Revenue minus supplier, shipping and gateway costs.</p>
+              <h2 className="text-lg font-bold text-slate-950 dark:text-white">
+                Store profit comparison
+              </h2>
+              <p className="text-sm text-slate-500">
+                Revenue minus supplier, shipping and gateway costs.
+              </p>
             </div>
 
             <div className="mt-5 space-y-4">
               {allMetrics.length === 0 && !loading ? (
-                <p className="py-16 text-center text-sm text-slate-400">Nothing to compare yet.</p>
+                <p className="py-16 text-center text-sm text-slate-400">
+                  Nothing to compare yet.
+                </p>
               ) : (
                 allMetrics.map((metric) => (
-                  <div key={metric.store.id} className="rounded-xl border border-slate-100 p-4 dark:border-white/[0.06]">
+                  <div
+                    key={metric.store.id}
+                    className="rounded-xl border border-slate-100 p-4 dark:border-white/[0.06]"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{metric.store.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{metric.orders} orders</p>
+                        <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                          {metric.store.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {metric.orders} orders
+                        </p>
                       </div>
-                      <p className={`text-sm font-bold ${metric.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {formatMoney(metric.profit, metric.store.currency || selectedCurrency)}
+                      <p
+                        className={`text-sm font-bold ${metric.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                      >
+                        {formatMoney(
+                          metric.profit,
+                          metric.store.currency || selectedCurrency,
+                        )}
                       </p>
                     </div>
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
                       <div
                         className="h-full rounded-full bg-slate-900 transition-all duration-500 dark:bg-white"
-                        style={{ width: `${Math.min(100, Math.max(0, metric.margin))}%` }}
+                        style={{
+                          width: `${Math.min(100, Math.max(0, metric.margin))}%`,
+                        }}
                       />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span className="text-slate-400">Net margin</span>
-                      <span className="font-bold text-slate-700 dark:text-slate-200">{formatPercent(metric.margin)}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        {formatPercent(metric.margin)}
+                      </span>
                     </div>
                   </div>
                 ))
@@ -743,35 +811,81 @@ export default function StorePerformance() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-[#11151b]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-950 dark:text-white">Revenue vs profit</h2>
-              <p className="text-sm text-slate-500">Daily margin spread across the selected performance period.</p>
+              <h2 className="text-lg font-bold text-slate-950 dark:text-white">
+                Revenue vs profit
+              </h2>
+              <p className="text-sm text-slate-500">
+                Daily margin spread across the selected performance period.
+              </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-bold">
               <span className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                <span className="h-2 w-2 rounded-full bg-slate-950 dark:bg-white" /> Revenue
+                <span className="h-2 w-2 rounded-full bg-slate-950 dark:bg-white" />{" "}
+                Revenue
               </span>
               <span className="inline-flex items-center gap-2 text-emerald-600">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Net profit
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Net
+                profit
               </span>
             </div>
           </div>
 
           <div className="mt-6 overflow-x-auto">
             <div className="min-w-[720px]">
-              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-72 w-full overflow-visible" role="img" aria-label="Revenue versus profit line chart">
-                <path d={`M 0 40 H ${chartWidth}`} stroke="currentColor" className="text-slate-100 dark:text-white/[0.06]" />
-                <path d={`M 0 110 H ${chartWidth}`} stroke="currentColor" className="text-slate-100 dark:text-white/[0.06]" />
-                <path d={`M 0 180 H ${chartWidth}`} stroke="currentColor" className="text-slate-100 dark:text-white/[0.06]" />
-                <path d={revenuePath} fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-950 dark:text-white" />
-                <path d={profitPath} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <svg
+                viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                className="h-72 w-full overflow-visible"
+                role="img"
+                aria-label="Revenue versus profit line chart"
+              >
+                <path
+                  d={`M 0 40 H ${chartWidth}`}
+                  stroke="currentColor"
+                  className="text-slate-100 dark:text-white/[0.06]"
+                />
+                <path
+                  d={`M 0 110 H ${chartWidth}`}
+                  stroke="currentColor"
+                  className="text-slate-100 dark:text-white/[0.06]"
+                />
+                <path
+                  d={`M 0 180 H ${chartWidth}`}
+                  stroke="currentColor"
+                  className="text-slate-100 dark:text-white/[0.06]"
+                />
+                <path
+                  d={revenuePath}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  className="text-slate-950 dark:text-white"
+                />
+                <path
+                  d={profitPath}
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               <div className="mt-1 grid grid-cols-6 text-xs text-slate-400">
-                {dailySeries.filter((_, index) => {
-                  const step = Math.max(1, Math.floor(dailySeries.length / 5));
-                  return index % step === 0 || index === dailySeries.length - 1;
-                }).slice(0, 6).map((point, index) => (
-                  <span key={`${point.label}-${index}`} className="truncate">{point.label}</span>
-                ))}
+                {dailySeries
+                  .filter((_, index) => {
+                    const step = Math.max(
+                      1,
+                      Math.floor(dailySeries.length / 5),
+                    );
+                    return (
+                      index % step === 0 || index === dailySeries.length - 1
+                    );
+                  })
+                  .slice(0, 6)
+                  .map((point, index) => (
+                    <span key={`${point.label}-${index}`} className="truncate">
+                      {point.label}
+                    </span>
+                  ))}
               </div>
             </div>
           </div>
@@ -781,8 +895,12 @@ export default function StorePerformance() {
           <div className="border-b border-slate-100 px-5 py-4 dark:border-white/[0.06]">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-950 dark:text-white">Store financial breakdown</h2>
-                <p className="text-sm text-slate-500">The inputs behind each store's net profit.</p>
+                <h2 className="text-lg font-bold text-slate-950 dark:text-white">
+                  Store financial breakdown
+                </h2>
+                <p className="text-sm text-slate-500">
+                  The inputs behind each store's net profit.
+                </p>
               </div>
               <div className="hidden items-center gap-2 text-xs font-semibold text-slate-400 sm:flex">
                 <WalletCards size={15} />
@@ -808,24 +926,47 @@ export default function StorePerformance() {
               <tbody className="divide-y divide-slate-100 dark:divide-white/[0.06]">
                 {allMetrics.map((metric) => (
                   <tr key={metric.store.id} className="text-sm">
-                    <td className="px-5 py-4 font-bold text-slate-900 dark:text-white">{metric.store.name}</td>
-                    <td className="px-5 py-4 text-slate-600 dark:text-slate-300">{metric.orders}</td>
+                    <td className="px-5 py-4 font-bold text-slate-900 dark:text-white">
+                      {metric.store.name}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600 dark:text-slate-300">
+                      {metric.orders}
+                    </td>
                     <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white">
-                      {formatMoney(metric.revenue, metric.store.currency || selectedCurrency)}
+                      {formatMoney(
+                        metric.revenue,
+                        metric.store.currency || selectedCurrency,
+                      )}
                     </td>
                     <td className="px-5 py-4 text-slate-600 dark:text-slate-300">
-                      {formatMoney(metric.supplierCost, metric.store.currency || selectedCurrency)}
+                      {formatMoney(
+                        metric.supplierCost,
+                        metric.store.currency || selectedCurrency,
+                      )}
                     </td>
                     <td className="px-5 py-4 text-slate-600 dark:text-slate-300">
-                      {formatMoney(metric.shippingCost, metric.store.currency || selectedCurrency)}
+                      {formatMoney(
+                        metric.shippingCost,
+                        metric.store.currency || selectedCurrency,
+                      )}
                     </td>
                     <td className="px-5 py-4 text-slate-600 dark:text-slate-300">
-                      {formatMoney(metric.gatewayFees, metric.store.currency || selectedCurrency)}
+                      {formatMoney(
+                        metric.gatewayFees,
+                        metric.store.currency || selectedCurrency,
+                      )}
                     </td>
-                    <td className={`px-5 py-4 font-bold ${metric.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                      {formatMoney(metric.profit, metric.store.currency || selectedCurrency)}
+                    <td
+                      className={`px-5 py-4 font-bold ${metric.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                    >
+                      {formatMoney(
+                        metric.profit,
+                        metric.store.currency || selectedCurrency,
+                      )}
                     </td>
-                    <td className="px-5 py-4 font-bold text-slate-700 dark:text-slate-200">{formatPercent(metric.margin)}</td>
+                    <td className="px-5 py-4 font-bold text-slate-700 dark:text-slate-200">
+                      {formatPercent(metric.margin)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -835,7 +976,10 @@ export default function StorePerformance() {
 
         {!loading && !hasFinancialData && stores.length > 0 && (
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-500 shadow-sm dark:border-white/[0.08] dark:bg-[#11151b]">
-            Store Performance is connected to the existing stores, products and orders APIs. Because there are no completed financial records in the current data source, the charts remain empty instead of inventing numbers.
+            Store Performance is connected to the existing stores, products and
+            orders APIs. Because there are no completed financial records in the
+            current data source, the charts remain empty instead of inventing
+            numbers.
           </div>
         )}
       </div>

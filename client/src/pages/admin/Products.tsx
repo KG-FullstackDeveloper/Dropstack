@@ -1,14 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import type {
-  ChangeEvent,
-  FormEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { searchCJProducts, getCJProductDetails } from "../../services/adminApi";
+import type { ChangeEvent, FormEvent } from "react";
 import {
   Check,
   Edit3,
@@ -25,6 +17,7 @@ import {
 import {
   createProduct,
   deleteProduct,
+  getCloudinaryUploadSignature,
   getAdminProducts,
   updateProduct,
 } from "../../services/adminApi";
@@ -81,6 +74,36 @@ interface ImportResult {
   errors: string[];
 }
 
+async function uploadProductMedia(
+  file: File,
+  resourceType: "image" | "video",
+): Promise<string> {
+  const signed = await getCloudinaryUploadSignature(resourceType);
+  const body = new FormData();
+  body.append("file", file);
+  body.append("api_key", signed.apiKey);
+  body.append("timestamp", String(signed.timestamp));
+  body.append("signature", signed.signature);
+  body.append("folder", signed.folder);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloudName)}/${resourceType}/upload`,
+    { method: "POST", body },
+  );
+  const result = (await response.json().catch(() => ({}))) as {
+    secure_url?: string;
+    error?: { message?: string };
+  };
+
+  if (!response.ok || !result.secure_url) {
+    throw new Error(
+      result.error?.message || "Cloudinary could not upload this file.",
+    );
+  }
+
+  return result.secure_url;
+}
+
 const emptyForm: ProductFormState = {
   name: "",
   slug: "",
@@ -89,7 +112,7 @@ const emptyForm: ProductFormState = {
   description: "",
   price: "",
   currency: "USD",
-  supplierName: "",
+  supplierName: "TeemDrop",
   supplierProductId: "",
   warehouseCountry: "",
   supplierCost: "",
@@ -131,9 +154,7 @@ function money(value: number, currency = "USD") {
   }
 }
 
-function numberValue(
-  value: string | number | null | undefined,
-) {
+function numberValue(value: string | number | null | undefined) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
@@ -161,14 +182,10 @@ function calculateRecommendedPrice(
     numberValue(shippingCost) +
     numberValue(otherCost);
 
-  return total > 0
-    ? Number((total * 2.5).toFixed(2))
-    : 0;
+  return total > 0 ? Number((total * 2.5).toFixed(2)) : 0;
 }
 
-function productToForm(
-  product: Product,
-): ProductFormState {
+function productToForm(product: Product): ProductFormState {
   return {
     name: product.name || "",
     slug: product.slug || "",
@@ -177,37 +194,20 @@ function productToForm(
     description: product.description || "",
     price: String(product.price ?? ""),
     currency: product.currency || "USD",
-    supplierName:
-      product.supplier_name || "",
-    supplierProductId:
-      product.supplier_product_id || "",
-    warehouseCountry:
-      product.warehouse_country || "",
-    supplierCost: String(
-      product.supplier_cost ?? "",
-    ),
-    shippingCost: String(
-      product.shipping_cost ?? "",
-    ),
-    otherCost: String(
-      product.other_cost ?? 0,
-    ),
-    processingTime:
-      product.processing_time || "",
-    deliveryTime:
-      product.delivery_time || "",
-    stock:
-      product.stock == null
-        ? ""
-        : String(product.stock),
+    supplierName: product.supplier_name || "",
+    supplierProductId: product.supplier_product_id || "",
+    warehouseCountry: product.warehouse_country || "",
+    supplierCost: String(product.supplier_cost ?? ""),
+    shippingCost: String(product.shipping_cost ?? ""),
+    otherCost: String(product.other_cost ?? 0),
+    processingTime: product.processing_time || "",
+    deliveryTime: product.delivery_time || "",
+    stock: product.stock == null ? "" : String(product.stock),
     lowStockThreshold:
       product.low_stock_threshold == null
         ? "5"
         : String(product.low_stock_threshold),
-    imageUrl:
-      product.image_url ||
-      product.images?.[0] ||
-      "",
+    imageUrl: product.image_url || product.images?.[0] || "",
     images: product.images || [],
     videoUrl: product.video_url || "",
     active: Number(product.active) === 1,
@@ -218,9 +218,7 @@ function productToForm(
 
 function getStockState(product: Product) {
   const stock = numberValue(product.stock);
-  const threshold = numberValue(
-    product.low_stock_threshold ?? 5,
-  );
+  const threshold = numberValue(product.low_stock_threshold ?? 5);
 
   if (stock <= 0) return "out";
   if (stock <= threshold) return "low";
@@ -252,11 +250,7 @@ function parseCsvRecords(text: string): string[][] {
   let cell = "";
   let quoted = false;
 
-  for (
-    let index = 0;
-    index < input.length;
-    index += 1
-  ) {
+  for (let index = 0; index < input.length; index += 1) {
     const char = input[index];
     const next = input[index + 1];
 
@@ -277,10 +271,7 @@ function parseCsvRecords(text: string): string[][] {
       continue;
     }
 
-    if (
-      (char === "\n" || char === "\r") &&
-      !quoted
-    ) {
+    if ((char === "\n" || char === "\r") && !quoted) {
       if (char === "\r" && next === "\n") {
         index += 1;
       }
@@ -288,11 +279,7 @@ function parseCsvRecords(text: string): string[][] {
       row.push(cell);
       cell = "";
 
-      if (
-        row.some(
-          (value) => value.trim().length > 0,
-        )
-      ) {
+      if (row.some((value) => value.trim().length > 0)) {
         rows.push(row);
       }
 
@@ -306,11 +293,7 @@ function parseCsvRecords(text: string): string[][] {
   if (cell.length > 0 || row.length > 0) {
     row.push(cell);
 
-    if (
-      row.some(
-        (value) => value.trim().length > 0,
-      )
-    ) {
+    if (row.some((value) => value.trim().length > 0)) {
       rows.push(row);
     }
   }
@@ -323,9 +306,7 @@ function parseCsv(text: string): CsvRow[] {
 
   if (records.length < 2) return [];
 
-  const headers = records[0].map(
-    normalizeCsvHeader,
-  );
+  const headers = records[0].map(normalizeCsvHeader);
 
   return records
     .slice(1)
@@ -335,32 +316,20 @@ function parseCsv(text: string): CsvRow[] {
       headers.forEach((header, index) => {
         if (!header) return;
 
-        row[header] = String(
-          values[index] ?? "",
-        ).trim();
+        row[header] = String(values[index] ?? "").trim();
       });
 
       return row;
     })
-    .filter((row) =>
-      Object.values(row).some(
-        (value) => value.trim() !== "",
-      ),
-    );
+    .filter((row) => Object.values(row).some((value) => value.trim() !== ""));
 }
 
-function firstValue(
-  row: CsvRow,
-  aliases: string[],
-) {
+function firstValue(row: CsvRow, aliases: string[]) {
   for (const alias of aliases) {
     const key = normalizeCsvHeader(alias);
     const value = row[key];
 
-    if (
-      value != null &&
-      value.trim() !== ""
-    ) {
+    if (value != null && value.trim() !== "") {
       return value.trim();
     }
   }
@@ -377,13 +346,8 @@ function splitList(value: string) {
     .filter(Boolean);
 }
 
-function parseBoolean(
-  value: string,
-  fallback = true,
-) {
-  const normalized = value
-    .trim()
-    .toLowerCase();
+function parseBoolean(value: string, fallback = true) {
+  const normalized = value.trim().toLowerCase();
 
   if (!normalized) return fallback;
 
@@ -426,14 +390,9 @@ function parseProductStatus(
   published: string,
   fallback = true,
 ) {
-  const normalized = status
-    .trim()
-    .toLowerCase();
+  const normalized = status.trim().toLowerCase();
 
-  if (
-    normalized === "draft" ||
-    normalized === "archived"
-  ) {
+  if (normalized === "draft" || normalized === "archived") {
     return false;
   }
 
@@ -442,10 +401,7 @@ function parseProductStatus(
   }
 
   if (published.trim()) {
-    return parseBoolean(
-      published,
-      fallback,
-    );
+    return parseBoolean(published, fallback);
   }
 
   return fallback;
@@ -463,19 +419,12 @@ function getRowImages(row: CsvRow) {
       "image_urls",
       "images",
     ]),
-    firstValue(row, [
-      "variant_image",
-      "variant_image_url",
-    ]),
+    firstValue(row, ["variant_image", "variant_image_url"]),
   ];
 
   return Array.from(
     new Set(
-      values
-        .flatMap(splitList)
-        .filter((value) =>
-          /^https?:\/\//i.test(value),
-        ),
+      values.flatMap(splitList).filter((value) => /^https?:\/\//i.test(value)),
     ),
   );
 }
@@ -491,12 +440,7 @@ function getRowHandle(row: CsvRow) {
 }
 
 function getRowName(row: CsvRow) {
-  return firstValue(row, [
-    "title",
-    "product_name",
-    "name",
-    "product_title",
-  ]);
+  return firstValue(row, ["title", "product_name", "name", "product_title"]);
 }
 
 function getRowSku(row: CsvRow) {
@@ -533,18 +477,11 @@ function getRowStock(row: CsvRow) {
 
 function getRowCurrency(row: CsvRow) {
   return (
-    firstValue(row, [
-      "currency",
-      "variant_currency",
-      "price_currency",
-    ]) || "USD"
+    firstValue(row, ["currency", "variant_currency", "price_currency"]) || "USD"
   ).toUpperCase();
 }
 
-function getRowOptionName(
-  row: CsvRow,
-  index: 1 | 2 | 3,
-) {
+function getRowOptionName(row: CsvRow, index: 1 | 2 | 3) {
   return firstValue(row, [
     `option${index}_name`,
     `option_${index}_name`,
@@ -552,14 +489,8 @@ function getRowOptionName(
   ]);
 }
 
-function getRowOptionValue(
-  row: CsvRow,
-  index: 1 | 2 | 3,
-) {
-  return firstValue(row, [
-    `option${index}_value`,
-    `option_${index}_value`,
-  ]);
+function getRowOptionValue(row: CsvRow, index: 1 | 2 | 3) {
+  return firstValue(row, [`option${index}_value`, `option_${index}_value`]);
 }
 
 function buildVariantFromCsvRow(
@@ -569,37 +500,21 @@ function buildVariantFromCsvRow(
 ) {
   const sku = getRowSku(row);
 
-  const price =
-    numberValue(getRowPrice(row)) ||
-    fallbackPrice;
+  const price = numberValue(getRowPrice(row)) || fallbackPrice;
 
   const stockText = getRowStock(row);
 
-  const stock = stockText
-    ? numberValue(stockText)
-    : 0;
+  const stock = stockText ? numberValue(stockText) : 0;
 
   const optionParts: string[] = [];
 
-  for (
-    const optionIndex of [1, 2, 3] as const
-  ) {
-    const name = getRowOptionName(
-      row,
-      optionIndex,
-    );
+  for (const optionIndex of [1, 2, 3] as const) {
+    const name = getRowOptionName(row, optionIndex);
 
-    const value = getRowOptionValue(
-      row,
-      optionIndex,
-    );
+    const value = getRowOptionValue(row, optionIndex);
 
     if (value) {
-      optionParts.push(
-        name
-          ? `${name}: ${value}`
-          : value,
-      );
+      optionParts.push(name ? `${name}: ${value}` : value);
     }
   }
 
@@ -609,14 +524,8 @@ function buildVariantFromCsvRow(
 
   return {
     id: `csv-variant-${Date.now()}-${rowIndex}`,
-    name:
-      optionParts.length > 0
-        ? optionParts.join(" / ")
-        : "Default",
-    value:
-      optionParts.length > 0
-        ? optionParts.join(" / ")
-        : "Default",
+    name: optionParts.length > 0 ? optionParts.join(" / ") : "Default",
+    value: optionParts.length > 0 ? optionParts.join(" / ") : "Default",
     price: String(price),
     sku,
     stock: String(stock),
@@ -663,83 +572,60 @@ function buildCsvProduct(
 ): CsvProductBuild {
   const rawName = getRowName(row);
 
-  const name =
-    rawName ||
-    inherited?.name ||
-    "";
+  const name = rawName || inherited?.name || "";
 
   if (!name) {
-    throw new Error(
-      "Product title/name is missing.",
-    );
+    throw new Error("Product title/name is missing.");
   }
 
   const rawHandle = getRowHandle(row);
 
-  const handle = slugify(
-    rawHandle ||
-      inherited?.handle ||
-      name,
-  );
+  const handle = slugify(rawHandle || inherited?.handle || name);
 
   if (!handle) {
-    throw new Error(
-      "Product handle/slug is missing.",
-    );
+    throw new Error("Product handle/slug is missing.");
   }
 
-  const supplierCostText =
-    firstValue(row, [
-      "wholesale_cost",
-      "supplier_cost",
-      "cost",
-      "unit_cost",
-      "purchase_price",
-      "supplier_price",
-    ]);
+  const supplierCostText = firstValue(row, [
+    "wholesale_cost",
+    "supplier_cost",
+    "cost",
+    "unit_cost",
+    "purchase_price",
+    "supplier_price",
+  ]);
 
-  const shippingCostText =
-    firstValue(row, [
-      "shipping_cost",
-      "supplier_shipping_cost",
-      "shipping",
-      "freight_cost",
-    ]);
+  const shippingCostText = firstValue(row, [
+    "shipping_cost",
+    "supplier_shipping_cost",
+    "shipping",
+    "freight_cost",
+  ]);
 
-  const otherCostText =
-    firstValue(row, [
-      "other_cost",
-      "additional_cost",
-      "fees",
-      "fee",
-    ]);
+  const otherCostText = firstValue(row, [
+    "other_cost",
+    "additional_cost",
+    "fees",
+    "fee",
+  ]);
 
-  const priceText =
-    getRowPrice(row);
+  const priceText = getRowPrice(row);
 
-  const supplierCost =
-    numberValue(supplierCostText);
+  const supplierCost = numberValue(supplierCostText);
 
-  const shippingCost =
-    numberValue(shippingCostText);
+  const shippingCost = numberValue(shippingCostText);
 
-  const otherCost =
-    numberValue(otherCostText);
+  const otherCost = numberValue(otherCostText);
 
-  const price =
-    numberValue(priceText);
+  const price = numberValue(priceText);
 
-  const recommendedPrice =
-    calculateRecommendedPrice(
-      String(supplierCost),
-      String(shippingCost),
-      String(otherCost),
-    );
+  const recommendedPrice = calculateRecommendedPrice(
+    String(supplierCost),
+    String(shippingCost),
+    String(otherCost),
+  );
 
-  const finalPrice =
-    price > 0
-      ? price
-      : recommendedPrice;
+  const finalPrice = price > 0 ? price : recommendedPrice;
 
   if (finalPrice <= 0) {
     throw new Error(
@@ -747,159 +633,111 @@ function buildCsvProduct(
     );
   }
 
-  const sku =
-    getRowSku(row) || undefined;
+  const sku = getRowSku(row) || undefined;
 
   const images = getRowImages(row);
 
-  const description =
-    firstValue(row, [
-      "body_html",
-      "body",
-      "description",
-      "product_description",
-      "short_description",
-    ]);
+  const description = firstValue(row, [
+    "body_html",
+    "body",
+    "description",
+    "product_description",
+    "short_description",
+  ]);
 
-  const category =
-    firstValue(row, [
-      "type",
-      "category",
-      "product_type",
-      "product_category",
-    ]);
+  const category = firstValue(row, [
+    "type",
+    "category",
+    "product_type",
+    "product_category",
+  ]);
 
-  const supplierName =
-    firstValue(row, [
-      "vendor",
-      "supplier_name",
-      "supplier",
-      "brand",
-    ]);
+  const supplierName = firstValue(row, [
+    "vendor",
+    "supplier_name",
+    "supplier",
+    "brand",
+  ]);
 
-  const supplierProductId =
-    firstValue(row, [
-      "supplier_product_id",
-      "supplier_product",
-      "spu",
-      "supplier_id",
-    ]);
+  const supplierProductId = firstValue(row, [
+    "supplier_product_id",
+    "supplier_product",
+    "spu",
+    "supplier_id",
+  ]);
 
-  const warehouseCountry =
-    firstValue(row, [
-      "warehouse_country",
-      "warehouse",
-      "warehouse_location",
-      "ship_from",
-      "country_of_origin",
-    ]);
+  const warehouseCountry = firstValue(row, [
+    "warehouse_country",
+    "warehouse",
+    "warehouse_location",
+    "ship_from",
+    "country_of_origin",
+  ]);
 
-  const deliveryTime =
-    firstValue(row, [
-      "delivery_time",
-      "delivery_estimate",
-      "shipping_time",
-      "estimated_delivery",
-      "delivery",
-    ]);
+  const deliveryTime = firstValue(row, [
+    "delivery_time",
+    "delivery_estimate",
+    "shipping_time",
+    "estimated_delivery",
+    "delivery",
+  ]);
 
-  const processingTime =
-    firstValue(row, [
-      "processing_time",
-      "processing",
-      "handling_time",
-    ]);
+  const processingTime = firstValue(row, [
+    "processing_time",
+    "processing",
+    "handling_time",
+  ]);
 
   const stockText = getRowStock(row);
 
-  const stock =
-    stockText !== ""
-      ? numberValue(stockText)
-      : undefined;
+  const stock = stockText !== "" ? numberValue(stockText) : undefined;
 
-  const lowStockText =
-    firstValue(row, [
-      "low_stock_threshold",
-      "low_stock",
-      "inventory_threshold",
-    ]);
+  const lowStockText = firstValue(row, [
+    "low_stock_threshold",
+    "low_stock",
+    "inventory_threshold",
+  ]);
 
   const lowStockThreshold =
-    lowStockText !== ""
-      ? numberValue(lowStockText)
-      : undefined;
+    lowStockText !== "" ? numberValue(lowStockText) : undefined;
 
-  const currency =
-    getRowCurrency(row);
+  const currency = getRowCurrency(row);
 
-  const variant =
-    buildVariantFromCsvRow(
-      row,
-      rowIndex,
-      finalPrice,
-    );
+  const variant = buildVariantFromCsvRow(row, rowIndex, finalPrice);
 
-  const published =
-    firstValue(row, [
-      "published",
-      "published_at",
-      "visible",
-    ]);
+  const published = firstValue(row, ["published", "published_at", "visible"]);
 
-  const status =
-    firstValue(row, [
-      "status",
-      "product_status",
-    ]);
+  const status = firstValue(row, ["status", "product_status"]);
 
-  const activeProvided =
-    Boolean(published || status);
+  const activeProvided = Boolean(published || status);
 
   const active = activeProvided
-    ? parseProductStatus(
-        status,
-        published,
-        true,
-      )
+    ? parseProductStatus(status, published, true)
     : true;
 
   const payload: CreateProductInput = {
     name: name.trim(),
     slug: handle,
     sku,
-    category:
-      category || "Uncategorized",
+    category: category || "Uncategorized",
     description,
     price: finalPrice,
     currency,
-    image_url:
-      images[0] || undefined,
+    image_url: images[0] || undefined,
     images,
     video_url:
-      firstValue(row, [
-        "video_url",
-        "video",
-        "product_video",
-      ]) || undefined,
-    supplier_name:
-      supplierName || undefined,
-    supplier_product_id:
-      supplierProductId || undefined,
-    warehouse_country:
-      warehouseCountry || undefined,
+      firstValue(row, ["video_url", "video", "product_video"]) || undefined,
+    supplier_name: supplierName || "TeemDrop",
+    supplier_product_id: supplierProductId || undefined,
+    warehouse_country: warehouseCountry || undefined,
     supplier_cost: supplierCost,
     shipping_cost: shippingCost,
     other_cost: otherCost,
-    processing_time:
-      processingTime || undefined,
-    delivery_time:
-      deliveryTime || undefined,
+    processing_time: processingTime || undefined,
+    delivery_time: deliveryTime || undefined,
     stock,
-    low_stock_threshold:
-      lowStockThreshold,
-    variants: variant
-      ? [variant]
-      : [],
+    low_stock_threshold: lowStockThreshold,
+    variants: variant ? [variant] : [],
   };
 
   return {
@@ -916,58 +754,35 @@ function buildCsvProduct(
       description: Boolean(description),
       price: Boolean(priceText),
       currency: Boolean(
-        firstValue(row, [
-          "currency",
-          "variant_currency",
-          "price_currency",
-        ]),
+        firstValue(row, ["currency", "variant_currency", "price_currency"]),
       ),
       supplierName: Boolean(supplierName),
-      supplierProductId:
-        Boolean(supplierProductId),
-      warehouseCountry:
-        Boolean(warehouseCountry),
-      supplierCost:
-        supplierCostText !== "",
-      shippingCost:
-        shippingCostText !== "",
-      otherCost:
-        otherCostText !== "",
-      processingTime:
-        Boolean(processingTime),
-      deliveryTime:
-        Boolean(deliveryTime),
+      supplierProductId: Boolean(supplierProductId),
+      warehouseCountry: Boolean(warehouseCountry),
+      supplierCost: supplierCostText !== "",
+      shippingCost: shippingCostText !== "",
+      otherCost: otherCostText !== "",
+      processingTime: Boolean(processingTime),
+      deliveryTime: Boolean(deliveryTime),
       stock: stockText !== "",
-      lowStockThreshold:
-        lowStockText !== "",
+      lowStockThreshold: lowStockText !== "",
       images: images.length > 0,
       videoUrl: Boolean(
-        firstValue(row, [
-          "video_url",
-          "video",
-          "product_video",
-        ]),
+        firstValue(row, ["video_url", "video", "product_video"]),
       ),
       active: activeProvided,
     },
   };
 }
 
-function variantKey(
-  variant: ProductVariant,
-) {
-  const sku =
-    variant.sku?.trim().toLowerCase();
+function variantKey(variant: ProductVariant) {
+  const sku = variant.sku?.trim().toLowerCase();
 
   if (sku) {
     return `sku:${sku}`;
   }
 
-  return `option:${(
-    variant.name || ""
-  )
-    .trim()
-    .toLowerCase()}:${(
+  return `option:${(variant.name || "").trim().toLowerCase()}:${(
     variant.value || ""
   )
     .trim()
@@ -982,48 +797,31 @@ function mergeVariants(
 
   const key = variantKey(incoming);
 
-  const existingIndex =
-    existing.findIndex(
-      (variant) =>
-        variantKey(variant) === key,
-    );
+  const existingIndex = existing.findIndex(
+    (variant) => variantKey(variant) === key,
+  );
 
   if (existingIndex === -1) {
     return [...existing, incoming];
   }
 
-  return existing.map(
-    (variant, index) =>
-      index === existingIndex
-        ? {
-            ...variant,
-            ...incoming,
-            id:
-              variant.id ||
-              incoming.id,
-          }
-        : variant,
+  return existing.map((variant, index) =>
+    index === existingIndex
+      ? {
+          ...variant,
+          ...incoming,
+          id: variant.id || incoming.id,
+        }
+      : variant,
   );
 }
 
-function mergeImages(
-  existing: string[] = [],
-  incoming: string[] = [],
-) {
-  return Array.from(
-    new Set([
-      ...existing,
-      ...incoming,
-    ]),
-  ).filter(Boolean);
+function mergeImages(existing: string[] = [], incoming: string[] = []) {
+  return Array.from(new Set([...existing, ...incoming])).filter(Boolean);
 }
 
-function makeUniqueSlug(
-  base: string,
-  used: Set<string>,
-) {
-  const cleanBase =
-    slugify(base) || "product";
+function makeUniqueSlug(base: string, used: Set<string>) {
+  const cleanBase = slugify(base) || "product";
 
   let candidate = cleanBase;
   let counter = 2;
@@ -1043,10 +841,7 @@ function makeUniqueSlug(
 /* -------------------------------------------------------------------------- */
 
 function escapeCsv(value: string) {
-  return `"${String(value).replace(
-    /"/g,
-    '""',
-  )}"`;
+  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 function downloadCsvTemplate() {
@@ -1087,7 +882,7 @@ function downloadCsvTemplate() {
     "elevated-cat-feeding-bowl",
     "Ergonomic 15 Degree Elevated Stainless Steel Cat Feeding Bowl",
     "<p>Premium elevated stainless steel feeding bowl.</p>",
-    "My Store",
+    "TeemDrop",
     "Pet Supplies",
     "cat,bowl,pet",
     "true",
@@ -1125,15 +920,12 @@ function downloadCsvTemplate() {
     type: "text/csv;charset=utf-8;",
   });
 
-  const url =
-    URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
 
-  const anchor =
-    document.createElement("a");
+  const anchor = document.createElement("a");
 
   anchor.href = url;
-  anchor.download =
-    "global-product-import-template.csv";
+  anchor.download = "global-product-import-template.csv";
 
   document.body.appendChild(anchor);
   anchor.click();
@@ -1154,46 +946,33 @@ interface ProductModalProps {
   onSaved: () => Promise<void>;
 }
 
-function ProductModal({
-  product,
-  onClose,
-  onSaved,
-}: ProductModalProps) {
-  const [form, setForm] =
-    useState<ProductFormState>(() =>
-      product
-        ? productToForm(product)
-        : { ...emptyForm },
-    );
+function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
+  const [form, setForm] = useState<ProductFormState>(() =>
+    product ? productToForm(product) : { ...emptyForm },
+  );
 
-  const [saving, setSaving] =
-    useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
-  const [imageInput, setImageInput] =
-    useState("");
+  const [imageInput, setImageInput] = useState("");
 
-  const imageFileInputRef =
-    useRef<HTMLInputElement | null>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
 
-  const objectUrlsRef =
-    useRef<Set<string>>(new Set());
+  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const isEditing =
-    Boolean(product);
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+
+  const isEditing = Boolean(product);
 
   const totalCost = useMemo(
     () =>
       numberValue(form.supplierCost) +
       numberValue(form.shippingCost) +
       numberValue(form.otherCost),
-    [
-      form.supplierCost,
-      form.shippingCost,
-      form.otherCost,
-    ],
+    [form.supplierCost, form.shippingCost, form.otherCost],
   );
 
   const recommendedPrice = useMemo(
@@ -1203,39 +982,25 @@ function ProductModal({
         form.shippingCost,
         form.otherCost,
       ),
-    [
-      form.supplierCost,
-      form.shippingCost,
-      form.otherCost,
-    ],
+    [form.supplierCost, form.shippingCost, form.otherCost],
   );
 
-  const selectedPrice =
-    numberValue(form.price);
+  const selectedPrice = numberValue(form.price);
 
-  const estimatedProfit =
-    selectedPrice - totalCost;
+  const estimatedProfit = selectedPrice - totalCost;
 
   const estimatedMargin =
-    selectedPrice > 0
-      ? (estimatedProfit /
-          selectedPrice) *
-        100
-      : 0;
+    selectedPrice > 0 ? (estimatedProfit / selectedPrice) * 100 : 0;
 
   useEffect(() => {
     return () => {
-      objectUrlsRef.current.forEach(
-        (url) => URL.revokeObjectURL(url),
-      );
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
 
       objectUrlsRef.current.clear();
     };
   }, []);
 
-  function setField<
-    K extends keyof ProductFormState,
-  >(
+  function setField<K extends keyof ProductFormState>(
     field: K,
     value: ProductFormState[K],
   ) {
@@ -1245,24 +1010,18 @@ function ProductModal({
     }));
   }
 
-  function handleNameChange(
-    value: string,
-  ) {
+  function handleNameChange(value: string) {
     setForm((current) => ({
       ...current,
       name: value,
       slug:
-        !current.slug ||
-        current.slug ===
-          slugify(current.name)
+        !current.slug || current.slug === slugify(current.name)
           ? slugify(value)
           : current.slug,
     }));
   }
 
-  function handlePriceModeChange(
-    mode: "manual" | "recommended",
-  ) {
+  function handlePriceModeChange(mode: "manual" | "recommended") {
     setForm((current) => ({
       ...current,
       priceMode: mode,
@@ -1280,179 +1039,169 @@ function ProductModal({
   }
 
   function addImageUrl() {
-    const value =
-      imageInput.trim();
+    const value = imageInput.trim();
 
     if (!value) return;
 
     setForm((current) => {
-      const images =
-        current.images.includes(value)
-          ? current.images
-          : [
-              ...current.images,
-              value,
-            ];
+      const images = current.images.includes(value)
+        ? current.images
+        : [...current.images, value];
 
       return {
         ...current,
         images,
-        imageUrl:
-          current.imageUrl ||
-          value,
+        imageUrl: current.imageUrl || value,
       };
     });
 
     setImageInput("");
   }
 
-  function removeImage(
-    index: number,
-  ) {
+  function removeImage(index: number) {
     setForm((current) => {
-      const removed =
-        current.images[index];
+      const removed = current.images[index];
 
-      if (
-        removed &&
-        objectUrlsRef.current.has(
-          removed,
-        )
-      ) {
-        URL.revokeObjectURL(
-          removed,
-        );
+      if (removed && objectUrlsRef.current.has(removed)) {
+        URL.revokeObjectURL(removed);
 
-        objectUrlsRef.current.delete(
-          removed,
-        );
+        objectUrlsRef.current.delete(removed);
       }
 
-      const images =
-        current.images.filter(
-          (_, imageIndex) =>
-            imageIndex !== index,
-        );
+      const images = current.images.filter(
+        (_, imageIndex) => imageIndex !== index,
+      );
 
       return {
         ...current,
         images,
         imageUrl:
-          current.imageUrl === removed
-            ? images[0] || ""
-            : current.imageUrl,
+          current.imageUrl === removed ? images[0] || "" : current.imageUrl,
       };
     });
   }
 
-  function makeMainImage(
-    image: string,
-  ) {
+  function makeMainImage(image: string) {
     setForm((current) => ({
       ...current,
       imageUrl: image,
-      images: [
-        image,
-        ...current.images.filter(
-          (item) => item !== image,
-        ),
-      ],
+      images: [image, ...current.images.filter((item) => item !== image)],
     }));
   }
 
-  function handleImageFiles(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const files = Array.from(
-      event.target.files || [],
-    );
+  function handleImageFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+
+    event.target.value = "";
 
     if (!files.length) return;
 
-    const urls = files.map((file) => {
-      const url =
-        URL.createObjectURL(file);
+    if (
+      files.some(
+        (file) =>
+          !file.type.startsWith("image/") || file.size > 10 * 1024 * 1024,
+      )
+    ) {
+      setError("Choose images no larger than 10 MB each.");
+      return;
+    }
 
-      objectUrlsRef.current.add(url);
+    setMediaUploading(true);
+    setError("");
 
-      return url;
-    });
+    void (async () => {
+      try {
+        const urls: string[] = [];
+        for (const file of files) {
+          urls.push(await uploadProductMedia(file, "image"));
+        }
 
-    setForm((current) => {
-      const images = [
-        ...current.images,
-        ...urls,
-      ];
-
-      return {
-        ...current,
-        images,
-        imageUrl:
-          current.imageUrl ||
-          urls[0] ||
-          "",
-      };
-    });
-
-    event.target.value = "";
+        setForm((current) => {
+          const images = Array.from(new Set([...current.images, ...urls]));
+          return {
+            ...current,
+            images,
+            imageUrl: current.imageUrl || urls[0] || "",
+          };
+        });
+      } catch (uploadError) {
+        setError(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Unable to upload product images.",
+        );
+      } finally {
+        setMediaUploading(false);
+      }
+    })();
   }
 
-  async function handleSubmit(
-    event: FormEvent,
-  ) {
+  async function handleVideoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      setError("Choose a video file.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setError("Product videos must be 50 MB or smaller.");
+      return;
+    }
+
+    setMediaUploading(true);
+    setError("");
+    try {
+      setField("videoUrl", await uploadProductMedia(file, "video"));
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload this product video.",
+      );
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
     setError("");
 
     if (!form.name.trim()) {
-      setError(
-        "Product name is required.",
-      );
+      setError("Product name is required.");
       return;
     }
 
     if (!form.category.trim()) {
-      setError(
-        "Category is required.",
-      );
+      setError("Category is required.");
       return;
     }
 
     if (selectedPrice <= 0) {
-      setError(
-        "Enter a valid selling price.",
-      );
+      setError("Enter a valid selling price.");
       return;
     }
 
     if (
-      numberValue(form.supplierCost) <
-        0 ||
-      numberValue(form.shippingCost) <
-        0 ||
+      numberValue(form.supplierCost) < 0 ||
+      numberValue(form.shippingCost) < 0 ||
       numberValue(form.otherCost) < 0
     ) {
-      setError(
-        "Product costs cannot be negative.",
-      );
+      setError("Product costs cannot be negative.");
       return;
     }
 
     setSaving(true);
 
     try {
-      const images =
-        form.images.filter(Boolean);
+      const images = form.images.filter(Boolean);
 
-      const primaryImage =
-        form.imageUrl ||
-        images[0] ||
-        "";
+      const primaryImage = form.imageUrl || images[0] || "";
 
-      const variantSku =
-        form.sku.trim() ||
-        form.variants[0]?.sku ||
-        "";
+      const variantSku = form.sku.trim() || form.variants[0]?.sku || "";
 
       const variants: ProductVariant[] =
         form.variants.length > 0
@@ -1463,115 +1212,59 @@ function ProductModal({
                   id: `variant-${Date.now()}`,
                   name: "Default",
                   value: "Default",
-                  price: String(
-                    selectedPrice,
-                  ),
+                  price: String(selectedPrice),
                   sku: variantSku,
-                  stock:
-                    form.stock || "0",
+                  stock: form.stock || "0",
                 },
               ]
             : [];
 
       const payload: CreateProductInput = {
         name: form.name.trim(),
-        slug:
-          form.slug.trim() ||
-          slugify(form.name),
-        category:
-          form.category.trim(),
-        description:
-          form.description.trim(),
+        slug: form.slug.trim() || slugify(form.name),
+        category: form.category.trim(),
+        description: form.description.trim(),
         price: selectedPrice,
-        currency:
-          form.currency || "USD",
-        image_url:
-          primaryImage || undefined,
+        currency: form.currency || "USD",
+        image_url: primaryImage || undefined,
         images,
-        video_url:
-          form.videoUrl.trim() ||
-          undefined,
-        supplier_name:
-          form.supplierName.trim() ||
-          undefined,
-        supplier_product_id:
-          form.supplierProductId.trim() ||
-          undefined,
-        warehouse_country:
-          form.warehouseCountry.trim() ||
-          undefined,
-        supplier_cost:
-          numberValue(
-            form.supplierCost,
-          ),
-        shipping_cost:
-          numberValue(
-            form.shippingCost,
-          ),
-        other_cost:
-          numberValue(
-            form.otherCost,
-          ),
-        processing_time:
-          form.processingTime.trim() ||
-          undefined,
-        delivery_time:
-          form.deliveryTime.trim() ||
-          undefined,
-        sku:
-          form.sku.trim() ||
-          undefined,
-        stock:
-          form.stock.trim() === ""
-            ? undefined
-            : numberValue(form.stock),
+        video_url: form.videoUrl.trim() || undefined,
+        supplier_name: form.supplierName.trim() || undefined,
+        supplier_product_id: form.supplierProductId.trim() || undefined,
+        warehouse_country: form.warehouseCountry.trim() || undefined,
+        supplier_cost: numberValue(form.supplierCost),
+        shipping_cost: numberValue(form.shippingCost),
+        other_cost: numberValue(form.otherCost),
+        processing_time: form.processingTime.trim() || undefined,
+        delivery_time: form.deliveryTime.trim() || undefined,
+        sku: form.sku.trim() || undefined,
+        stock: form.stock.trim() === "" ? undefined : numberValue(form.stock),
         low_stock_threshold:
-          form.lowStockThreshold.trim() ===
-          ""
+          form.lowStockThreshold.trim() === ""
             ? undefined
-            : numberValue(
-                form.lowStockThreshold,
-              ),
+            : numberValue(form.lowStockThreshold),
         variants,
       };
 
       if (product) {
-        await updateProduct(
-          product.id,
-          {
-            ...payload,
-            active: form.active
-              ? 1
-              : 0,
-          },
-        );
+        await updateProduct(product.id, {
+          ...payload,
+          active: form.active ? 1 : 0,
+        });
       } else {
-        const created =
-          await createProduct(
-            payload,
-          );
+        const created = await createProduct(payload);
 
-        if (
-          !form.active &&
-          created?.id
-        ) {
-          await updateProduct(
-            created.id,
-            {
-              active: 0,
-            },
-          );
+        if (!form.active && created?.id) {
+          await updateProduct(created.id, {
+            active: 0,
+          });
         }
       }
 
       await onSaved();
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save product.",
-      );
+      setError(err instanceof Error ? err.message : "Unable to save product.");
     } finally {
       setSaving(false);
     }
@@ -1582,10 +1275,7 @@ function ProductModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="presentation"
       onMouseDown={(event) => {
-        if (
-          event.target ===
-          event.currentTarget
-        ) {
+        if (event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -1594,15 +1284,11 @@ function ProductModal({
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
           <div>
             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-              {isEditing
-                ? "Edit product"
-                : "Add product"}
+              {isEditing ? "Edit product" : "Add product"}
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Add supplier information,
-              images, costs and selling
-              price.
+              Add supplier information, images, costs and selling price.
             </p>
           </div>
 
@@ -1615,10 +1301,7 @@ function ProductModal({
           </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="overflow-y-auto p-6"
-        >
+        <form onSubmit={handleSubmit} className="overflow-y-auto p-6">
           {error && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -1640,11 +1323,7 @@ function ProductModal({
 
                     <input
                       value={form.name}
-                      onChange={(event) =>
-                        handleNameChange(
-                          event.target.value,
-                        )
-                      }
+                      onChange={(event) => handleNameChange(event.target.value)}
                       placeholder="Ergonomic 15° Elevated Stainless Steel Cat Feeding Bowl"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
                     />
@@ -1657,12 +1336,7 @@ function ProductModal({
 
                     <input
                       value={form.sku}
-                      onChange={(event) =>
-                        setField(
-                          "sku",
-                          event.target.value,
-                        )
-                      }
+                      onChange={(event) => setField("sku", event.target.value)}
                       placeholder="SUPEHDF00178-A0"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
                     />
@@ -1676,10 +1350,7 @@ function ProductModal({
                     <input
                       value={form.category}
                       onChange={(event) =>
-                        setField(
-                          "category",
-                          event.target.value,
-                        )
+                        setField("category", event.target.value)
                       }
                       placeholder="Pet Supplies"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-900"
@@ -1692,14 +1363,9 @@ function ProductModal({
                     </span>
 
                     <textarea
-                      value={
-                        form.description
-                      }
+                      value={form.description}
                       onChange={(event) =>
-                        setField(
-                          "description",
-                          event.target.value,
-                        )
+                        setField("description", event.target.value)
                       }
                       rows={5}
                       placeholder="Describe the product for customers..."
@@ -1717,20 +1383,18 @@ function ProductModal({
                     </h3>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Upload images or add
-                      image URLs.
+                      Upload images or add image URLs.
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() =>
-                      imageFileInputRef.current?.click()
-                    }
+                    onClick={() => imageFileInputRef.current?.click()}
+                    disabled={mediaUploading}
                     className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
                   >
                     <Upload size={16} />
-                    Upload images
+                    {mediaUploading ? "Uploading..." : "Upload images"}
                   </button>
 
                   <input
@@ -1746,11 +1410,7 @@ function ProductModal({
                 <div className="mb-4 flex gap-2">
                   <input
                     value={imageInput}
-                    onChange={(event) =>
-                      setImageInput(
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => setImageInput(event.target.value)}
                     placeholder="Or paste an image URL"
                     className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2.5 outline-none dark:border-slate-700 dark:bg-slate-900"
                   />
@@ -1764,13 +1424,10 @@ function ProductModal({
                   </button>
                 </div>
 
-                {form.images.length ===
-                0 ? (
+                {form.images.length === 0 ? (
                   <button
                     type="button"
-                    onClick={() =>
-                      imageFileInputRef.current?.click()
-                    }
+                    onClick={() => imageFileInputRef.current?.click()}
                     className="flex min-h-40 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-slate-500 dark:border-slate-700"
                   >
                     <ImagePlus size={32} />
@@ -1780,75 +1437,52 @@ function ProductModal({
                     </span>
 
                     <span className="mt-1 text-xs">
-                      PNG, JPG, WEBP and other
-                      browser-supported formats
+                      PNG, JPG, WEBP and other browser-supported formats
                     </span>
                   </button>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                    {form.images.map(
-                      (
-                        image,
-                        index,
-                      ) => (
-                        <div
-                          key={`${image}-${index}`}
-                          className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
-                        >
-                          <img
-                            src={image}
-                            alt={`Product ${
-                              index + 1
-                            }`}
-                            className="aspect-square w-full object-cover"
-                            onError={(
-                              event,
-                            ) => {
-                              event.currentTarget.style.display =
-                                "none";
-                            }}
-                          />
+                    {form.images.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
+                      >
+                        <img
+                          src={image}
+                          alt={`Product ${index + 1}`}
+                          className="aspect-square w-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
 
-                          <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/60 p-2 opacity-0 transition group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                makeMainImage(
-                                  image,
-                                )
-                              }
-                              className="flex-1 rounded-lg bg-white px-2 py-1 text-xs font-medium text-slate-900"
-                            >
-                              {form.imageUrl ===
-                              image
-                                ? "Main image"
-                                : "Make main"}
-                            </button>
+                        <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/60 p-2 opacity-0 transition group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => makeMainImage(image)}
+                            className="flex-1 rounded-lg bg-white px-2 py-1 text-xs font-medium text-slate-900"
+                          >
+                            {form.imageUrl === image
+                              ? "Main image"
+                              : "Make main"}
+                          </button>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeImage(
-                                  index,
-                                )
-                              }
-                              className="rounded-lg bg-red-500 px-2 py-1 text-xs text-white"
-                            >
-                              <Trash2
-                                size={13}
-                              />
-                            </button>
-                          </div>
-
-                          {form.imageUrl ===
-                            image && (
-                            <div className="absolute left-2 top-2 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">
-                              MAIN
-                            </div>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="rounded-lg bg-red-500 px-2 py-1 text-xs text-white"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
-                      ),
-                    )}
+
+                        {form.imageUrl === image && (
+                          <div className="absolute left-2 top-2 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">
+                            MAIN
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </section>
@@ -1860,63 +1494,56 @@ function ProductModal({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   {[
-                    [
-                      "supplierName",
-                      "Supplier",
-                      "TeemDrop",
-                    ],
+                    ["supplierName", "Supplier", "TeemDrop"],
                     [
                       "supplierProductId",
                       "Supplier product ID / SPU",
                       "SUPEHDF00178",
                     ],
-                    [
-                      "warehouseCountry",
-                      "Warehouse country",
-                      "China / CN",
-                    ],
-                    [
-                      "deliveryTime",
-                      "Delivery time",
-                      "7–15 business days",
-                    ],
-                    [
-                      "processingTime",
-                      "Processing time",
-                      "1–3 business days",
-                    ],
-                    [
-                      "videoUrl",
-                      "Video URL",
-                      "Optional product video URL",
-                    ],
-                  ].map(
-                    ([field, label, placeholder]) => (
-                      <label key={field}>
-                        <span className="mb-1.5 block text-sm font-medium">
-                          {label}
-                        </span>
+                    ["warehouseCountry", "Warehouse country", "China / CN"],
+                    ["deliveryTime", "Delivery time", "7–15 business days"],
+                    ["processingTime", "Processing time", "1–3 business days"],
+                    ["videoUrl", "Video URL", "Optional product video URL"],
+                  ].map(([field, label, placeholder]) => (
+                    <label key={field}>
+                      <span className="mb-1.5 block text-sm font-medium">
+                        {label}
+                      </span>
 
-                        <input
-                          value={
-                            form[
-                              field as keyof ProductFormState
-                            ] as string
-                          }
-                          onChange={(event) =>
-                            setField(
-                              field as keyof ProductFormState,
-                              event.target.value as never,
-                            )
-                          }
-                          placeholder={
-                            placeholder
-                          }
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                        />
-                      </label>
-                    ),
-                  )}
+                      <input
+                        value={form[field as keyof ProductFormState] as string}
+                        onChange={(event) =>
+                          setField(
+                            field as keyof ProductFormState,
+                            event.target.value as never,
+                          )
+                        }
+                        placeholder={placeholder}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                      />
+
+                      {field === "videoUrl" && (
+                        <>
+                          <input
+                            ref={videoFileInputRef}
+                            type="file"
+                            accept="video/*"
+                            onChange={handleVideoFile}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => videoFileInputRef.current?.click()}
+                            disabled={mediaUploading}
+                            className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                          >
+                            <Upload size={15} />
+                            {mediaUploading ? "Uploading..." : "Upload video"}
+                          </button>
+                        </>
+                      )}
+                    </label>
+                  ))}
                 </div>
               </section>
             </div>
@@ -1929,64 +1556,37 @@ function ProductModal({
 
                 <div className="space-y-4">
                   {[
-                    [
-                      "supplierCost",
-                      "Supplier cost",
-                      "1.72",
-                    ],
-                    [
-                      "shippingCost",
-                      "Supplier shipping cost",
-                      "13.61",
-                    ],
-                    [
-                      "otherCost",
-                      "Other cost",
-                      "0",
-                    ],
-                  ].map(
-                    ([field, label, placeholder]) => (
-                      <label key={field}>
-                        <span className="mb-1.5 block text-sm font-medium">
-                          {label}
-                        </span>
+                    ["supplierCost", "Supplier cost", "1.72"],
+                    ["shippingCost", "Supplier shipping cost", "13.61"],
+                    ["otherCost", "Other cost", "0"],
+                  ].map(([field, label, placeholder]) => (
+                    <label key={field}>
+                      <span className="mb-1.5 block text-sm font-medium">
+                        {label}
+                      </span>
 
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={
-                            form[
-                              field as keyof ProductFormState
-                            ] as string
-                          }
-                          onChange={(event) =>
-                            setField(
-                              field as keyof ProductFormState,
-                              event.target.value as never,
-                            )
-                          }
-                          placeholder={
-                            placeholder
-                          }
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
-                        />
-                      </label>
-                    ),
-                  )}
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form[field as keyof ProductFormState] as string}
+                        onChange={(event) =>
+                          setField(
+                            field as keyof ProductFormState,
+                            event.target.value as never,
+                          )
+                        }
+                        placeholder={placeholder}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
+                      />
+                    </label>
+                  ))}
 
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">
-                        Total product cost
-                      </span>
+                      <span className="text-slate-500">Total product cost</span>
 
-                      <strong>
-                        {money(
-                          totalCost,
-                          form.currency,
-                        )}
-                      </strong>
+                      <strong>{money(totalCost, form.currency)}</strong>
                     </div>
                   </div>
                 </div>
@@ -2000,21 +1600,14 @@ function ProductModal({
                 <div className="mb-4 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      handlePriceModeChange(
-                        "manual",
-                      )
-                    }
+                    onClick={() => handlePriceModeChange("manual")}
                     className={`rounded-xl border px-3 py-3 text-left text-sm ${
-                      form.priceMode ===
-                      "manual"
+                      form.priceMode === "manual"
                         ? "border-slate-900 bg-slate-900 text-white"
                         : "border-slate-300 dark:border-slate-700"
                     }`}
                   >
-                    <strong className="block">
-                      Manual price
-                    </strong>
+                    <strong className="block">Manual price</strong>
 
                     <span className="text-xs opacity-70">
                       I choose the price
@@ -2023,25 +1616,16 @@ function ProductModal({
 
                   <button
                     type="button"
-                    onClick={() =>
-                      handlePriceModeChange(
-                        "recommended",
-                      )
-                    }
+                    onClick={() => handlePriceModeChange("recommended")}
                     className={`rounded-xl border px-3 py-3 text-left text-sm ${
-                      form.priceMode ===
-                      "recommended"
+                      form.priceMode === "recommended"
                         ? "border-slate-900 bg-slate-900 text-white"
                         : "border-slate-300 dark:border-slate-700"
                     }`}
                   >
-                    <strong className="block">
-                      Recommended
-                    </strong>
+                    <strong className="block">Recommended</strong>
 
-                    <span className="text-xs opacity-70">
-                      2.5× total cost
-                    </span>
+                    <span className="text-xs opacity-70">2.5× total cost</span>
                   </button>
                 </div>
 
@@ -2055,54 +1639,28 @@ function ProductModal({
                     min="0"
                     step="0.01"
                     value={form.price}
-                    onChange={(event) =>
-                      setField(
-                        "price",
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => setField("price", event.target.value)}
                     className="w-full rounded-xl border border-slate-300 px-3 py-3 text-lg font-semibold dark:border-slate-700 dark:bg-slate-900"
                   />
                 </label>
 
                 <div className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">
-                      Recommended
-                    </span>
+                    <span className="text-slate-500">Recommended</span>
 
-                    <strong>
-                      {money(
-                        recommendedPrice,
-                        form.currency,
-                      )}
-                    </strong>
+                    <strong>{money(recommendedPrice, form.currency)}</strong>
                   </div>
 
                   <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-slate-500">
-                      Estimated profit
-                    </span>
+                    <span className="text-slate-500">Estimated profit</span>
 
-                    <strong>
-                      {money(
-                        estimatedProfit,
-                        form.currency,
-                      )}
-                    </strong>
+                    <strong>{money(estimatedProfit, form.currency)}</strong>
                   </div>
 
                   <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-slate-500">
-                      Estimated margin
-                    </span>
+                    <span className="text-slate-500">Estimated margin</span>
 
-                    <strong>
-                      {estimatedMargin.toFixed(
-                        1,
-                      )}
-                      %
-                    </strong>
+                    <strong>{estimatedMargin.toFixed(1)}%</strong>
                   </div>
                 </div>
               </section>
@@ -2124,10 +1682,7 @@ function ProductModal({
                       step="1"
                       value={form.stock}
                       onChange={(event) =>
-                        setField(
-                          "stock",
-                          event.target.value,
-                        )
+                        setField("stock", event.target.value)
                       }
                       placeholder="0"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
@@ -2143,14 +1698,9 @@ function ProductModal({
                       type="number"
                       min="0"
                       step="1"
-                      value={
-                        form.lowStockThreshold
-                      }
+                      value={form.lowStockThreshold}
                       onChange={(event) =>
-                        setField(
-                          "lowStockThreshold",
-                          event.target.value,
-                        )
+                        setField("lowStockThreshold", event.target.value)
                       }
                       className="w-full rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
                     />
@@ -2166,30 +1716,20 @@ function ProductModal({
                     </h3>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Active products can appear
-                      on the storefront.
+                      Active products can appear on the storefront.
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setField(
-                        "active",
-                        !form.active,
-                      )
-                    }
+                    onClick={() => setField("active", !form.active)}
                     className={`relative h-6 w-11 rounded-full transition ${
-                      form.active
-                        ? "bg-slate-900"
-                        : "bg-slate-300"
+                      form.active ? "bg-slate-900" : "bg-slate-300"
                     }`}
                   >
                     <span
                       className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                        form.active
-                          ? "left-6"
-                          : "left-1"
+                        form.active ? "left-6" : "left-1"
                       }`}
                     />
                   </button>
@@ -2225,121 +1765,1103 @@ function ProductModal({
   );
 }
 
+function CJDropshippingImport({
+  onImportSuccess,
+}: {
+  onImportSuccess?: () => void | Promise<void>;
+}) {
+  const [keyword, setKeyword] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [warehouse, setWarehouse] = useState("ALL");
+  const [products, setProducts] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalProducts, setTotalProducts] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [details, setDetails] = useState<any>(null);
+  const [selectedSearchProduct, setSelectedSearchProduct] = useState<any>(null);
+  const [searched, setSearched] = useState(false);
+  const [sellingPrice, setSellingPrice] = useState("");
+
+  const warehouseNames: Record<string, string> = {
+    ALL: "All warehouses",
+    US: "United States",
+    CA: "Canada",
+    GB: "United Kingdom",
+    AU: "Australia",
+    DE: "Germany",
+    FR: "France",
+    ES: "Spain",
+    IT: "Italy",
+    PL: "Poland",
+    CN: "China",
+  };
+
+  async function handleSearch() {
+    setLoading(true);
+    setError("");
+    setNotice("");
+    setDetails(null);
+    setSellingPrice("");
+    setSearched(true);
+
+    try {
+      const result: any = await searchCJProducts(keyword, 1, 100, warehouse);
+
+      const rows = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.products)
+            ? result.products
+            : Array.isArray(result?.list)
+              ? result.list
+              : [];
+
+      setProducts(rows);
+      setPage(Number(result?.page) || 1);
+      setHasMore(Boolean(result?.hasMore));
+      setTotalProducts(
+        Number.isFinite(Number(result?.total)) ? Number(result.total) : null,
+      );
+
+      if (result?.notice) {
+        setNotice(result.notice);
+      }
+
+      if (result?.success === false) {
+        throw new Error(result.error || "CJ product search failed.");
+      }
+    } catch (err) {
+      setProducts([]);
+      setHasMore(false);
+      setTotalProducts(null);
+      setError(
+        err instanceof Error ? err.message : "Could not search CJ products.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadMore() {
+    if (loadingMore || loading || !hasMore) return;
+
+    setLoadingMore(true);
+    setError("");
+
+    try {
+      const nextPage = page + 1;
+      const result: any = await searchCJProducts(
+        keyword,
+        nextPage,
+        100,
+        warehouse,
+      );
+      const rows = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.products)
+            ? result.products
+            : Array.isArray(result?.list)
+              ? result.list
+              : [];
+
+      if (result?.success === false) {
+        throw new Error(result.error || "Could not load more CJ products.");
+      }
+
+      setProducts((current) => {
+        const knownIds = new Set(
+          current.map((item) =>
+            String(item.pid || item.productId || item.id || ""),
+          ),
+        );
+        return [
+          ...current,
+          ...rows.filter((item: any) => {
+            const id = String(item.pid || item.productId || item.id || "");
+            if (!id || knownIds.has(id)) return false;
+            knownIds.add(id);
+            return true;
+          }),
+        ];
+      });
+      setPage(Number(result?.page) || nextPage);
+      setHasMore(Boolean(result?.hasMore));
+      setTotalProducts(
+        Number.isFinite(Number(result?.total))
+          ? Number(result.total)
+          : totalProducts,
+      );
+      if (result?.notice) setNotice(result.notice);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not load more CJ products.",
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function handleDetails(product: any) {
+    const id = product.pid || product.productId || product.id;
+
+    if (!id) {
+      setError("This result has no CJ product ID.");
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setDetails(null);
+    setSelectedSearchProduct(product);
+    setSellingPrice("");
+    setLoading(true);
+
+    try {
+      const response: any = await getCJProductDetails(String(id), warehouse);
+
+      const payload = response?.data ?? response;
+
+      if (payload?.success === false) {
+        throw new Error(payload.error || "Could not load product details.");
+      }
+
+      const productDetails = payload?.data ?? payload;
+      setDetails(productDetails);
+
+      const initialSupplierPrice = Number(
+        productDetails.sellPrice ??
+          productDetails.price ??
+          productDetails.productPrice ??
+          0,
+      );
+
+      // Prefill the input with the supplier price, but let the admin
+      // choose the actual selling price before importing.
+      setSellingPrice(
+        Number.isFinite(initialSupplierPrice) && initialSupplierPrice > 0
+          ? initialSupplierPrice.toFixed(2)
+          : "",
+      );
+
+      if (payload?.notice) {
+        setNotice(payload.notice);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not load product details.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImportProduct() {
+    if (warehouse === "ALL") {
+      setError(
+        "Choose a specific country (for example, United States) and open the product details again before importing. Stock from different countries cannot be combined safely.",
+      );
+      return;
+    }
+
+    if (!details) {
+      setError("Load a product's details before importing.");
+      return;
+    }
+
+    const productId = String(
+      details.pid || details.productId || details.id || "",
+    ).trim();
+
+    if (!productId) {
+      setError("CJ product ID is missing. Cannot import safely.");
+      return;
+    }
+
+    const name = String(
+      details.name ||
+        details.nameEn ||
+        details.productName ||
+        details.productNameEn ||
+        details.title ||
+        "Imported CJ product",
+    ).trim();
+
+    const images = [
+      ...(Array.isArray(details.gallery) ? details.gallery : []),
+      details.image,
+      details.productImage,
+      details.bigImage,
+    ].filter(
+      (image, index, all): image is string =>
+        typeof image === "string" &&
+        image.startsWith("http") &&
+        all.indexOf(image) === index,
+    );
+
+    const supplierCost = Number(
+      details.sellPrice ?? details.price ?? details.productPrice ?? 0,
+    );
+
+    const chosenPrice = Number(sellingPrice);
+
+    if (
+      sellingPrice.trim() === "" ||
+      !Number.isFinite(chosenPrice) ||
+      chosenPrice <= 0
+    ) {
+      setError("Enter a valid selling price greater than zero.");
+      return;
+    }
+
+    if (!Number.isFinite(supplierCost) || supplierCost < 0) {
+      setError("CJ supplier price is invalid.");
+      return;
+    }
+
+    const productVariants = Array.isArray(details.variants)
+      ? details.variants
+      : [];
+
+    // Choose one importable variant. Never add together different sizes/colours
+    // or use totalInventoryNum, because that may include factory-managed stock.
+    const selectedVariant = productVariants.find(
+      (variant: any) =>
+        variant.selectedWarehouseAvailable === true &&
+        Number(variant.selectedWarehouseInventory?.availableStock) > 0,
+    );
+
+    if (!selectedVariant) {
+      setError(
+        `CJ did not confirm any ready-to-sell stock for ${warehouseNames[warehouse] || warehouse}. Choose another country or refresh the stock details before importing.`,
+      );
+      return;
+    }
+
+    const selectedVariantCJStock = Number(
+      selectedVariant.selectedWarehouseInventory?.availableStock ?? 0,
+    );
+
+    // Save stock for the actual variant being imported, based on CJ's stock
+    // endpoint. Product-level totalVerifiedInventory can cover a different
+    // scope (all variants/warehouses), so it is displayed for comparison only.
+    const stock = Math.max(0, Math.floor(selectedVariantCJStock));
+
+    setImporting(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await createProduct({
+        name,
+        slug: slugify(name),
+        sku: String(details.productSku || details.sku || `CJ-${productId}`),
+        description: String(details.description || "")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/\s+/g, " ")
+          .trim(),
+        category: String(details.categoryName || details.category || "Other"),
+        price: Number(chosenPrice.toFixed(2)),
+        currency: "USD",
+        image_url: images[0] || null,
+        images,
+        supplier_name: "CJdropshipping",
+        supplier_product_id: productId,
+        warehouse_country: warehouse === "ALL" ? null : warehouse,
+        supplier_cost: supplierCost,
+        shipping_cost: 0,
+        other_cost: 0,
+        stock,
+        low_stock_threshold: 5,
+        active: true,
+      });
+
+      setNotice(
+        `"${name}" imported successfully at $${chosenPrice.toFixed(2)} USD. The Products list is refreshing now.`,
+      );
+      // Update the main Products table immediately; don't make the admin refresh manually.
+      await onImportSuccess?.();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not import this CJ product.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function getProductName(product: any) {
+    return (
+      product.name ||
+      product.nameEn ||
+      product.nameen ||
+      product.productNameEn ||
+      product.productName ||
+      product.title ||
+      "Unnamed CJ product"
+    );
+  }
+
+  function getProductImage(product: any) {
+    return (
+      product.image ||
+      product.bigImage ||
+      product.bigimg ||
+      product.productImage ||
+      product.productImageUrl ||
+      product.img ||
+      ""
+    );
+  }
+
+  function formatPrice(value: unknown) {
+    if (value === undefined || value === null || value === "") {
+      return "Price unavailable";
+    }
+
+    const number = Number(value);
+
+    return Number.isFinite(number)
+      ? `$${number.toFixed(2)} USD`
+      : String(value);
+  }
+
+  function getStockStatus(variant: any) {
+    if (warehouse === "ALL") {
+      return {
+        label: "Choose a warehouse to check availability",
+        style: "bg-slate-100 text-slate-700",
+      };
+    }
+
+    if (variant.inventoryError) {
+      return {
+        label: "Inventory lookup failed",
+        style: "bg-amber-100 text-amber-800",
+      };
+    }
+
+    if (variant.selectedWarehouseAvailable === true) {
+      return {
+        label: `CJ-managed stock: ${variant.selectedWarehouseInventory?.availableStock} units`,
+        style: "bg-emerald-100 text-emerald-800",
+      };
+    }
+
+    if (
+      variant.selectedWarehouseAvailable === false &&
+      variant.selectedWarehouseInventory
+    ) {
+      return {
+        label: "Out of stock in selected warehouse",
+        style: "bg-red-100 text-red-800",
+      };
+    }
+
+    if (variant.selectedWarehouseAvailable === true) {
+      return {
+        label: `Stock reported: ${variant.selectedWarehouseInventory?.availableStock} — verification incomplete`,
+        style: "bg-amber-100 text-amber-800",
+      };
+    }
+
+    return {
+      label: "Warehouse stock not verified",
+      style: "bg-amber-100 text-amber-800",
+    };
+  }
+
+  const gallery: string[] = details
+    ? [
+        ...(Array.isArray(details.gallery) ? details.gallery : []),
+        details.image,
+        details.productImage,
+        details.bigImage,
+      ].filter(
+        (image, index, images) =>
+          typeof image === "string" &&
+          image.startsWith("http") &&
+          images.indexOf(image) === index,
+      )
+    : [];
+
+  const videoCandidates = [
+    details?.videos,
+    details?.videoList,
+    details?.videoUrl,
+    details?.video,
+    details?.productVideo,
+    details?.videoInfo,
+    details?.productVideos,
+  ];
+  const videos: string[] = videoCandidates
+    .flatMap((value: any) => {
+      if (typeof value === "string") return [value];
+      if (Array.isArray(value))
+        return value.flatMap((item: any) => {
+          if (typeof item === "string") return [item];
+          if (item && typeof item === "object")
+            return [item.url, item.videoUrl, item.video, item.src].filter(
+              (url: any) => typeof url === "string",
+            );
+          return [];
+        });
+      if (value && typeof value === "object")
+        return [value.url, value.videoUrl, value.video, value.src].filter(
+          (url: any) => typeof url === "string",
+        );
+      return [];
+    })
+    .filter(
+      (url: string, index: number, all: string[]) =>
+        /^https?:\/\//i.test(url) && all.indexOf(url) === index,
+    );
+
+  const variants: any[] = Array.isArray(details?.variants)
+    ? details.variants
+    : [];
+  // This summary follows the variant-level CJ stock endpoint used by import.
+  // Product-list totals are kept separate because they may cover other variants
+  // or a broader warehouse scope.
+  const firstVariantWithCJStock = variants.find(
+    (variant: any) =>
+      Number(variant.selectedWarehouseInventory?.availableStock) > 0,
+  );
+  const reportedStock = Math.max(
+    0,
+    Math.floor(
+      Number(
+        firstVariantWithCJStock?.selectedWarehouseInventory?.availableStock ??
+          0,
+      ),
+    ),
+  );
+  const listingVerifiedValue =
+    selectedSearchProduct?.totalVerifiedInventory ??
+    details?.totalVerifiedInventory;
+  const listingVerifiedStock =
+    listingVerifiedValue === undefined ||
+    listingVerifiedValue === null ||
+    listingVerifiedValue === ""
+      ? null
+      : Number(listingVerifiedValue);
+
+  const description = String(details?.description || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (
+    <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-5">
+        <h2 className="text-xl font-bold text-slate-900">
+          CJdropshipping Import
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Search CJ products, inspect variants and warehouse stock, choose your
+          own selling price, and import products.
+        </p>
+      </div>
+
+      <form
+        className="mb-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSearch();
+        }}
+      >
+        <input
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          placeholder="Search projectors, clothing, beauty products..."
+          className="min-w-0 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
+        />
+
+        <select
+          value={warehouse}
+          onChange={(event) => {
+            setWarehouse(event.target.value);
+            setDetails(null);
+            setSellingPrice("");
+            setNotice("");
+            setError("");
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-indigo-500"
+        >
+          {Object.entries(warehouseNames).map(([code, name]) => (
+            <option key={code} value={code}>
+              {name}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="submit"
+          disabled={loading || !keyword.trim()}
+          className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:opacity-50"
+        >
+          {loading ? "Please wait..." : "Search CJ"}
+        </button>
+      </form>
+
+      {warehouse !== "ALL" && (
+        <div className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+          <strong>Selected warehouse:</strong> {warehouseNames[warehouse]}.
+          Inspect each product's inventory before deciding where to source it.
+        </div>
+      )}
+
+      {notice && (
+        <p className="mb-4 break-words rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {notice}
+        </p>
+      )}
+
+      {error && (
+        <p className="mb-4 break-words rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </p>
+      )}
+
+      {products.length > 0 && (
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900">Search results</h3>
+          <span className="text-sm text-slate-500">
+            {products.length} loaded
+            {totalProducts !== null ? ` of ${totalProducts}` : ""}
+          </span>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {products.map((product, index) => {
+          const id =
+            product.pid || product.productId || product.id || `cj-${index}`;
+
+          const name = getProductName(product);
+          const image = getProductImage(product);
+          const price =
+            product.price ??
+            product.sellPrice ??
+            product.sellprice ??
+            product.productPrice;
+
+          return (
+            <article
+              key={String(id)}
+              role="button"
+              tabIndex={0}
+              onClick={() => void handleDetails(product)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  void handleDetails(product);
+                }
+              }}
+              className="cursor-pointer overflow-hidden rounded-xl border border-slate-200 transition hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {image ? (
+                <img
+                  src={image}
+                  alt={name}
+                  className="h-48 w-full bg-slate-50 object-contain p-3"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
+                  No image available
+                </div>
+              )}
+
+              <div className="p-4">
+                <h3 className="line-clamp-2 min-h-12 font-semibold text-slate-900">
+                  {name}
+                </h3>
+
+                <p className="mt-2 text-lg font-bold text-indigo-700">
+                  {formatPrice(price)}
+                </p>
+
+                <p className="mt-1 break-all text-xs text-slate-400">
+                  CJ product ID: {String(id)}
+                </p>
+                <p className="mt-2 text-xs font-medium text-indigo-700">
+                  Open details to check ready-to-sell quantity by country and
+                  variant.
+                </p>
+                {(product.totalVerifiedInventory != null ||
+                  product.warehouseInventoryNum != null) && (
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                    {product.totalVerifiedInventory != null && (
+                      <p className="font-semibold text-emerald-700">
+                        CJ listing verified total:{" "}
+                        {Number(
+                          product.totalVerifiedInventory,
+                        ).toLocaleString()}{" "}
+                        units
+                      </p>
+                    )}
+                    {product.warehouseInventoryNum != null && (
+                      <p>
+                        CJ listing warehouse total:{" "}
+                        {Number(product.warehouseInventoryNum).toLocaleString()}{" "}
+                        units
+                        <span className="text-slate-500">
+                          {" "}
+                          (not confirmed sellable stock; may include
+                          factory-managed stock)
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDetails(product);
+                  }}
+                  disabled={loading}
+                  className="mt-4 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  View details & warehouse stock
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {products.length > 0 && hasMore && (
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleLoadMore()}
+            disabled={loadingMore || loading}
+            className="rounded-xl border border-slate-300 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {loadingMore ? "Loading more products..." : "Load More CJ Products"}
+          </button>
+          <p className="text-xs text-slate-500">
+            CJ returns results in pages; use this to continue browsing.
+          </p>
+        </div>
+      )}
+
+      {!loading && searched && products.length === 0 && !error && (
+        <p className="py-8 text-center text-sm text-slate-500">
+          No products were returned. Try another search term or warehouse.
+        </p>
+      )}
+
+      {!searched && !loading && (
+        <p className="py-8 text-center text-sm text-slate-500">
+          Search for a product to explore the CJ catalogue.
+        </p>
+      )}
+
+      {details && (
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/60 p-3 sm:p-6">
+          <div className="mx-auto max-w-7xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                  Supplier product preview
+                </p>
+                <h3 className="mt-1 text-lg font-bold text-slate-900">
+                  {getProductName(details)}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Inventory region: {warehouseNames[warehouse]}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDetails(null);
+                  setSellingPrice("");
+                }}
+                className="self-start rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-white sm:self-auto"
+              >
+                Close preview
+              </button>
+            </div>
+
+            <div className="grid gap-6 p-5 lg:grid-cols-2">
+              <div>
+                {gallery.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {gallery.slice(0, 6).map((image, index) => (
+                      <img
+                        key={`${image}-${index}`}
+                        src={image}
+                        alt={`${getProductName(details)} ${index + 1}`}
+                        className="h-40 w-full rounded-xl border border-slate-200 bg-slate-50 object-contain p-2"
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex h-64 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+                    No product gallery available
+                  </div>
+                )}
+
+                {videos.length > 0 && (
+                  <div className="mt-5">
+                    <h4 className="mb-3 font-semibold text-slate-900">
+                      Product videos ({videos.length})
+                    </h4>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {videos.map((video, index) => (
+                        <div
+                          key={`${video}-${index}`}
+                          className="overflow-hidden rounded-xl border border-slate-200 bg-black"
+                        >
+                          <video
+                            controls
+                            preload="metadata"
+                            className="max-h-64 w-full"
+                            src={video}
+                          >
+                            Your browser does not support embedded video.
+                          </video>
+                          <a
+                            href={video}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block break-all bg-white p-2 text-xs text-indigo-700 underline"
+                          >
+                            Open video in new tab
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {description && (
+                  <div className="mt-5">
+                    <h4 className="font-semibold text-slate-900">
+                      Description
+                    </h4>
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
+                      {description.slice(0, 1500)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Supplier price</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {formatPrice(
+                      details.sellPrice ??
+                        details.price ??
+                        details.productPrice,
+                    )}
+                  </p>
+
+                  <div className="mt-4 grid gap-3 text-sm">
+                    <div>
+                      <span className="text-slate-500">CJ product ID</span>
+                      <p className="break-all font-medium text-slate-800">
+                        {details.pid ||
+                          details.productId ||
+                          details.id ||
+                          "Not provided"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500">Supplier SKU</span>
+                      <p className="break-all font-medium text-slate-800">
+                        {details.productSku || details.sku || "Not provided"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500">Category</span>
+                      <p className="font-medium text-slate-800">
+                        {details.categoryName ||
+                          details.category ||
+                          "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-indigo-200 p-4">
+                  <label
+                    htmlFor="cj-selling-price"
+                    className="block text-sm font-semibold text-slate-900"
+                  >
+                    Your selling price (USD)
+                  </label>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Choose the price customers will pay. This is not
+                    automatically marked up.
+                  </p>
+                  <input
+                    id="cj-selling-price"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    value={sellingPrice}
+                    onChange={(event) => setSellingPrice(event.target.value)}
+                    placeholder="Enter your selling price"
+                    className="mt-3 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <h4 className="mt-5 font-semibold text-slate-900">
+                  Variants & warehouse stock ({variants.length})
+                </h4>
+
+                {variants.length > 0 ? (
+                  <div className="mt-3 space-y-3">
+                    {variants.map((variant, index) => {
+                      const status = getStockStatus(variant);
+
+                      return (
+                        <div
+                          key={String(variant.id || variant.sku || index)}
+                          className="rounded-xl border border-slate-200 p-3"
+                        >
+                          <div className="flex gap-3">
+                            {variant.image && (
+                              <img
+                                src={variant.image}
+                                alt={variant.name || "Product variant"}
+                                className="h-16 w-16 rounded-lg bg-slate-50 object-contain"
+                                loading="lazy"
+                              />
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-slate-900">
+                                {variant.name || `Variant ${index + 1}`}
+                              </p>
+                              <p className="mt-1 break-all text-xs text-slate-500">
+                                SKU: {variant.sku || "Not provided"}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-indigo-700">
+                                {formatPrice(variant.price)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <p
+                            className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${status.style}`}
+                          >
+                            {status.label}
+                          </p>
+
+                          {Array.isArray(variant.inventory) &&
+                            variant.inventory.length > 0 && (
+                              <div className="mt-3 space-y-1 border-t border-slate-100 pt-3">
+                                <p className="text-xs font-semibold text-slate-600">
+                                  Inventory returned by CJ
+                                </p>
+
+                                {variant.inventory.map(
+                                  (stockItem: any, stockIndex: number) => (
+                                    <div
+                                      key={`${stockItem.countryCode}-${stockIndex}`}
+                                      className="flex justify-between gap-3 text-xs text-slate-600"
+                                    >
+                                      <span>
+                                        {stockItem.warehouseName ||
+                                          stockItem.countryCode ||
+                                          "Warehouse"}{" "}
+                                        ({stockItem.countryCode || "Unknown"})
+                                      </span>
+                                      <span className="text-right font-medium">
+                                        <span className="block">
+                                          CJ-managed:{" "}
+                                          {stockItem.cjManagedStock == null
+                                            ? "not returned"
+                                            : `${stockItem.cjManagedStock} units`}
+                                        </span>
+                                        <span className="block text-slate-500">
+                                          Factory:{" "}
+                                          {stockItem.factoryManagedStock == null
+                                            ? "not returned"
+                                            : `${stockItem.factoryManagedStock} units`}
+                                        </span>
+                                        <span className="block text-slate-500">
+                                          Total:{" "}
+                                          {stockItem.totalInventory == null
+                                            ? "not returned"
+                                            : `${stockItem.totalInventory} units`}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            )}
+
+                          {variant.inventoryError && (
+                            <p className="mt-2 text-xs text-amber-700">
+                              {variant.inventoryError}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    CJ did not return variant details for this product.
+                  </p>
+                )}
+
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <strong>Ready-to-sell stock:</strong>
+                  {warehouse === "ALL" ? (
+                    <p className="mt-1">
+                      You are viewing stock by country. Each variant above lists
+                      the quantities CJ returned for individual
+                      countries/warehouses. Choose a specific country from the
+                      selector and open this product again to get the quantity
+                      that will be saved on import. MEO will not add different
+                      countries together.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-1">
+                        Selected country:{" "}
+                        <strong>
+                          {warehouseNames[warehouse] || warehouse}
+                        </strong>
+                        . The import quantity is the CJ-managed quantity for the
+                        selected country and available variant—not the factory
+                        quantity or combined total.
+                      </p>
+                      <p className="mt-1">
+                        Quantity found for the first available variant:{" "}
+                        <strong>{Math.floor(reportedStock)} pieces</strong>.
+                      </p>
+                    </>
+                  )}
+                  <p className="mt-1">
+                    Factory stock and total inventory are shown for reference
+                    only. If CJ does not return a country-specific CJ-managed
+                    quantity, treat it as unverified and do not import it as
+                    ready stock.
+                  </p>
+                  {listingVerifiedStock !== null &&
+                    Number.isFinite(listingVerifiedStock) && (
+                      <p className="mt-1 text-xs">
+                        CJ listing verified total (may use a different scope):{" "}
+                        {Math.floor(listingVerifiedStock)} pieces. This is not
+                        used as the imported stock quantity.
+                      </p>
+                    )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleImportProduct()}
+                  disabled={importing || loading || warehouse === "ALL"}
+                  className="mt-5 w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {warehouse === "ALL"
+                    ? "Choose a country before importing"
+                    : importing
+                      ? "Importing Product..."
+                      : "Import Product to MEO Store"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// The retired importer stays inactive until a supported supplier API is available.
+void CJDropshippingImport;
+
 /* -------------------------------------------------------------------------- */
 /* PRODUCTS PAGE                                                              */
 /* -------------------------------------------------------------------------- */
 
 export default function Products() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [products, setProducts] =
-    useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [search, setSearch] =
-    useState("");
+  const [search, setSearch] = useState("");
 
-  const [
-    statusFilter,
-    setStatusFilter,
-  ] =
-    useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const [
-    stockFilter,
-    setStockFilter,
-  ] =
-    useState<StockFilter>("all");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
 
-  const [
-    categoryFilter,
-    setCategoryFilter,
-  ] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const [
-    selectedIds,
-    setSelectedIds,
-  ] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const [
-    editingProduct,
-    setEditingProduct,
-  ] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const [
-    showModal,
-    setShowModal,
-  ] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
-  const [menuId, setMenuId] =
-    useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
 
-  const csvInputRef =
-    useRef<HTMLInputElement | null>(null);
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [
-    csvImporting,
-    setCsvImporting,
-  ] = useState(false);
+  const [csvImporting, setCsvImporting] = useState(false);
 
-  const [
-    csvMessage,
-    setCsvMessage,
-  ] = useState("");
+  const [csvMessage, setCsvMessage] = useState("");
 
-  const [
-    importResult,
-    setImportResult,
-  ] = useState<ImportResult | null>(
-    null,
-  );
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
-  const loadProducts =
-    useCallback(async () => {
-      try {
-        setLoading(true);
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        const result =
-          await getAdminProducts();
+      const result = await getAdminProducts();
 
-        setProducts(
-          Array.isArray(result)
-            ? result
-            : [],
-        );
-      } catch (error) {
-        console.error(
-          "Failed to load products:",
-          error,
-        );
+      setProducts(Array.isArray(result) ? result : []);
+    } catch (error) {
+      console.error("Failed to load products:", error);
 
-        setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   async function refreshProducts() {
     setRefreshing(true);
 
     try {
-      const result =
-        await getAdminProducts();
+      const result = await getAdminProducts();
 
-      setProducts(
-        Array.isArray(result)
-          ? result
-          : [],
-      );
+      setProducts(Array.isArray(result) ? result : []);
     } catch (error) {
-      console.error(
-        "Failed to refresh products:",
-        error,
-      );
+      console.error("Failed to refresh products:", error);
     } finally {
       setRefreshing(false);
     }
@@ -2352,275 +2874,156 @@ export default function Products() {
   useEffect(() => {
     if (!menuId) return;
 
-    function handleKeyDown(
-      event: KeyboardEvent,
-    ) {
+    function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuId(null);
       }
     }
 
-    function handlePointerDown(
-      event: PointerEvent,
-    ) {
-      const target =
-        event.target as HTMLElement | null;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
 
-      if (
-        target?.closest(
-          "[data-product-action-menu]",
-        )
-      ) {
+      if (target?.closest("[data-product-action-menu]")) {
         return;
       }
 
       setMenuId(null);
     }
 
-    document.addEventListener(
-      "keydown",
-      handleKeyDown,
-    );
+    document.addEventListener("keydown", handleKeyDown);
 
-    document.addEventListener(
-      "pointerdown",
-      handlePointerDown,
-    );
+    document.addEventListener("pointerdown", handlePointerDown);
 
     return () => {
-      document.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      document.removeEventListener("keydown", handleKeyDown);
 
-      document.removeEventListener(
-        "pointerdown",
-        handlePointerDown,
-      );
+      document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [menuId]);
 
   const categories = useMemo(() => {
     return Array.from(
-      new Set(
-        products
-          .map(
-            (product) =>
-              product.category,
-          )
-          .filter(Boolean),
-      ),
+      new Set(products.map((product) => product.category).filter(Boolean)),
     ).sort();
   }, [products]);
 
-  const filteredProducts =
-    useMemo(() => {
-      const query = search
-        .trim()
-        .toLowerCase();
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-      return products.filter(
-        (product) => {
-          const matchesSearch =
-            !query ||
-            product.name
-              .toLowerCase()
-              .includes(query) ||
-            product.sku
-              ?.toLowerCase()
-              .includes(query) ||
-            product.supplier_name
-              ?.toLowerCase()
-              .includes(query) ||
-            product.category
-              ?.toLowerCase()
-              .includes(query);
+    return products.filter((product) => {
+      const matchesSearch =
+        !query ||
+        product.name.toLowerCase().includes(query) ||
+        product.sku?.toLowerCase().includes(query) ||
+        product.supplier_name?.toLowerCase().includes(query) ||
+        product.category?.toLowerCase().includes(query);
 
-          const matchesStatus =
-            statusFilter === "all" ||
-            (statusFilter ===
-              "active" &&
-              Number(
-                product.active,
-              ) === 1) ||
-            (statusFilter ===
-              "inactive" &&
-              Number(
-                product.active,
-              ) !== 1);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && Number(product.active) === 1) ||
+        (statusFilter === "inactive" && Number(product.active) !== 1);
 
-          const matchesStock =
-            stockFilter === "all" ||
-            getStockState(product) ===
-              stockFilter;
+      const matchesStock =
+        stockFilter === "all" || getStockState(product) === stockFilter;
 
-          const matchesCategory =
-            categoryFilter === "all" ||
-            product.category ===
-              categoryFilter;
+      const matchesCategory =
+        categoryFilter === "all" || product.category === categoryFilter;
 
-          return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesStock &&
-            matchesCategory
-          );
-        },
-      );
-    }, [
-      products,
-      search,
-      statusFilter,
-      stockFilter,
-      categoryFilter,
-    ]);
+      return matchesSearch && matchesStatus && matchesStock && matchesCategory;
+    });
+  }, [products, search, statusFilter, stockFilter, categoryFilter]);
 
-  function toggleSelected(
-    id: string,
-  ) {
+  function toggleSelected(id: string) {
     setSelectedIds((current) =>
       current.includes(id)
-        ? current.filter(
-            (item) => item !== id,
-          )
-        : [
-            ...current,
-            id,
-          ],
+        ? current.filter((item) => item !== id)
+        : [...current, id],
     );
   }
 
   function toggleAllVisible() {
-    const visibleIds =
-      filteredProducts.map(
-        (product) => product.id,
-      );
+    const visibleIds = filteredProducts.map((product) => product.id);
 
     const allSelected =
       visibleIds.length > 0 &&
-      visibleIds.every((id) =>
-        selectedIds.includes(id),
-      );
+      visibleIds.every((id) => selectedIds.includes(id));
 
     setSelectedIds((current) =>
       allSelected
-        ? current.filter(
-            (id) =>
-              !visibleIds.includes(id),
-          )
-        : Array.from(
-            new Set([
-              ...current,
-              ...visibleIds,
-            ]),
-          ),
+        ? current.filter((id) => !visibleIds.includes(id))
+        : Array.from(new Set([...current, ...visibleIds])),
     );
   }
 
-  async function handleDelete(
-    product: Product,
-  ) {
-    const confirmed =
-      window.confirm(
-        `Delete "${product.name}"? This cannot be undone.`,
-      );
+  async function handleDelete(product: Product) {
+    const confirmed = window.confirm(
+      `Delete "${product.name}"? This cannot be undone.`,
+    );
 
     if (!confirmed) return;
 
     try {
-      await deleteProduct(
-        product.id,
-      );
+      await deleteProduct(product.id);
 
       setProducts((current) =>
-        current.filter(
-          (item) =>
-            item.id !== product.id,
-        ),
+        current.filter((item) => item.id !== product.id),
       );
 
-      setSelectedIds((current) =>
-        current.filter(
-          (id) =>
-            id !== product.id,
-        ),
-      );
+      setSelectedIds((current) => current.filter((id) => id !== product.id));
     } catch (error) {
       window.alert(
-        error instanceof Error
-          ? error.message
-          : "Unable to delete product.",
+        error instanceof Error ? error.message : "Unable to delete product.",
       );
     }
   }
 
-  async function toggleActive(
-    product: Product,
-  ) {
-    const nextActive =
-      Number(product.active) === 1
-        ? 0
-        : 1;
+  async function toggleActive(product: Product) {
+    const nextActive = Number(product.active) === 1 ? 0 : 1;
 
     try {
-      await updateProduct(
-        product.id,
-        {
-          active: nextActive,
-        },
-      );
+      await updateProduct(product.id, {
+        active: nextActive,
+      });
 
       setProducts((current) =>
         current.map((item) =>
           item.id === product.id
             ? {
                 ...item,
-                active:
-                  nextActive,
+                active: nextActive,
               }
             : item,
         ),
       );
     } catch (error) {
       window.alert(
-        error instanceof Error
-          ? error.message
-          : "Unable to update product.",
+        error instanceof Error ? error.message : "Unable to update product.",
       );
     }
   }
 
-  async function bulkUpdateActive(
-    active: number,
-  ) {
+  async function bulkUpdateActive(active: number) {
     if (!selectedIds.length) return;
 
     const ids = [...selectedIds];
 
-    const results =
-      await Promise.allSettled(
-        ids.map((id) =>
-          updateProduct(id, {
-            active,
-          }),
-        ),
-      );
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        updateProduct(id, {
+          active,
+        }),
+      ),
+    );
 
     const failed = results.filter(
-      (result) =>
-        result.status === "rejected",
+      (result) => result.status === "rejected",
     ).length;
 
     setProducts((current) =>
       current.map((product) => {
-        const index =
-          ids.indexOf(product.id);
+        const index = ids.indexOf(product.id);
 
-        if (
-          index === -1 ||
-          results[index]?.status !==
-            "fulfilled"
-        ) {
+        if (index === -1 || results[index]?.status !== "fulfilled") {
           return product;
         }
 
@@ -2634,58 +3037,41 @@ export default function Products() {
     setSelectedIds([]);
 
     if (failed > 0) {
-      window.alert(
-        `${failed} product(s) failed to update.`,
-      );
+      window.alert(`${failed} product(s) failed to update.`);
     }
   }
 
   async function bulkDelete() {
     if (!selectedIds.length) return;
 
-    const confirmed =
-      window.confirm(
-        `Delete ${selectedIds.length} selected product(s)?`,
-      );
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.length} selected product(s)?`,
+    );
 
     if (!confirmed) return;
 
     const ids = [...selectedIds];
 
-    const results =
-      await Promise.allSettled(
-        ids.map((id) =>
-          deleteProduct(id),
-        ),
-      );
+    const results = await Promise.allSettled(
+      ids.map((id) => deleteProduct(id)),
+    );
 
     const failed = results.filter(
-      (result) =>
-        result.status === "rejected",
+      (result) => result.status === "rejected",
     ).length;
 
-    const successfulIds =
-      ids.filter(
-        (_, index) =>
-          results[index].status ===
-          "fulfilled",
-      );
+    const successfulIds = ids.filter(
+      (_, index) => results[index].status === "fulfilled",
+    );
 
     setProducts((current) =>
-      current.filter(
-        (product) =>
-          !successfulIds.includes(
-            product.id,
-          ),
-      ),
+      current.filter((product) => !successfulIds.includes(product.id)),
     );
 
     setSelectedIds([]);
 
     if (failed > 0) {
-      window.alert(
-        `${failed} product(s) failed to delete.`,
-      );
+      window.alert(`${failed} product(s) failed to delete.`);
     }
   }
 
@@ -2693,11 +3079,8 @@ export default function Products() {
   /* CSV IMPORT                                                             */
   /* ---------------------------------------------------------------------- */
 
-  async function handleCsvImport(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const file =
-      event.target.files?.[0];
+  async function handleCsvImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
@@ -2706,81 +3089,49 @@ export default function Products() {
     setCsvImporting(true);
 
     try {
-      if (
-        !file.name
-          .toLowerCase()
-          .endsWith(".csv")
-      ) {
-        throw new Error(
-          "Please select a CSV file.",
-        );
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        throw new Error("Please select a CSV file.");
       }
 
-      const text =
-        await file.text();
+      const text = await file.text();
 
       const rows = parseCsv(text);
 
       if (!rows.length) {
-        throw new Error(
-          "The CSV file contains no product rows.",
-        );
+        throw new Error("The CSV file contains no product rows.");
       }
 
       const existingProducts =
-        products.length > 0
-          ? products
-          : await getAdminProducts();
+        products.length > 0 ? products : await getAdminProducts();
 
-      const byHandle =
-        new Map<string, Product>();
+      const byHandle = new Map<string, Product>();
 
-      const bySku =
-        new Map<string, Product>();
+      const bySku = new Map<string, Product>();
 
-      const bySupplierId =
-        new Map<string, Product>();
+      const bySupplierId = new Map<string, Product>();
 
-      existingProducts.forEach(
-        (product) => {
-          if (product.slug) {
-            byHandle.set(
-              slugify(product.slug),
-              product,
-            );
-          }
+      existingProducts.forEach((product) => {
+        if (product.slug) {
+          byHandle.set(slugify(product.slug), product);
+        }
 
-          if (product.sku) {
-            bySku.set(
-              product.sku
-                .trim()
-                .toLowerCase(),
-              product,
-            );
-          }
+        if (product.sku) {
+          bySku.set(product.sku.trim().toLowerCase(), product);
+        }
 
-          if (
-            product.supplier_product_id
-          ) {
-            bySupplierId.set(
-              product
-                .supplier_product_id
-                .trim()
-                .toLowerCase(),
-              product,
-            );
-          }
-        },
+        if (product.supplier_product_id) {
+          bySupplierId.set(
+            product.supplier_product_id.trim().toLowerCase(),
+            product,
+          );
+        }
+      });
+
+      const usedSlugs = new Set<string>(
+        existingProducts
+          .map((product) => slugify(product.slug))
+          .filter(Boolean),
       );
-
-      const usedSlugs =
-        new Set<string>(
-          existingProducts
-            .map((product) =>
-              slugify(product.slug),
-            )
-            .filter(Boolean),
-        );
 
       const result: ImportResult = {
         created: 0,
@@ -2790,466 +3141,291 @@ export default function Products() {
         errors: [],
       };
 
-      const groups =
-        new Map<string, CsvGroup>();
+      const groups = new Map<string, CsvGroup>();
 
-      let currentGroup:
-        | CsvGroup
-        | null = null;
+      let currentGroup: CsvGroup | null = null;
 
-      rows.forEach(
-        (row, index) => {
-          const explicitHandle =
-            getRowHandle(row);
+      rows.forEach((row, index) => {
+        const explicitHandle = getRowHandle(row);
 
-          const name =
-            getRowName(row);
+        const name = getRowName(row);
 
-          if (
-            explicitHandle ||
-            name
-          ) {
-            const handle = slugify(
-              explicitHandle ||
-                name,
-            );
+        if (explicitHandle || name) {
+          const handle = slugify(explicitHandle || name);
 
-            if (!handle) {
-              return;
-            }
-
-            const existing =
-              groups.get(handle);
-
-            if (existing) {
-              existing.rows.push(
-                row,
-              );
-
-              currentGroup =
-                existing;
-            } else {
-              const group: CsvGroup =
-                {
-                  rows: [row],
-                  firstRowIndex:
-                    index,
-                  handle,
-                };
-
-              groups.set(
-                handle,
-                group,
-              );
-
-              currentGroup = group;
-            }
-
+          if (!handle) {
             return;
           }
 
-          if (currentGroup) {
-            currentGroup.rows.push(
-              row,
-            );
+          const existing = groups.get(handle);
+
+          if (existing) {
+            existing.rows.push(row);
+
+            currentGroup = existing;
+          } else {
+            const group: CsvGroup = {
+              rows: [row],
+              firstRowIndex: index,
+              handle,
+            };
+
+            groups.set(handle, group);
+
+            currentGroup = group;
           }
-        },
-      );
 
-      for (
-        const group of groups.values()
-      ) {
-        const firstRow =
-          group.rows[0];
+          return;
+        }
 
-        const rowNumber =
-          group.firstRowIndex + 2;
+        if (currentGroup) {
+          currentGroup.rows.push(row);
+        }
+      });
+
+      for (const group of groups.values()) {
+        const firstRow = group.rows[0];
+
+        const rowNumber = group.firstRowIndex + 2;
 
         try {
-          const firstBuilt =
-            buildCsvProduct(
-              firstRow,
-              group.firstRowIndex,
-            );
+          const firstBuilt = buildCsvProduct(firstRow, group.firstRowIndex);
 
-          let payload =
-            firstBuilt.payload;
+          let payload = firstBuilt.payload;
 
-          let allImages =
-            firstBuilt.images;
+          let allImages = firstBuilt.images;
 
-          let variants =
-            payload.variants || [];
+          let variants = payload.variants || [];
 
           let totalVariantStock = 0;
           let hasVariantStock = false;
 
-          if (
-            firstBuilt.variant &&
-            getRowStock(firstRow)
-          ) {
-            totalVariantStock +=
-              numberValue(
-                getRowStock(firstRow),
-              );
+          if (firstBuilt.variant && getRowStock(firstRow)) {
+            totalVariantStock += numberValue(getRowStock(firstRow));
 
             hasVariantStock = true;
           }
 
-          for (
-            let index = 1;
-            index < group.rows.length;
-            index += 1
-          ) {
-            const additionalRow =
-              group.rows[index];
+          for (let index = 1; index < group.rows.length; index += 1) {
+            const additionalRow = group.rows[index];
 
-            const built =
-              buildCsvProduct(
-                additionalRow,
-                group.firstRowIndex +
-                  index,
-                {
-                  name: payload.name,
-                  handle: group.handle,
-                },
-              );
+            const built = buildCsvProduct(
+              additionalRow,
+              group.firstRowIndex + index,
+              {
+                name: payload.name,
+                handle: group.handle,
+              },
+            );
 
-            allImages =
-              mergeImages(
-                allImages,
-                built.images,
-              );
+            allImages = mergeImages(allImages, built.images);
 
-            variants =
-              mergeVariants(
-                variants,
-                built.variant,
-              );
+            variants = mergeVariants(variants, built.variant);
 
-            if (
-              built.variant &&
-              getRowStock(
-                additionalRow,
-              )
-            ) {
-              totalVariantStock +=
-                numberValue(
-                  getRowStock(
-                    additionalRow,
-                  ),
-                );
+            if (built.variant && getRowStock(additionalRow)) {
+              totalVariantStock += numberValue(getRowStock(additionalRow));
 
               hasVariantStock = true;
             }
 
-            if (
-              !payload.description &&
-              built.payload.description
-            ) {
+            if (!payload.description && built.payload.description) {
               payload = {
                 ...payload,
-                description:
-                  built.payload
-                    .description,
+                description: built.payload.description,
               };
             }
 
             if (
-              payload.category ===
-                "Uncategorized" &&
+              payload.category === "Uncategorized" &&
               built.payload.category &&
-              built.payload.category !==
-                "Uncategorized"
+              built.payload.category !== "Uncategorized"
             ) {
               payload = {
                 ...payload,
-                category:
-                  built.payload
-                    .category,
+                category: built.payload.category,
+              };
+            }
+
+            if (!payload.supplier_name && built.payload.supplier_name) {
+              payload = {
+                ...payload,
+                supplier_name: built.payload.supplier_name,
               };
             }
 
             if (
-              !payload.supplier_name &&
-              built.payload.supplier_name
+              !payload.supplier_product_id &&
+              built.payload.supplier_product_id
             ) {
               payload = {
                 ...payload,
-                supplier_name:
-                  built.payload
-                    .supplier_name,
+                supplier_product_id: built.payload.supplier_product_id,
               };
             }
 
-            if (
-              !payload
-                .supplier_product_id &&
-              built.payload
-                .supplier_product_id
-            ) {
+            if (payload.stock == null && built.payload.stock != null) {
               payload = {
                 ...payload,
-                supplier_product_id:
-                  built.payload
-                    .supplier_product_id,
-              };
-            }
-
-            if (
-              payload.stock == null &&
-              built.payload.stock != null
-            ) {
-              payload = {
-                ...payload,
-                stock:
-                  built.payload.stock,
+                stock: built.payload.stock,
               };
             }
           }
 
-          if (
-            payload.stock == null &&
-            hasVariantStock
-          ) {
+          if (payload.stock == null && hasVariantStock) {
             payload = {
               ...payload,
-              stock:
-                totalVariantStock,
+              stock: totalVariantStock,
             };
           }
 
           payload = {
             ...payload,
             images: allImages,
-            image_url:
-              allImages[0] ||
-              payload.image_url,
+            image_url: allImages[0] || payload.image_url,
             variants,
           };
 
-          const normalizedHandle =
-            slugify(
-              firstBuilt.handle,
-            );
+          const normalizedHandle = slugify(firstBuilt.handle);
 
-          const sku =
-            payload.sku
-              ?.trim()
-              .toLowerCase();
+          const sku = payload.sku?.trim().toLowerCase();
 
-          const supplierId =
-            payload
-              .supplier_product_id
-              ?.trim()
-              .toLowerCase();
+          const supplierId = payload.supplier_product_id?.trim().toLowerCase();
 
           const existing =
-            byHandle.get(
-              normalizedHandle,
-            ) ||
-            (sku
-              ? bySku.get(sku)
-              : undefined) ||
-            (supplierId
-              ? bySupplierId.get(
-                  supplierId,
-                )
-              : undefined);
+            byHandle.get(normalizedHandle) ||
+            (sku ? bySku.get(sku) : undefined) ||
+            (supplierId ? bySupplierId.get(supplierId) : undefined);
 
           if (existing) {
-            const supplied =
-              firstBuilt.supplied;
+            const supplied = firstBuilt.supplied;
 
-            const updatedPayload: Partial<
-              CreateProductInput
-            > & {
+            const updatedPayload: Partial<CreateProductInput> & {
               active?: number;
             } = {};
 
             if (supplied.name) {
-              updatedPayload.name =
-                payload.name;
+              updatedPayload.name = payload.name;
             }
 
             if (supplied.slug) {
-              updatedPayload.slug =
-                payload.slug;
+              updatedPayload.slug = payload.slug;
             }
 
             if (supplied.sku) {
-              updatedPayload.sku =
-                payload.sku;
+              updatedPayload.sku = payload.sku;
             }
 
             if (supplied.category) {
-              updatedPayload.category =
-                payload.category;
+              updatedPayload.category = payload.category;
             }
 
             if (supplied.description) {
-              updatedPayload.description =
-                payload.description;
+              updatedPayload.description = payload.description;
             }
 
             if (supplied.price) {
-              updatedPayload.price =
-                payload.price;
+              updatedPayload.price = payload.price;
             }
 
             if (supplied.currency) {
-              updatedPayload.currency =
-                payload.currency;
+              updatedPayload.currency = payload.currency;
             }
 
             if (supplied.supplierName) {
-              updatedPayload.supplier_name =
-                payload.supplier_name;
+              updatedPayload.supplier_name = payload.supplier_name;
             }
 
-            if (
-              supplied.supplierProductId
-            ) {
-              updatedPayload.supplier_product_id =
-                payload.supplier_product_id;
+            if (supplied.supplierProductId) {
+              updatedPayload.supplier_product_id = payload.supplier_product_id;
             }
 
-            if (
-              supplied.warehouseCountry
-            ) {
-              updatedPayload.warehouse_country =
-                payload.warehouse_country;
+            if (supplied.warehouseCountry) {
+              updatedPayload.warehouse_country = payload.warehouse_country;
             }
 
             if (supplied.supplierCost) {
-              updatedPayload.supplier_cost =
-                payload.supplier_cost;
+              updatedPayload.supplier_cost = payload.supplier_cost;
             }
 
             if (supplied.shippingCost) {
-              updatedPayload.shipping_cost =
-                payload.shipping_cost;
+              updatedPayload.shipping_cost = payload.shipping_cost;
             }
 
             if (supplied.otherCost) {
-              updatedPayload.other_cost =
-                payload.other_cost;
+              updatedPayload.other_cost = payload.other_cost;
             }
 
             if (supplied.processingTime) {
-              updatedPayload.processing_time =
-                payload.processing_time;
+              updatedPayload.processing_time = payload.processing_time;
             }
 
             if (supplied.deliveryTime) {
-              updatedPayload.delivery_time =
-                payload.delivery_time;
+              updatedPayload.delivery_time = payload.delivery_time;
             }
 
             if (supplied.stock) {
-              updatedPayload.stock =
-                payload.stock;
+              updatedPayload.stock = payload.stock;
             }
 
-            if (
-              supplied.lowStockThreshold
-            ) {
-              updatedPayload.low_stock_threshold =
-                payload.low_stock_threshold;
+            if (supplied.lowStockThreshold) {
+              updatedPayload.low_stock_threshold = payload.low_stock_threshold;
             }
 
             if (supplied.images) {
-              updatedPayload.images =
-                mergeImages(
-                  existing.images || [],
-                  allImages,
-                );
+              updatedPayload.images = mergeImages(
+                existing.images || [],
+                allImages,
+              );
 
               updatedPayload.image_url =
-                updatedPayload.images[0] ||
-                existing.image_url ||
-                undefined;
+                updatedPayload.images[0] || existing.image_url || undefined;
             }
 
             if (supplied.videoUrl) {
-              updatedPayload.video_url =
-                payload.video_url;
+              updatedPayload.video_url = payload.video_url;
             }
 
-            if (
-              variants.length > 0
-            ) {
-              updatedPayload.variants =
-                variants;
+            if (variants.length > 0) {
+              updatedPayload.variants = variants;
             }
 
             if (supplied.active) {
-              updatedPayload.active =
-                firstBuilt.active
-                  ? 1
-                  : 0;
+              updatedPayload.active = firstBuilt.active ? 1 : 0;
             }
 
-            const updated =
-              await updateProduct(
-                existing.id,
-                updatedPayload,
-              );
+            const updated = await updateProduct(existing.id, updatedPayload);
 
-            const finalProduct =
-              updated || {
-                ...existing,
-                ...updatedPayload,
-              };
+            const finalProduct = updated || {
+              ...existing,
+              ...updatedPayload,
+            };
 
             byHandle.set(
-              slugify(
-                finalProduct.slug ||
-                  existing.slug,
-              ),
+              slugify(finalProduct.slug || existing.slug),
               finalProduct,
             );
 
             if (finalProduct.sku) {
-              bySku.set(
-                finalProduct.sku
-                  .trim()
-                  .toLowerCase(),
-                finalProduct,
-              );
+              bySku.set(finalProduct.sku.trim().toLowerCase(), finalProduct);
             }
 
-            if (
-              finalProduct
-                .supplier_product_id
-            ) {
+            if (finalProduct.supplier_product_id) {
               bySupplierId.set(
-                finalProduct
-                  .supplier_product_id
-                  .trim()
-                  .toLowerCase(),
+                finalProduct.supplier_product_id.trim().toLowerCase(),
                 finalProduct,
               );
             }
 
             result.updated += 1;
           } else {
-            const uniqueSlug =
-              makeUniqueSlug(
-                normalizedHandle,
-                usedSlugs,
-              );
+            const uniqueSlug = makeUniqueSlug(normalizedHandle, usedSlugs);
 
-            const createPayload: CreateProductInput =
-              {
-                ...payload,
-                slug: uniqueSlug,
-              };
+            const createPayload: CreateProductInput = {
+              ...payload,
+              slug: uniqueSlug,
+            };
 
-            const created =
-              await createProduct(
-                createPayload,
-              );
+            const created = await createProduct(createPayload);
 
             result.created += 1;
 
@@ -3260,53 +3436,32 @@ export default function Products() {
              * updated separately when the CSV says it
              * should be inactive.
              */
-            if (
-              created?.id &&
-              !firstBuilt.active
-            ) {
-              await updateProduct(
-                created.id,
-                {
-                  active: 0,
-                },
-              );
+            if (created?.id && !firstBuilt.active) {
+              await updateProduct(created.id, {
+                active: 0,
+              });
             }
 
             if (created) {
-              const finalCreated =
-                !firstBuilt.active
-                  ? {
-                      ...created,
-                      active: 0,
-                    }
-                  : created;
+              const finalCreated = !firstBuilt.active
+                ? {
+                    ...created,
+                    active: 0,
+                  }
+                : created;
 
               byHandle.set(
-                slugify(
-                  finalCreated.slug ||
-                    uniqueSlug,
-                ),
+                slugify(finalCreated.slug || uniqueSlug),
                 finalCreated,
               );
 
               if (finalCreated.sku) {
-                bySku.set(
-                  finalCreated.sku
-                    .trim()
-                    .toLowerCase(),
-                  finalCreated,
-                );
+                bySku.set(finalCreated.sku.trim().toLowerCase(), finalCreated);
               }
 
-              if (
-                finalCreated
-                  .supplier_product_id
-              ) {
+              if (finalCreated.supplier_product_id) {
                 bySupplierId.set(
-                  finalCreated
-                    .supplier_product_id
-                    .trim()
-                    .toLowerCase(),
+                  finalCreated.supplier_product_id.trim().toLowerCase(),
                   finalCreated,
                 );
               }
@@ -3320,9 +3475,7 @@ export default function Products() {
               ? error.message
               : "Unable to import product.";
 
-          result.errors.push(
-            `Row ${rowNumber}: ${message}`,
-          );
+          result.errors.push(`Row ${rowNumber}: ${message}`);
         }
       }
 
@@ -3335,9 +3488,7 @@ export default function Products() {
       );
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to import CSV.";
+        error instanceof Error ? error.message : "Unable to import CSV.";
 
       setCsvMessage(message);
 
@@ -3352,14 +3503,37 @@ export default function Products() {
       setCsvImporting(false);
 
       if (csvInputRef.current) {
-        csvInputRef.current.value =
-          "";
+        csvInputRef.current.value = "";
       }
     }
   }
 
   return (
     <div className="space-y-6">
+      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              TeemDrop sourcing & fulfillment
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+              Source and list products in TeemDrop, then manage your catalog
+              here with Add product or CSV import. TeemDrop documents automatic
+              syncing for authorized supported platforms; connect this custom
+              store only after TeemDrop provides its custom-store integration
+              details.
+            </p>
+          </div>
+          <a
+            href="https://teemdrop.com/login"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Open TeemDrop
+          </a>
+        </div>
+      </section>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
@@ -3367,17 +3541,14 @@ export default function Products() {
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Manage your Global store products,
-            pricing, suppliers and inventory.
+            Manage your Global store products, pricing, suppliers and inventory.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={
-              downloadCsvTemplate
-            }
+            onClick={downloadCsvTemplate}
             className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             CSV template
@@ -3386,17 +3557,13 @@ export default function Products() {
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
             <Upload size={17} />
 
-            {csvImporting
-              ? "Importing..."
-              : "Import CSV"}
+            {csvImporting ? "Importing..." : "Import CSV"}
 
             <input
               ref={csvInputRef}
               type="file"
               accept=".csv,text/csv"
-              onChange={
-                handleCsvImport
-              }
+              onChange={handleCsvImport}
               disabled={csvImporting}
               className="hidden"
             />
@@ -3404,30 +3571,18 @@ export default function Products() {
 
           <button
             type="button"
-            onClick={() =>
-              void refreshProducts()
-            }
+            onClick={() => void refreshProducts()}
             disabled={refreshing}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
-            <RefreshCw
-              size={17}
-              className={
-                refreshing
-                  ? "animate-spin"
-                  : ""
-              }
-            />
-
+            <RefreshCw size={17} className={refreshing ? "animate-spin" : ""} />
             Refresh
           </button>
 
           <button
             type="button"
             onClick={() => {
-              setEditingProduct(
-                null,
-              );
+              setEditingProduct(null);
               setShowModal(true);
             }}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
@@ -3445,101 +3600,60 @@ export default function Products() {
               {csvMessage}
             </span>
 
-            <button
-              type="button"
-              onClick={() =>
-                setCsvMessage("")
-              }
-            >
+            <button type="button" onClick={() => setCsvMessage("")}>
               <X size={16} />
             </button>
           </div>
 
-          {importResult &&
-            importResult.errors.length >
-              0 && (
-              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-600">
-                  Import errors
-                </p>
+          {importResult && importResult.errors.length > 0 && (
+            <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-600">
+                Import errors
+              </p>
 
-                <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-red-600">
-                  {importResult.errors.map(
-                    (
-                      importError,
-                      index,
-                    ) => (
-                      <div
-                        key={`${importError}-${index}`}
-                      >
-                        {importError}
-                      </div>
-                    ),
-                  )}
-                </div>
+              <div className="max-h-40 space-y-1 overflow-y-auto text-xs text-red-600">
+                {importResult.errors.map((importError, index) => (
+                  <div key={`${importError}-${index}`}>{importError}</div>
+                ))}
               </div>
-            )}
+            </div>
+          )}
         </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-          <p className="text-sm text-slate-500">
-            Total products
-          </p>
+          <p className="text-sm text-slate-500">Total products</p>
+
+          <p className="mt-2 text-2xl font-semibold">{products.length}</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500">Active</p>
 
           <p className="mt-2 text-2xl font-semibold">
-            {products.length}
+            {products.filter((product) => Number(product.active) === 1).length}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-          <p className="text-sm text-slate-500">
-            Active
-          </p>
+          <p className="text-sm text-slate-500">Low stock</p>
 
           <p className="mt-2 text-2xl font-semibold">
             {
-              products.filter(
-                (product) =>
-                  Number(
-                    product.active,
-                  ) === 1,
-              ).length
+              products.filter((product) => getStockState(product) === "low")
+                .length
             }
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-          <p className="text-sm text-slate-500">
-            Low stock
-          </p>
+          <p className="text-sm text-slate-500">Out of stock</p>
 
           <p className="mt-2 text-2xl font-semibold">
             {
-              products.filter(
-                (product) =>
-                  getStockState(
-                    product,
-                  ) === "low",
-              ).length
-            }
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-          <p className="text-sm text-slate-500">
-            Out of stock
-          </p>
-
-          <p className="mt-2 text-2xl font-semibold">
-            {
-              products.filter(
-                (product) =>
-                  getStockState(
-                    product,
-                  ) === "out",
-              ).length
+              products.filter((product) => getStockState(product) === "out")
+                .length
             }
           </p>
         </div>
@@ -3555,11 +3669,7 @@ export default function Products() {
 
             <input
               value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Search products, SKU or supplier..."
               className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-4 outline-none dark:border-slate-700 dark:bg-slate-900"
             />
@@ -3568,93 +3678,74 @@ export default function Products() {
           <select
             value={statusFilter}
             onChange={(event) =>
-              setStatusFilter(
-                event.target
-                  .value as StatusFilter,
-              )
+              setStatusFilter(event.target.value as StatusFilter)
             }
             className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
           >
-            <option value="all">
-              All status
-            </option>
-            <option value="active">
-              Active
-            </option>
-            <option value="inactive">
-              Inactive
-            </option>
+            <option value="all">All status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
           </select>
 
           <select
             value={stockFilter}
             onChange={(event) =>
-              setStockFilter(
-                event.target
-                  .value as StockFilter,
-              )
+              setStockFilter(event.target.value as StockFilter)
             }
             className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
           >
-            <option value="all">
-              All stock
-            </option>
-            <option value="healthy">
-              Healthy
-            </option>
-            <option value="low">
-              Low stock
-            </option>
-            <option value="out">
-              Out of stock
-            </option>
+            <option value="all">All stock</option>
+            <option value="healthy">Healthy</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
           </select>
 
           <select
             value={categoryFilter}
-            onChange={(event) =>
-              setCategoryFilter(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setCategoryFilter(event.target.value)}
             className="rounded-xl border border-slate-300 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900"
           >
-            <option value="all">
-              All categories
-            </option>
+            <option value="all">All categories</option>
 
-            {categories.map(
-              (category) => (
-                <option
-                  key={category}
-                  value={category}
-                >
-                  {category}
-                </option>
-              ),
-            )}
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
           </select>
 
-          <div className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900" aria-label="Product layout">
-            <button type="button" onClick={() => setViewMode("grid")} aria-pressed={viewMode === "grid"} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "grid" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}>Cards</button>
-            <button type="button" onClick={() => setViewMode("table")} aria-pressed={viewMode === "table"} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "table" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}>Table</button>
+          <div
+            className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900"
+            aria-label="Product layout"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              aria-pressed={viewMode === "grid"}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "grid" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+            >
+              Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              aria-pressed={viewMode === "table"}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition ${viewMode === "table" ? "bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"}`}
+            >
+              Table
+            </button>
           </div>
         </div>
 
         {selectedIds.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
             <span className="mr-2 text-sm font-medium">
-              {selectedIds.length}{" "}
-              selected
+              {selectedIds.length} selected
             </span>
 
             <button
               type="button"
-              onClick={() =>
-                void bulkUpdateActive(
-                  1,
-                )
-              }
+              onClick={() => void bulkUpdateActive(1)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
             >
               Activate
@@ -3662,11 +3753,7 @@ export default function Products() {
 
             <button
               type="button"
-              onClick={() =>
-                void bulkUpdateActive(
-                  0,
-                )
-              }
+              onClick={() => void bulkUpdateActive(0)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
             >
               Deactivate
@@ -3674,9 +3761,7 @@ export default function Products() {
 
             <button
               type="button"
-              onClick={() =>
-                void bulkDelete()
-              }
+              onClick={() => void bulkDelete()}
               className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
             >
               Delete
@@ -3686,38 +3771,25 @@ export default function Products() {
 
         {loading ? (
           <div className="flex min-h-80 items-center justify-center">
-            <RefreshCw
-              size={24}
-              className="animate-spin text-slate-400"
-            />
+            <RefreshCw size={24} className="animate-spin text-slate-400" />
           </div>
-        ) : filteredProducts.length ===
-          0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="flex min-h-96 flex-col items-center justify-center px-6 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-900">
-              <Package
-                size={28}
-                className="text-slate-400"
-              />
+              <Package size={28} className="text-slate-400" />
             </div>
 
-            <h3 className="mt-5 text-lg font-semibold">
-              No products found
-            </h3>
+            <h3 className="mt-5 text-lg font-semibold">No products found</h3>
 
             <p className="mt-2 max-w-md text-sm text-slate-500">
-              Your Products page is connected
-              to the real product database. Add
-              your first product or import your
-              Master Inventory CSV.
+              Your Products page is connected to the real product database. Add
+              your first product or import your Master Inventory CSV.
             </p>
 
             <button
               type="button"
               onClick={() => {
-                setEditingProduct(
-                  null,
-                );
+                setEditingProduct(null);
                 setShowModal(true);
               }}
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"
@@ -3726,31 +3798,107 @@ export default function Products() {
               Add your first product
             </button>
           </div>
+        ) : viewMode === "grid" ? (
+          <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {filteredProducts.map((product) => {
+              const stockState = getStockState(product);
+              const image = product.image_url || product.images?.[0];
+              const active = Number(product.active) === 1;
+              return (
+                <article
+                  key={product.id}
+                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
+                    {image ? (
+                      <img
+                        src={image}
+                        alt={product.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Package size={34} className="text-slate-400" />
+                      </div>
+                    )}
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${product.name}`}
+                      checked={selectedIds.includes(product.id)}
+                      onChange={() => toggleSelected(product.id)}
+                      className="absolute left-3 top-3 h-4 w-4 rounded border-slate-300 bg-white"
+                    />
+                    <span
+                      className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}
+                    >
+                      {active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <div className="space-y-3 p-4">
+                    <div className="min-w-0">
+                      <h3
+                        className="truncate font-semibold text-slate-950 dark:text-white"
+                        title={product.name}
+                      >
+                        {product.name}
+                      </h3>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {product.sku || "No SKU"} ·{" "}
+                        {product.category || "Uncategorized"}
+                      </p>
+                    </div>
+                    <div className="flex items-end justify-between gap-3">
+                      <p className="text-lg font-bold text-slate-950 dark:text-white">
+                        {money(numberValue(product.price), product.currency)}
+                      </p>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${stockState === "healthy" ? "bg-emerald-50 text-emerald-700" : stockState === "low" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}
+                      >
+                        {stockState === "healthy"
+                          ? "In stock"
+                          : stockState === "low"
+                            ? "Low stock"
+                            : "Out of stock"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
+                      <span>{product.stock ?? 0} units available</span>
+                      <span>{product.supplier_name || "No supplier"}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProduct(product);
+                          setShowModal(true);
+                        }}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950"
+                      >
+                        <Edit3 size={15} /> Edit product
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void toggleActive(product)}
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                      >
+                        {active ? "Disable" : "Activate"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${product.name}`}
+                        onClick={() => void handleDelete(product)}
+                        className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         ) : (
-          viewMode === "grid" ? (
-            <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {filteredProducts.map((product) => {
-                const stockState = getStockState(product);
-                const image = product.image_url || product.images?.[0];
-                const active = Number(product.active) === 1;
-                return (
-                  <article key={product.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-950">
-                    <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
-                      {image ? <img src={image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /> : <div className="flex h-full items-center justify-center"><Package size={34} className="text-slate-400" /></div>}
-                      <input type="checkbox" aria-label={`Select ${product.name}`} checked={selectedIds.includes(product.id)} onChange={() => toggleSelected(product.id)} className="absolute left-3 top-3 h-4 w-4 rounded border-slate-300 bg-white" />
-                      <span className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{active ? "Active" : "Inactive"}</span>
-                    </div>
-                    <div className="space-y-3 p-4">
-                      <div className="min-w-0"><h3 className="truncate font-semibold text-slate-950 dark:text-white" title={product.name}>{product.name}</h3><p className="mt-1 truncate text-xs text-slate-500">{product.sku || "No SKU"} · {product.category || "Uncategorized"}</p></div>
-                      <div className="flex items-end justify-between gap-3"><p className="text-lg font-bold text-slate-950 dark:text-white">{money(numberValue(product.price), product.currency)}</p><span className={`rounded-full px-2 py-1 text-xs font-semibold ${stockState === "healthy" ? "bg-emerald-50 text-emerald-700" : stockState === "low" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{stockState === "healthy" ? "In stock" : stockState === "low" ? "Low stock" : "Out of stock"}</span></div>
-                      <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800"><span>{product.stock ?? 0} units available</span><span>{product.supplier_name || "No supplier"}</span></div>
-                      <div className="flex gap-2"><button type="button" onClick={() => { setEditingProduct(product); setShowModal(true); }} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950"><Edit3 size={15}/> Edit product</button><button type="button" onClick={() => void toggleActive(product)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">{active ? "Disable" : "Activate"}</button><button type="button" aria-label={`Delete ${product.name}`} onClick={() => void handleDelete(product)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700"><Trash2 size={16}/></button></div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px]">
               <thead>
@@ -3759,354 +3907,226 @@ export default function Products() {
                     <input
                       type="checkbox"
                       checked={
-                        filteredProducts.length >
-                          0 &&
-                        filteredProducts.every(
-                          (
-                            product,
-                          ) =>
-                            selectedIds.includes(
-                              product.id,
-                            ),
+                        filteredProducts.length > 0 &&
+                        filteredProducts.every((product) =>
+                          selectedIds.includes(product.id),
                         )
                       }
-                      onChange={
-                        toggleAllVisible
-                      }
+                      onChange={toggleAllVisible}
                     />
                   </th>
 
-                  <th className="px-4 py-3">
-                    Product
-                  </th>
+                  <th className="px-4 py-3">Product</th>
 
-                  <th className="px-4 py-3">
-                    Category
-                  </th>
+                  <th className="px-4 py-3">Category</th>
 
-                  <th className="px-4 py-3">
-                    Price
-                  </th>
+                  <th className="px-4 py-3">Price</th>
 
-                  <th className="px-4 py-3">
-                    Inventory
-                  </th>
+                  <th className="px-4 py-3">Inventory</th>
 
-                  <th className="px-4 py-3">
-                    Supplier
-                  </th>
+                  <th className="px-4 py-3">Supplier</th>
 
-                  <th className="px-4 py-3">
-                    Profit
-                  </th>
+                  <th className="px-4 py-3">Profit</th>
 
-                  <th className="px-4 py-3">
-                    Status
-                  </th>
+                  <th className="px-4 py-3">Status</th>
 
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
 
               <tbody>
-                {filteredProducts.map(
-                  (product) => {
-                    const stockState =
-                      getStockState(
-                        product,
-                      );
+                {filteredProducts.map((product) => {
+                  const stockState = getStockState(product);
 
-                    const image =
-                      product.image_url ||
-                      product.images?.[0];
+                  const image = product.image_url || product.images?.[0];
 
-                    return (
-                      <tr
-                        key={
-                          product.id
-                        }
-                        className="border-b border-slate-100 last:border-0 dark:border-slate-900"
-                      >
-                        <td className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(
-                              product.id,
+                  return (
+                    <tr
+                      key={product.id}
+                      className="border-b border-slate-100 last:border-0 dark:border-slate-900"
+                    >
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(product.id)}
+                          onChange={() => toggleSelected(product.id)}
+                        />
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
+                            {image ? (
+                              <img
+                                src={image}
+                                alt={product.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package size={20} className="text-slate-400" />
                             )}
-                            onChange={() =>
-                              toggleSelected(
-                                product.id,
-                              )
-                            }
-                          />
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-900">
-                              {image ? (
-                                <img
-                                  src={image}
-                                  alt={
-                                    product.name
-                                  }
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <Package
-                                  size={
-                                    20
-                                  }
-                                  className="text-slate-400"
-                                />
-                              )}
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="max-w-[260px] truncate font-medium text-slate-900 dark:text-white">
-                                {
-                                  product.name
-                                }
-                              </p>
-
-                              <p className="mt-1 text-xs text-slate-500">
-                                {product.sku ||
-                                  "No SKU"}
-                              </p>
-                            </div>
                           </div>
-                        </td>
 
-                        <td className="px-4 py-4 text-sm">
-                          {product.category ||
-                            "—"}
-                        </td>
+                          <div className="min-w-0">
+                            <p className="max-w-[260px] truncate font-medium text-slate-900 dark:text-white">
+                              {product.name}
+                            </p>
 
-                        <td className="px-4 py-4 text-sm font-medium">
+                            <p className="mt-1 text-xs text-slate-500">
+                              {product.sku || "No SKU"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4 text-sm">
+                        {product.category || "—"}
+                      </td>
+
+                      <td className="px-4 py-4 text-sm font-medium">
+                        {money(numberValue(product.price), product.currency)}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="text-sm">
+                          <strong>{product.stock ?? 0}</strong>
+
+                          <span className="ml-1 text-slate-500">units</span>
+                        </div>
+
+                        <span
+                          className={`mt-1 inline-block text-xs ${
+                            stockState === "healthy"
+                              ? "text-emerald-600"
+                              : stockState === "low"
+                                ? "text-amber-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {stockState === "healthy"
+                            ? "Healthy"
+                            : stockState === "low"
+                              ? "Low stock"
+                              : "Out of stock"}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-4 text-sm">
+                        {product.supplier_name || "—"}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className="text-sm font-medium">
                           {money(
-                            numberValue(
-                              product.price,
-                            ),
+                            numberValue(product.profit_per_unit),
                             product.currency,
                           )}
-                        </td>
+                        </div>
 
-                        <td className="px-4 py-4">
-                          <div className="text-sm">
-                            <strong>
-                              {product.stock ??
-                                0}
-                            </strong>
+                        <div className="text-xs text-slate-500">
+                          {numberValue(product.profit_margin).toFixed(1)}%
+                        </div>
+                      </td>
 
-                            <span className="ml-1 text-slate-500">
-                              units
-                            </span>
-                          </div>
-
-                          <span
-                            className={`mt-1 inline-block text-xs ${
-                              stockState ===
-                              "healthy"
-                                ? "text-emerald-600"
-                                : stockState ===
-                                    "low"
-                                  ? "text-amber-600"
-                                  : "text-red-600"
-                            }`}
-                          >
-                            {stockState ===
-                            "healthy"
-                              ? "Healthy"
-                              : stockState ===
-                                  "low"
-                                ? "Low stock"
-                                : "Out of stock"}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-4 text-sm">
-                          {product.supplier_name ||
-                            "—"}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-medium">
-                            {money(
-                              numberValue(
-                                product.profit_per_unit,
-                              ),
-                              product.currency,
-                            )}
-                          </div>
-
-                          <div className="text-xs text-slate-500">
-                            {numberValue(
-                              product.profit_margin,
-                            ).toFixed(
-                              1,
-                            )}
-                            %
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                              Number(
-                                product.active,
-                              ) === 1
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {Number(
-                              product.active,
-                            ) === 1
-                              ? "Active"
-                              : "Inactive"}
-                          </span>
-                        </td>
-
-                        <td
-                          className="relative px-4 py-4 text-right"
-                          data-product-action-menu
+                      <td className="px-4 py-4">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                            Number(product.active) === 1
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
                         >
-                          <button
-                            type="button"
-                            aria-label={`Actions for ${product.name}`}
-                            aria-expanded={
-                              menuId ===
-                              product.id
-                            }
-                            onClick={(
-                              event,
-                            ) => {
-                              event.stopPropagation();
+                          {Number(product.active) === 1 ? "Active" : "Inactive"}
+                        </span>
+                      </td>
 
-                              setMenuId(
-                                (current) =>
-                                  current ===
-                                  product.id
-                                    ? null
-                                    : product.id,
-                              );
-                            }}
-                            className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      <td
+                        className="relative px-4 py-4 text-right"
+                        data-product-action-menu
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Actions for ${product.name}`}
+                          aria-expanded={menuId === product.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            setMenuId((current) =>
+                              current === product.id ? null : product.id,
+                            );
+                          }}
+                          className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <MoreHorizontal size={18} />
+                        </button>
+
+                        {menuId === product.id && (
+                          <div
+                            className="absolute right-4 top-12 z-20 w-48 rounded-xl border border-slate-200 bg-white p-1 text-left shadow-xl dark:border-slate-800 dark:bg-slate-950"
+                            data-product-action-menu
+                            onPointerDown={(event) => event.stopPropagation()}
                           >
-                            <MoreHorizontal
-                              size={
-                                18
-                              }
-                            />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingProduct(product);
 
-                          {menuId ===
-                            product.id && (
-                            <div
-                              className="absolute right-4 top-12 z-20 w-48 rounded-xl border border-slate-200 bg-white p-1 text-left shadow-xl dark:border-slate-800 dark:bg-slate-950"
-                              data-product-action-menu
-                              onPointerDown={(
-                                event,
-                              ) =>
-                                event.stopPropagation()
-                              }
+                                setShowModal(true);
+
+                                setMenuId(null);
+                              }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
                             >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingProduct(
-                                    product,
-                                  );
+                              <Edit3 size={15} />
+                              Edit product
+                            </button>
 
-                                  setShowModal(
-                                    true,
-                                  );
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuId(null);
 
-                                  setMenuId(
-                                    null,
-                                  );
-                                }}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
-                              >
-                                <Edit3
-                                  size={
-                                    15
-                                  }
-                                />
-                                Edit product
-                              </button>
+                                void toggleActive(product);
+                              }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                            >
+                              <Check size={15} />
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuId(
-                                    null,
-                                  );
+                              {Number(product.active) === 1
+                                ? "Deactivate"
+                                : "Activate"}
+                            </button>
 
-                                  void toggleActive(
-                                    product,
-                                  );
-                                }}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
-                              >
-                                <Check
-                                  size={
-                                    15
-                                  }
-                                />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMenuId(null);
 
-                                {Number(
-                                  product.active,
-                                ) === 1
-                                  ? "Deactivate"
-                                  : "Activate"}
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuId(
-                                    null,
-                                  );
-
-                                  void handleDelete(
-                                    product,
-                                  );
-                                }}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                              >
-                                <Trash2
-                                  size={
-                                    15
-                                  }
-                                />
-
-                                Delete product
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  },
-                )}
+                                void handleDelete(product);
+                              }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            >
+                              <Trash2 size={15} />
+                              Delete product
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          )
         )}
       </div>
 
       {showModal && (
         <ProductModal
-          product={
-            editingProduct
-          }
+          product={editingProduct}
           onClose={() => {
             setShowModal(false);
-            setEditingProduct(
-              null,
-            );
+            setEditingProduct(null);
           }}
           onSaved={loadProducts}
         />

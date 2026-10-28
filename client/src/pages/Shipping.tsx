@@ -1,158 +1,63 @@
-import {
-  Globe2,
-  Package,
-  Plane,
-} from "lucide-react";
-
+import { Globe2, Package, Plane } from "lucide-react";
+import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-
-const regions = [
-  {
-    name: "Nigeria",
-    code: "NG",
-    time: "6–10 days",
-  },
-  {
-    name: "Ghana",
-    code: "GH",
-    time: "6–10 days",
-  },
-  {
-    name: "South Africa",
-    code: "ZA",
-    time: "6–10 days",
-  },
-  {
-    name: "United States",
-    code: "US",
-    time: "10–14 days",
-  },
-  {
-    name: "United Kingdom",
-    code: "GB",
-    time: "10–14 days",
-  },
-  {
-    name: "Australia",
-    code: "AU",
-    time: "10–14 days",
-  },
-];
 
 export default function Shipping() {
   return (
     <>
       <Navbar />
-
       <main>
         <section className="bg-slate-900 px-6 py-20 text-white">
           <div className="mx-auto max-w-6xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">
-              Shipping
-            </p>
-
-            <h1 className="mt-3 text-4xl font-bold sm:text-5xl">
-              Delivery information
-            </h1>
-
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Shipping</p>
+            <h1 className="mt-3 text-4xl font-bold sm:text-5xl">Delivery information</h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-              We provide estimated delivery windows based on the
-              destination of your order.
+              Delivery options and timing depend on the product and destination. Please review the information provided for your order before confirming it.
             </p>
           </div>
         </section>
-
         <section className="px-6 py-16">
           <div className="mx-auto max-w-6xl">
             <div className="grid gap-6 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <Package
-                  size={25}
-                  className="text-slate-900"
-                />
-
-                <h2 className="mt-4 font-bold text-slate-900">
-                  Order processing
-                </h2>
-
+              <article className="rounded-2xl border border-slate-200 bg-white p-6">
+                <Package size={25} className="text-slate-900" />
+                <h2 className="mt-4 font-bold text-slate-900">Order processing</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Products may require processing before they are
-                  dispatched.
+                  Processing begins after the order has been accepted and the required payment confirmation has been completed. Processing time varies by product and supplier.
                 </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <Plane
-                  size={25}
-                  className="text-slate-900"
-                />
-
-                <h2 className="mt-4 font-bold text-slate-900">
-                  International shipping
-                </h2>
-
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white p-6">
+                <Plane size={25} className="text-slate-900" />
+                <h2 className="mt-4 font-bold text-slate-900">Transit and customs</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  International orders may be transported by air
-                  depending on the destination.
+                  Carrier schedules, customs checks, public holidays and other events outside the store’s control may affect delivery. Any applicable import duties or taxes should be checked for your destination.
                 </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                <Globe2
-                  size={25}
-                  className="text-slate-900"
-                />
-
-                <h2 className="mt-4 font-bold text-slate-900">
-                  Global destinations
-                </h2>
-
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white p-6">
+                <Globe2 size={25} className="text-slate-900" />
+                <h2 className="mt-4 font-bold text-slate-900">Destination availability</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Shipping availability and delivery times depend on
-                  the destination country.
+                  Not every product may be deliverable to every country. Confirm that your destination is supported before placing an order.
                 </p>
+              </article>
+            </div>
+            <div className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+              <h2 className="text-xl font-bold text-slate-900">Tracking your order</h2>
+              <p className="mt-3 leading-7 text-slate-600">
+                A tracking number may only become available after the parcel has been dispatched and the carrier has registered it. If your tracking information is not available yet, please check again later or contact support with your order number.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-4">
+                <Link to="/order-tracking" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">Track an order</Link>
+                <Link to="/contact" className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-800">Contact support</Link>
               </div>
             </div>
-
-            <div className="mt-12 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 px-6 py-5">
-                <h2 className="text-xl font-bold text-slate-900">
-                  Estimated delivery windows
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  These are estimates and may vary.
-                </p>
-              </div>
-
-              <div className="divide-y divide-slate-200">
-                {regions.map((region) => (
-                  <div
-                    key={region.code}
-                    className="flex items-center justify-between px-6 py-5"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {region.name}
-                      </p>
-
-                      <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                        {region.code}
-                      </p>
-                    </div>
-
-                    <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-                      {region.time}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <p className="mt-8 text-sm leading-6 text-slate-500">
+              Delivery estimates are not guarantees unless the store explicitly states otherwise for your order. Please check the order confirmation and contact support if you need help.
+            </p>
           </div>
         </section>
       </main>
-
       <Footer />
     </>
   );

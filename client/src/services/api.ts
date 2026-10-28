@@ -2,12 +2,14 @@ import type { Product } from "../types/product";
 import type {
   CheckoutData,
   CheckoutResponse,
+  CheckoutShippingResponse,
+  ConfirmOrderResponse,
 } from "../types/order";
 import type { StoreConfig } from "../types/store";
 
-const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:4000"
-).replace(/\/+$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:4000")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
 
 export interface PublicStore {
   id: string;
@@ -29,9 +31,7 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-async function handleResponse<T>(
-  response: Response,
-): Promise<T> {
+async function handleResponse<T>(response: Response): Promise<T> {
   let result: ApiResponse<T>;
 
   try {
@@ -41,33 +41,27 @@ async function handleResponse<T>(
   }
 
   if (!response.ok || !result.success) {
-    throw new Error(
-      result.error ||
-        result.message ||
-        "Something went wrong.",
-    );
+    throw new Error(result.error || result.message || "Something went wrong.");
   }
 
   return result.data as T;
 }
 
+/** Attach the logged-in admin's token to protected requests. */
 function adminHeaders(): HeadersInit {
   const token = localStorage.getItem("admin_token");
 
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /** Retrieve global products for platform-level features. */
 export async function getProducts(): Promise<Product[]> {
   const response = await fetch(`${API_URL}/api/products`);
+
   return handleResponse<Product[]>(response);
 }
 
-export async function getProduct(
-  id: string,
-): Promise<Product> {
+export async function getProduct(id: string): Promise<Product> {
   const response = await fetch(
     `${API_URL}/api/products/${encodeURIComponent(id)}`,
   );
@@ -75,9 +69,7 @@ export async function getProduct(
   return handleResponse<Product>(response);
 }
 
-export async function getProductBySlug(
-  slug: string,
-): Promise<Product> {
+export async function getProductBySlug(slug: string): Promise<Product> {
   const response = await fetch(
     `${API_URL}/api/products/slug/${encodeURIComponent(slug)}`,
   );
@@ -86,9 +78,7 @@ export async function getProductBySlug(
 }
 
 /** Retrieve public information for one store. */
-export async function getPublicStore(
-  slug: string,
-): Promise<PublicStore> {
+export async function getPublicStore(slug: string): Promise<PublicStore> {
   const response = await fetch(
     `${API_URL}/api/stores/public/${encodeURIComponent(slug)}`,
   );
@@ -97,9 +87,7 @@ export async function getPublicStore(
 }
 
 /** Retrieve products assigned to the requested store. */
-export async function getStoreProducts(
-  slug: string,
-): Promise<Product[]> {
+export async function getStoreProducts(slug: string): Promise<Product[]> {
   const response = await fetch(
     `${API_URL}/api/stores/public/${encodeURIComponent(slug)}/products`,
   );
@@ -107,6 +95,7 @@ export async function getStoreProducts(
   return handleResponse<Product[]>(response);
 }
 
+/** Create an order and reserve its stock on the server. */
 export async function createCheckout(
   data: CheckoutData,
 ): Promise<CheckoutResponse> {
@@ -121,9 +110,54 @@ export async function createCheckout(
   return handleResponse<CheckoutResponse>(response);
 }
 
+export async function getCheckoutShipping(
+  workspace: "global" | "nigeria",
+  storeId: string,
+  country: string,
+  currency: string,
+): Promise<CheckoutShippingResponse> {
+  const params = new URLSearchParams({
+    workspace,
+    store_id: storeId,
+    country,
+    currency,
+  });
+  const response = await fetch(`${API_URL}/api/checkout/shipping?${params}`);
+
+  return handleResponse<CheckoutShippingResponse>(response);
+}
+
+/**
+ * Submit an order for payment review.
+ *
+ * This does not mark payment as paid or verified.
+ * The server validates the order-specific confirmation token.
+ */
+export async function confirmOrder(
+  orderId: string,
+  confirmationToken: string,
+): Promise<ConfirmOrderResponse> {
+  const response = await fetch(`${API_URL}/api/order-confirmation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      orderId,
+      confirmationToken,
+    }),
+  });
+
+  return handleResponse<ConfirmOrderResponse>(response);
+}
+
 /** Retrieve the default store configuration. */
 export async function getStoreConfig(): Promise<StoreConfig> {
-  const response = await fetch(`${API_URL}/api/store`);
+  const response = await fetch(`${API_URL}/api/store`, {
+    headers: {
+      ...adminHeaders(),
+    },
+  });
 
   return handleResponse<StoreConfig>(response);
 }

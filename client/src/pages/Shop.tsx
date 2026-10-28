@@ -4,7 +4,9 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
 import { getProducts } from "../services/api";
+import { detectMarket } from "../services/market";
 import type { Product } from "../types/product";
+import type { MarketInfo } from "../types/market";
 
 export default function Shop() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -12,6 +14,7 @@ export default function Shop() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [market, setMarket] = useState<MarketInfo | null>(null);
 
   // Load real products from the backend.
   useEffect(() => {
@@ -25,16 +28,12 @@ export default function Shop() {
         const items = await getProducts();
 
         if (active) {
-          setProducts(
-            items.filter((product) => Number(product.active) === 1),
-          );
+          setProducts(items.filter((product) => Number(product.active) === 1));
         }
       } catch (err: unknown) {
         if (active) {
           setError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load products.",
+            err instanceof Error ? err.message : "Unable to load products.",
           );
         }
       } finally {
@@ -45,6 +44,20 @@ export default function Shop() {
     }
 
     void loadProducts();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void detectMarket()
+      .then((detected) => {
+        if (active) setMarket(detected);
+      })
+      .catch(() => {});
 
     return () => {
       active = false;
@@ -104,7 +117,7 @@ export default function Shop() {
         <section className="border-b border-black/10 px-5 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-28">
           <div className="mx-auto max-w-[1440px]">
             <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-[#817a6e]">
-              MEO Store · The collection
+              Dropstack Global Ecommerce · The collection
             </p>
 
             <div className="mt-6 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
@@ -113,9 +126,9 @@ export default function Shop() {
               </h1>
 
               <p className="max-w-md text-base leading-7 text-[#6e685f]">
-                Explore our collection of carefully selected products.
-                Discover useful essentials and find something that fits
-                your everyday needs.
+                Explore our collection of carefully selected products. Discover
+                useful essentials and find something that fits your everyday
+                needs.
               </p>
             </div>
 
@@ -201,11 +214,7 @@ export default function Shop() {
           {loading ? (
             <div className="grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {Array.from({ length: 8 }, (_, index) => (
-                <div
-                  key={index}
-                  className="animate-pulse"
-                  aria-hidden="true"
-                >
+                <div key={index} className="animate-pulse" aria-hidden="true">
                   <div className="aspect-[4/5] bg-[#e8e3d9]" />
 
                   <div className="space-y-3 py-5">
@@ -242,6 +251,7 @@ export default function Shop() {
                   key={product.id}
                   product={product}
                   index={index}
+                  currency={market?.currency || "USD"}
                 />
               ))}
             </div>

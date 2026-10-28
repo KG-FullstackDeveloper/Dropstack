@@ -8,22 +8,22 @@ const questions = [
   {
     question: "How long does delivery take?",
     answer:
-      "For Nigeria, Ghana, and South Africa, the current estimated delivery window is 6–10 days. For the United States, United Kingdom, and Australia, the current estimated window is 10–14 days.",
+      "Delivery time depends on the product, destination, supplier processing, customs and carrier. Check the shipping information shown for your order. We will share tracking details when they are available.",
   },
   {
     question: "Where do you ship?",
     answer:
-      "We are building the store to support customers across multiple countries. Shipping availability is shown during checkout.",
+      "Shipping availability depends on the destination and the products in your order. Available destinations should be confirmed before you place an order.",
   },
   {
     question: "Can I track my order?",
     answer:
-      "Yes. Once an order has been shipped and tracking information is available, tracking details can be provided for the order.",
+      "Use the Order Tracking page with your order number and checkout email. A tracking number may not be available until the order has been dispatched.",
   },
   {
     question: "When is my order processed?",
     answer:
-      "Orders are processed after payment has been successfully confirmed. Processing time can vary by product.",
+      "Orders move into processing only after the store has confirmed the order according to the payment process shown at checkout. Processing time can vary by product and supplier.",
   },
   {
     question: "Can I cancel an order?",
@@ -33,7 +33,7 @@ const questions = [
   {
     question: "How can I contact support?",
     answer:
-      "Use the Contact page to send us your question or request.",
+      "Use the Contact page to send your question. Never send passwords, full card details or payment account credentials in a support message.",
   },
 ];
 

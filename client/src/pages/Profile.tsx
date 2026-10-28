@@ -396,7 +396,7 @@ export default function Profile() {
                   <div>
                     <h2 className="font-black">Change password</h2>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Use a strong password with at least 12 characters.
+                      Use a strong password with at least 8 characters.
                     </p>
                   </div>
                 </div>
@@ -420,7 +420,7 @@ export default function Profile() {
                     }
                     type="password"
                     required
-                    minLength={12}
+                    minLength={8}
                     placeholder="New password"
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-950/10"
                   />

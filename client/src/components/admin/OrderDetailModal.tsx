@@ -7,6 +7,7 @@ import { useToast } from "./Toast";
 
 const ORDER_STATUSES = [
   { value: "payment_pending", label: "Payment Pending" },
+  { value: "payment_review_pending", label: "Payment Review Pending" },
   { value: "payment_confirmed", label: "Payment Confirmed" },
   { value: "settlement_pending", label: "Settlement Pending" },
   { value: "ready_to_fulfill", label: "Ready to Fulfill" },
@@ -16,12 +17,7 @@ const ORDER_STATUSES = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const PAYMENT_STATUSES = [
-  { value: "pending", label: "Pending" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "failed", label: "Failed" },
-  { value: "refunded", label: "Refunded" },
-];
+
 
 function formatDate(dateStr: string) {
   try {
@@ -43,7 +39,9 @@ interface Props {
 export default function OrderDetailModal({ order, onClose, onSuccess }: Props) {
   const { addToast } = useToast();
   const [orderStatus, setOrderStatus] = useState(order.order_status);
-  const [paymentStatus, setPaymentStatus] = useState(order.payment_status);
+  const paymentStatus = order.payment_status;
+  const [supplierName, setSupplierName] = useState(order.supplier_name ?? "");
+  const [supplierReference, setSupplierReference] = useState(order.supplier_order_reference ?? "");
   const [trackingNumber, setTrackingNumber] = useState(order.tracking_number ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -52,8 +50,9 @@ export default function OrderDetailModal({ order, onClose, onSuccess }: Props) {
     try {
       await updateOrderStatus(order.id, {
         order_status: orderStatus,
-        payment_status: paymentStatus,
-        tracking_number: trackingNumber.trim() || undefined,
+        tracking_number: trackingNumber.trim(),
+        supplier_name: supplierName.trim(),
+        supplier_order_reference: supplierReference.trim(),
       });
       addToast("Order status updated.", "success");
       onSuccess();
@@ -205,26 +204,41 @@ export default function OrderDetailModal({ order, onClose, onSuccess }: Props) {
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-600">
-                    Payment status
-                  </label>
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => setPaymentStatus(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-slate-400"
-                  >
-                    {PAYMENT_STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                  <span className="font-semibold">Payment status: </span>
+                  <span>{paymentStatus.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase())}</span>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Payment status is read-only here. It must only change after verified payment processing.
+                  </p>
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-slate-600">
-                    Tracking number
+                    Supplier name
+                  </label>
+                  <input
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                    placeholder="Supplier or sourcing contact"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                    Supplier order reference
+                  </label>
+                  <input
+                    value={supplierReference}
+                    onChange={(e) => setSupplierReference(e.target.value)}
+                    placeholder="Reference from WhatsApp / supplier"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition focus:border-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                    Tracking number (paste from WhatsApp)
                   </label>
                   <input
                     value={trackingNumber}

@@ -12,7 +12,6 @@ import {
   MessageCircle,
   Package,
   PackageCheck,
-  Palette,
   Search,
   Settings,
   ShieldCheck,
@@ -45,7 +44,6 @@ export type AdminPageKey =
   | "Shipping"
   | "Inventory"
   | "Storefront"
-  | "Theme Editor"
   | "Settings";
 
 export type AdminWorkspace = "global" | "nigeria";
@@ -95,7 +93,6 @@ const operationsNavigation: NavigationItem[] = [
 const storeNavigation: NavigationItem[] = [
   { label: "Stores", icon: Store },
   { label: "Storefront", icon: ExternalLink },
-  { label: "Theme Editor", icon: Palette },
 ];
 
 const settingsNavigation: SettingsItem[] = [

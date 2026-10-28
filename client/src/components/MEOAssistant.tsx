@@ -23,6 +23,11 @@ import type {
 } from "react";
 import { Link } from "react-router-dom";
 
+// Use the deployed API URL in production and localhost only for local development.
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:4000")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -204,7 +209,7 @@ export default function MEOAssistant({ workspace = "global", currentPage = "Over
       const token = localStorage.getItem("admin_token");
       const response =
         await fetch(
-          "http://localhost:4000/api/ai",
+          `${API_URL}/api/ai`,
           {
             method: "POST",
             headers: {

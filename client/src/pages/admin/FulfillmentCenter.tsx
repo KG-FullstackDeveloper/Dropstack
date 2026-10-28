@@ -36,6 +36,7 @@ type AdminOrder = {
   currency: string;
   total: number;
   order_status: OrderStatus;
+  payment_status: string;
   created_at: string;
   supplier_name?: string | null;
   tracking_number?: string | null;
@@ -65,7 +66,11 @@ function money(value: number, currency = "USD"): string {
 }
 
 function orderNeedsSupplierAction(order: AdminOrder): boolean {
-  if (order.order_status === "cancelled" || order.order_status === "delivered") {
+  if (
+    order.payment_status !== "confirmed" ||
+    order.order_status === "cancelled" ||
+    order.order_status === "delivered"
+  ) {
     return false;
   }
 
@@ -180,8 +185,7 @@ export default function FulfillmentCenter() {
   const [activeView, setActiveView] = useState<
     "suppliers" | "queue" | "integrations"
   >("suppliers");
-  const [supplierFilter, setSupplierFilter] =
-    useState<SupplierFilter>("all");
+  const [supplierFilter, setSupplierFilter] = useState<SupplierFilter>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -239,8 +243,7 @@ export default function FulfillmentCenter() {
         existing.activeProducts += product.active ? 1 : 0;
         existing.stockUnits += Number(product.stock) || 0;
         existing.supplierCost +=
-          (Number(product.supplier_cost) || 0) *
-          (Number(product.stock) || 0);
+          (Number(product.supplier_cost) || 0) * (Number(product.stock) || 0);
       } else {
         supplierMap.set(supplierName, {
           name: supplierName,
@@ -248,8 +251,7 @@ export default function FulfillmentCenter() {
           activeProducts: product.active ? 1 : 0,
           stockUnits: Number(product.stock) || 0,
           supplierCost:
-            (Number(product.supplier_cost) || 0) *
-            (Number(product.stock) || 0),
+            (Number(product.supplier_cost) || 0) * (Number(product.stock) || 0),
           pendingOrders: 0,
         });
       }
@@ -279,10 +281,7 @@ export default function FulfillmentCenter() {
   }, [orders, products]);
 
   const supplierProductsWithoutSupplier = useMemo(
-    () =>
-      products.filter(
-        (product) => !product.supplier_name?.trim(),
-      ).length,
+    () => products.filter((product) => !product.supplier_name?.trim()).length,
     [products],
   );
 
@@ -300,9 +299,8 @@ export default function FulfillmentCenter() {
 
   const ordersWithoutSupplier = useMemo(
     () =>
-      pendingSupplierOrders.filter(
-        (order) => !order.supplier_name?.trim(),
-      ).length,
+      pendingSupplierOrders.filter((order) => !order.supplier_name?.trim())
+        .length,
     [pendingSupplierOrders],
   );
 
@@ -356,16 +354,13 @@ export default function FulfillmentCenter() {
       products.reduce(
         (total, product) =>
           total +
-          (Number(product.supplier_cost) || 0) *
-            (Number(product.stock) || 0),
+          (Number(product.supplier_cost) || 0) * (Number(product.stock) || 0),
         0,
       ),
     [products],
   );
 
-  function changeView(
-    view: "suppliers" | "queue" | "integrations",
-  ) {
+  function changeView(view: "suppliers" | "queue" | "integrations") {
     setActiveView(view);
     setSearch("");
   }
@@ -394,10 +389,7 @@ export default function FulfillmentCenter() {
           disabled={loading || refreshing}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <RefreshCw
-            size={16}
-            className={refreshing ? "animate-spin" : ""}
-          />
+          <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
@@ -729,10 +721,7 @@ export default function FulfillmentCenter() {
               {filteredQueue.length === 0 ? (
                 <div className="p-12 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50">
-                    <CheckCircle2
-                      size={25}
-                      className="text-emerald-600"
-                    />
+                    <CheckCircle2 size={25} className="text-emerald-600" />
                   </div>
 
                   <h3 className="mt-5 text-base font-bold text-slate-900">
@@ -746,12 +735,8 @@ export default function FulfillmentCenter() {
               ) : (
                 <div className="divide-y divide-slate-100">
                   {filteredQueue.map((order) => {
-                    const hasSupplier = Boolean(
-                      order.supplier_name?.trim(),
-                    );
-                    const hasTracking = Boolean(
-                      order.tracking_number?.trim(),
-                    );
+                    const hasSupplier = Boolean(order.supplier_name?.trim());
+                    const hasTracking = Boolean(order.tracking_number?.trim());
 
                     return (
                       <article
@@ -842,9 +827,7 @@ export default function FulfillmentCenter() {
                           </span>
 
                           {hasTracking && (
-                            <span>
-                              Tracking: {order.tracking_number}
-                            </span>
+                            <span>Tracking: {order.tracking_number}</span>
                           )}
 
                           <span className="inline-flex items-center gap-1.5">
@@ -879,8 +862,8 @@ export default function FulfillmentCenter() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Connect a supplier later using its own API, order
-                    endpoint, inventory feed or other supported connection.
+                    Connect a supplier later using its own API, order endpoint,
+                    inventory feed or other supported connection.
                   </p>
 
                   <span className="mt-5 inline-flex rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
@@ -918,9 +901,8 @@ export default function FulfillmentCenter() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Future supplier connections can return shipment and
-                    tracking information when the supplier actually provides
-                    it.
+                    Future supplier connections can return shipment and tracking
+                    information when the supplier actually provides it.
                   </p>
 
                   <span className="mt-5 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
@@ -932,9 +914,9 @@ export default function FulfillmentCenter() {
               <div className="border-t border-slate-100 px-5 py-4 sm:px-6">
                 <p className="text-xs leading-5 text-slate-500">
                   This section intentionally does not assume CJ, AliExpress,
-                  Spocket, or any other supplier. A specific integration can
-                  be added later when you decide which supplier or supplier
-                  API you actually want to use.
+                  Spocket, or any other supplier. A specific integration can be
+                  added later when you decide which supplier or supplier API you
+                  actually want to use.
                 </p>
               </div>
             </section>

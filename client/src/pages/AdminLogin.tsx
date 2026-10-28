@@ -133,8 +133,8 @@ export default function AdminLogin() {
     event.preventDefault();
     clearMessages();
 
-    if (newPassword.length < 12) {
-      setError("Your new password must contain at least 12 characters.");
+    if (newPassword.length < 8) {
+      setError("Your new password must contain at least 8 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -254,9 +254,9 @@ export default function AdminLogin() {
               <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 to-transparent" />
             </div>
             <div>
-              <div className="text-sm font-black tracking-[0.22em]">MEO</div>
+              <div className="text-sm font-black tracking-[0.22em]">DROPSTACK</div>
               <div className="mt-0.5 text-[9px] font-semibold tracking-[0.28em] text-slate-500">
-                COMMERCE OS
+                GLOBAL ECOMMERCE
               </div>
             </div>
           </button>
@@ -546,7 +546,7 @@ export default function AdminLogin() {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="At least 12 characters"
-                        minLength={12}
+                        minLength={8}
                         required
                         autoComplete="new-password"
                         autoFocus
@@ -587,7 +587,7 @@ export default function AdminLogin() {
                 <div className="my-7 flex items-center gap-3">
                   <div className="h-px flex-1 bg-white/[0.08]" />
                   <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-600">
-                    MEO protected access
+                    Dropstack protected access
                   </span>
                   <div className="h-px flex-1 bg-white/[0.08]" />
                 </div>
@@ -621,7 +621,7 @@ export default function AdminLogin() {
             ))}
           </div>
           <p className="mt-6 text-center text-[9px] font-semibold uppercase tracking-[0.3em] text-slate-600">
-            MEO · Commerce, under your control
+            Dropstack Global Ecommerce · Your business, under your control
           </p>
         </footer>
       </div>

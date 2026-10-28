@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  Download,
   Filter,
   PackageCheck,
   RefreshCw,
@@ -33,55 +34,34 @@ const STATUS_OPTIONS = [
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    payment_pending:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    payment_confirmed:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    settlement_pending:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    ready_to_fulfill:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-    supplier_ordered:
-      "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
-    shipped:
-      "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
-    delivered:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    cancelled:
-      "bg-red-500/10 text-red-600 dark:text-red-400",
+    payment_pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    payment_confirmed: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    settlement_pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    ready_to_fulfill: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    supplier_ordered: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    shipped: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    delivered: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    cancelled: "bg-red-500/10 text-red-600 dark:text-red-400",
   };
 
-  return (
-    map[status] ??
-    "bg-slate-500/10 text-slate-600 dark:text-slate-400"
-  );
+  return map[status] ?? "bg-slate-500/10 text-slate-600 dark:text-slate-400";
 }
 
 function paymentBadge(status: string) {
   const map: Record<string, string> = {
-    confirmed:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    pending:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    failed:
-      "bg-red-500/10 text-red-600 dark:text-red-400",
-    refunded:
-      "bg-slate-500/10 text-slate-600 dark:text-slate-400",
+    confirmed: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    failed: "bg-red-500/10 text-red-600 dark:text-red-400",
+    refunded: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
   };
 
-  return (
-    map[status] ??
-    "bg-slate-500/10 text-slate-600 dark:text-slate-400"
-  );
+  return map[status] ?? "bg-slate-500/10 text-slate-600 dark:text-slate-400";
 }
 
 function formatLabel(value: string) {
   return value
     .split("_")
-    .map(
-      (word) =>
-        word.charAt(0).toUpperCase() + word.slice(1),
-    )
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
 
@@ -108,16 +88,18 @@ function formatShortDate(dateStr: string) {
   }
 }
 
+function escapeCsv(value: unknown): string {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
 export default function Orders() {
   const { addToast } = useToast();
 
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>("all");
-  const [selectedOrder, setSelectedOrder] =
-    useState<AdminOrder | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
 
   const [showFilters, setShowFilters] = useState(false);
 
@@ -131,10 +113,7 @@ export default function Orders() {
     } catch (err) {
       console.error(err);
 
-      addToast(
-        "Unable to load orders.",
-        "error",
-      );
+      addToast("Unable to load orders.", "error");
     } finally {
       setLoading(false);
     }
@@ -146,8 +125,7 @@ export default function Orders() {
 
   const stats = useMemo(() => {
     const totalRevenue = orders.reduce(
-      (sum, order) =>
-        sum + Number(order.total || 0),
+      (sum, order) => sum + Number(order.total || 0),
       0,
     );
 
@@ -167,18 +145,15 @@ export default function Orders() {
     ).length;
 
     const shipped = orders.filter(
-      (order) =>
-        order.order_status === "shipped",
+      (order) => order.order_status === "shipped",
     ).length;
 
     const delivered = orders.filter(
-      (order) =>
-        order.order_status === "delivered",
+      (order) => order.order_status === "delivered",
     ).length;
 
     const cancelled = orders.filter(
-      (order) =>
-        order.order_status === "cancelled",
+      (order) => order.order_status === "cancelled",
     ).length;
 
     return {
@@ -198,25 +173,74 @@ export default function Orders() {
     return orders.filter((order) => {
       const matchesSearch =
         !query ||
-        order.customer_name
-          .toLowerCase()
-          .includes(query) ||
-        order.customer_email
-          .toLowerCase()
-          .includes(query) ||
+        order.customer_name.toLowerCase().includes(query) ||
+        order.customer_email.toLowerCase().includes(query) ||
         order.id.toLowerCase().includes(query);
 
       const matchesStatus =
-        statusFilter === "all" ||
-        order.order_status === statusFilter;
+        statusFilter === "all" || order.order_status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [orders, search, statusFilter]);
 
-  const hasFilters =
-    Boolean(search.trim()) ||
-    statusFilter !== "all";
+  const hasFilters = Boolean(search.trim()) || statusFilter !== "all";
+
+  const readyToFulfill = orders.filter(
+    (order) =>
+      order.order_status === "ready_to_fulfill" &&
+      order.payment_status === "confirmed",
+  );
+
+  function exportFulfillmentCsv() {
+    const headers = [
+      "Order Number",
+      "Store ID",
+      "Order Date",
+      "Recipient Name",
+      "Phone",
+      "Address",
+      "City",
+      "State",
+      "Postal Code",
+      "Country",
+      "Supplier Product ID",
+      "Variant SKU",
+      "Variant Details",
+      "Product Name",
+      "Quantity",
+    ];
+    const rows = readyToFulfill.flatMap((order) =>
+      (order.items ?? []).map((item) => [
+        order.order_reference || order.id,
+        order.store_id,
+        order.created_at,
+        order.customer_name,
+        order.customer_phone,
+        order.shipping_address,
+        order.city,
+        order.state,
+        order.postal_code,
+        order.country,
+        item.supplier_product_id,
+        item.supplier_sku,
+        item.variant_name,
+        item.product_name,
+        item.quantity,
+      ]),
+    );
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\r\n");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "fulfillment-preparation.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   const clearFilters = () => {
     setSearch("");
@@ -234,9 +258,7 @@ export default function Orders() {
             </p>
 
             <div className="mt-1 flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">
-                Orders
-              </h1>
+              <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
 
               <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {orders.length.toLocaleString()}
@@ -244,26 +266,33 @@ export default function Orders() {
             </div>
 
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Manage orders, payments, fulfillment, and
-              customer delivery status.
+              Manage orders, payments, fulfillment, and customer delivery
+              status.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={loadOrders}
-            disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <RefreshCw
-              size={16}
-              className={
-                loading ? "animate-spin" : ""
-              }
-            />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={exportFulfillmentCsv}
+              disabled={readyToFulfill.length === 0}
+              title="Preparation data only. Copy these rows into the template downloaded from TeemDrop."
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={16} />
+              Fulfillment CSV ({readyToFulfill.length})
+            </button>
 
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
+            <button
+              type="button"
+              onClick={loadOrders}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {/* KPI cards */}
@@ -277,10 +306,7 @@ export default function Orders() {
           <StatCard
             icon={DollarSign}
             title="Order revenue"
-            value={formatCurrency(
-              stats.totalRevenue,
-              "USD",
-            )}
+            value={formatCurrency(stats.totalRevenue, "USD")}
           />
 
           <StatCard
@@ -337,9 +363,7 @@ export default function Orders() {
           <div className="border-b border-slate-200 dark:border-slate-800">
             <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="font-semibold">
-                  Order directory
-                </h2>
+                <h2 className="font-semibold">Order directory</h2>
 
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {loading
@@ -357,9 +381,7 @@ export default function Orders() {
 
                   <input
                     value={search}
-                    onChange={(event) =>
-                      setSearch(event.target.value)
-                    }
+                    onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search orders, customers, email..."
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-500 dark:focus:ring-slate-800"
                   />
@@ -367,9 +389,7 @@ export default function Orders() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowFilters((value) => !value)
-                  }
+                  onClick={() => setShowFilters((value) => !value)}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
                     showFilters || statusFilter !== "all"
                       ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950"
@@ -378,13 +398,10 @@ export default function Orders() {
                 >
                   <Filter size={16} />
                   Filters
-
                   <ChevronDown
                     size={15}
                     className={
-                      showFilters
-                        ? "rotate-180 transition"
-                        : "transition"
+                      showFilters ? "rotate-180 transition" : "transition"
                     }
                   />
                 </button>
@@ -401,16 +418,11 @@ export default function Orders() {
 
                   <select
                     value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(event.target.value)
-                    }
+                    onChange={(event) => setStatusFilter(event.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-900 md:max-w-[320px]"
                   >
                     {STATUS_OPTIONS.map((option) => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                      >
+                      <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
@@ -438,33 +450,19 @@ export default function Orders() {
               <table className="w-full min-w-[1100px] text-left">
                 <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
                   <tr>
-                    <th className="px-6 py-4">
-                      Order
-                    </th>
+                    <th className="px-6 py-4">Order</th>
 
-                    <th className="px-6 py-4">
-                      Customer
-                    </th>
+                    <th className="px-6 py-4">Customer</th>
 
-                    <th className="px-6 py-4">
-                      Date
-                    </th>
+                    <th className="px-6 py-4">Date</th>
 
-                    <th className="px-6 py-4">
-                      Total
-                    </th>
+                    <th className="px-6 py-4">Total</th>
 
-                    <th className="px-6 py-4">
-                      Payment
-                    </th>
+                    <th className="px-6 py-4">Payment</th>
 
-                    <th className="px-6 py-4">
-                      Status
-                    </th>
+                    <th className="px-6 py-4">Status</th>
 
-                    <th className="px-6 py-4 text-right">
-                      View
-                    </th>
+                    <th className="px-6 py-4 text-right">View</th>
                   </tr>
                 </thead>
 
@@ -472,9 +470,7 @@ export default function Orders() {
                   {filteredOrders.map((order) => (
                     <tr
                       key={order.id}
-                      onClick={() =>
-                        setSelectedOrder(order)
-                      }
+                      onClick={() => setSelectedOrder(order)}
                       className="group cursor-pointer border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                     >
                       <td className="px-6 py-5">
@@ -485,10 +481,7 @@ export default function Orders() {
 
                           <div>
                             <p className="font-semibold">
-                              #
-                              {order.id
-                                .slice(0, 8)
-                                .toUpperCase()}
+                              #{order.id.slice(0, 8).toUpperCase()}
                             </p>
 
                             <p className="mt-0.5 text-xs text-slate-400">
@@ -510,24 +503,17 @@ export default function Orders() {
 
                       <td className="px-6 py-5">
                         <p className="text-sm font-medium">
-                          {formatShortDate(
-                            order.created_at,
-                          )}
+                          {formatShortDate(order.created_at)}
                         </p>
 
                         <p className="mt-1 text-xs text-slate-400">
-                          {formatDate(
-                            order.created_at,
-                          )}
+                          {formatDate(order.created_at)}
                         </p>
                       </td>
 
                       <td className="px-6 py-5">
                         <p className="text-sm font-bold">
-                          {formatCurrency(
-                            order.total,
-                            order.currency,
-                          )}
+                          {formatCurrency(order.total, order.currency)}
                         </p>
 
                         <p className="mt-1 text-xs uppercase text-slate-400">
@@ -541,9 +527,7 @@ export default function Orders() {
                             order.payment_status,
                           )}`}
                         >
-                          {formatLabel(
-                            order.payment_status,
-                          )}
+                          {formatLabel(order.payment_status)}
                         </span>
                       </td>
 
@@ -553,9 +537,7 @@ export default function Orders() {
                             order.order_status,
                           )}`}
                         >
-                          {formatLabel(
-                            order.order_status,
-                          )}
+                          {formatLabel(order.order_status)}
                         </span>
                       </td>
 
@@ -572,10 +554,7 @@ export default function Orders() {
           ) : (
             <div className="p-16 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
-                <PackageCheck
-                  size={30}
-                  className="text-slate-400"
-                />
+                <PackageCheck size={30} className="text-slate-400" />
               </div>
 
               <h3 className="mt-5 text-lg font-semibold">
@@ -607,9 +586,7 @@ export default function Orders() {
       {selectedOrder && (
         <OrderDetailModal
           order={selectedOrder}
-          onClose={() =>
-            setSelectedOrder(null)
-          }
+          onClose={() => setSelectedOrder(null)}
           onSuccess={loadOrders}
         />
       )}
@@ -621,23 +598,19 @@ function OrdersLoading() {
   return (
     <div className="min-h-[420px] p-6">
       <div className="space-y-3">
-        {Array.from({ length: 7 }).map(
-          (_, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-7 gap-5 rounded-xl border border-slate-100 p-5 dark:border-slate-800"
-            >
-              {Array.from({ length: 7 }).map(
-                (_, cell) => (
-                  <div
-                    key={cell}
-                    className="h-5 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
-                  />
-                ),
-              )}
-            </div>
-          ),
-        )}
+        {Array.from({ length: 7 }).map((_, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-7 gap-5 rounded-xl border border-slate-100 p-5 dark:border-slate-800"
+          >
+            {Array.from({ length: 7 }).map((_, cell) => (
+              <div
+                key={cell}
+                className="h-5 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
+              />
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -659,9 +632,7 @@ function MiniStatus({
           {label}
         </span>
 
-        <span
-          className={`text-lg font-bold ${className}`}
-        >
+        <span className={`text-lg font-bold ${className}`}>
           {value.toLocaleString()}
         </span>
       </div>
@@ -696,13 +667,9 @@ function StatCard({
         <Icon size={20} />
       </div>
 
-      <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">
-        {title}
-      </p>
+      <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">{title}</p>
 
-      <p className="mt-2 text-2xl font-bold tracking-tight">
-        {value}
-      </p>
+      <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
     </div>
   );
 }

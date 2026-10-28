@@ -140,6 +140,11 @@ export default function Customers() {
   }, [loadCustomers]);
 
   const stats = useMemo(() => {
+    // Do not add amounts in different currencies together.
+    const currencies = new Set(
+      customers.map((customer) => String(customer.currency || "").trim().toUpperCase()).filter(Boolean),
+    );
+    const singleCurrency = currencies.size === 1 ? Array.from(currencies)[0] : null;
     const totalSpend = customers.reduce(
       (sum, customer) =>
         sum + Number(customer.total_spend || 0),
@@ -197,6 +202,8 @@ export default function Customers() {
       totalOrders,
       totalSpend,
       averageSpend,
+      singleCurrency,
+      hasMixedCurrencies: currencies.size > 1,
       averageOrders,
       countries,
       returningRate,
@@ -209,10 +216,10 @@ export default function Customers() {
     const result = customers.filter((customer) => {
       const matchesSearch =
         !query ||
-        customer.customer_name
+        String(customer.customer_name || "")
           .toLowerCase()
           .includes(query) ||
-        customer.customer_email
+        String(customer.customer_email || "")
           .toLowerCase()
           .includes(query) ||
         String(customer.country || "")
@@ -385,18 +392,22 @@ export default function Customers() {
             value={
               loading
                 ? "..."
-                : formatCurrency(
-                    stats.totalSpend,
-                    "USD",
-                  )
+                : stats.hasMixedCurrencies
+                  ? "Multiple currencies"
+                  : formatCurrency(
+                      stats.totalSpend,
+                      stats.singleCurrency || "NGN",
+                    )
             }
             description={
               loading
                 ? undefined
-                : `Avg. ${formatCurrency(
-                    stats.averageSpend,
-                    "USD",
-                  )}`
+                : stats.hasMixedCurrencies
+                  ? "See individual customer currencies"
+                  : `Avg. ${formatCurrency(
+                      stats.averageSpend,
+                      stats.singleCurrency || "NGN",
+                    )}`
             }
           />
         </div>
@@ -703,7 +714,7 @@ export default function Customers() {
                               <p className="text-sm font-semibold">
                                 {formatCurrency(
                                   spend,
-                                  "USD",
+                                  customer.currency || "NGN",
                                 )}
                               </p>
 
@@ -712,7 +723,7 @@ export default function Customers() {
                                   {formatCurrency(
                                     spend /
                                       orderCount,
-                                    "USD",
+                                    customer.currency || "NGN",
                                   )}{" "}
                                   / order
                                 </p>
@@ -780,7 +791,7 @@ export default function Customers() {
                                     label="Lifetime spend"
                                     value={formatCurrency(
                                       spend,
-                                      "USD",
+                                      customer.currency || "NGN",
                                     )}
                                   />
                                 </div>

@@ -60,9 +60,9 @@ export default function Home() {
               <ShoppingBag size={22} />
             </span>
             <span>
-              <span className="block text-lg font-black tracking-tight">MEO</span>
+              <span className="block text-lg font-black tracking-tight">Dropstack</span>
               <span className={`block text-[9px] font-bold uppercase tracking-[0.25em] ${theme.muted}`}>
-                Commerce OS
+                Global Ecommerce
               </span>
             </span>
           </Link>
@@ -76,14 +76,13 @@ export default function Home() {
               {dark ? <Sun size={17} /> : <Moon size={17} />}
             </button>
 
-            <Link
-              to="/admin/login"
+            <a
+              href="#platform"
               className="inline-flex h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
             >
-              <LockKeyhole size={15} />
-              Admin Login
+              Explore platform
               <ArrowRight size={15} />
-            </Link>
+            </a>
           </div>
         </div>
       </header>
@@ -110,19 +109,19 @@ export default function Home() {
             </motion.h1>
 
             <motion.p variants={reveal} className={`mt-7 max-w-xl text-base leading-8 sm:text-lg ${theme.muted}`}>
-              Meet MEO — your private ecommerce command center. Manage stores,
+              Meet Dropstack Global Ecommerce — your ecommerce command center. Manage stores,
               products, orders, customers, inventory, and business performance
               from one intelligent workspace.
             </motion.p>
 
             <motion.div variants={reveal} className="mt-9 flex flex-wrap gap-3">
-              <Link
-                to="/admin/login"
+              <a
+                href="#platform"
                 className="group inline-flex h-14 items-center gap-3 rounded-full bg-emerald-400 px-7 text-sm font-extrabold text-slate-950 shadow-xl shadow-emerald-500/15 transition hover:-translate-y-1 hover:bg-emerald-300"
               >
-                Enter your workspace
+                Explore the platform
                 <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-              </Link>
+              </a>
               <a
                 href="#platform"
                 className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-sm font-bold transition hover:bg-white/5 ${theme.panel}`}
@@ -263,15 +262,15 @@ export default function Home() {
             viewport={{ once: true }}
             className="mt-12 text-center"
           >
-            <Link to="/admin/login" className="inline-flex h-13 items-center gap-2 rounded-full bg-emerald-400 px-7 py-4 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-300">
-              Access MEO <ArrowRight size={17} />
-            </Link>
+            <a href="#platform" className="inline-flex h-13 items-center gap-2 rounded-full bg-emerald-400 px-7 py-4 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-300">
+              Explore features <ArrowRight size={17} />
+            </a>
           </motion.div>
         </div>
       </section>
 
       <footer className={`mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-8 ${theme.muted}`}>
-        <span>© {new Date().getFullYear()} MEO Commerce OS</span>
+        <span>© {new Date().getFullYear()} Dropstack Global Ecommerce</span>
         <div className="flex items-center gap-2">
           <LockKeyhole size={13} />
           Private management platform

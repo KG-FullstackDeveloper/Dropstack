@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import DashboardPageShell from "../../components/dasboard/DashboardPageShell";
+import GlobalDataReset from "../../components/settings/GlobalDataReset";
 import type {
   DashboardSettingsData,
   SettingsSection,
@@ -929,6 +930,14 @@ export default function AdvancedSettings({
                 </p>
               </div>
             </SettingCard>
+
+            {workspaceKey === "global" ? (
+              <GlobalDataReset />
+            ) : (
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                System reset is intentionally unavailable in Nigeria Ecommerce to protect its separate data.
+              </div>
+            )}
           </>
         );
 

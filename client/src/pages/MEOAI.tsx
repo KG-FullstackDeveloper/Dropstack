@@ -13,6 +13,11 @@ import {
   useState,
 } from "react";
 
+// Use the deployed API URL in production and localhost only for local development.
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:4000")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
+
 type MessageRole = "user" | "assistant";
 
 interface Message {
@@ -189,7 +194,7 @@ export default function MEOAI() {
     try {
       const token = localStorage.getItem("admin_token");
       const response = await fetch(
-        "http://localhost:4000/api/ai",
+        `${API_URL}/api/ai`,
         {
           method: "POST",
           headers: {
@@ -320,7 +325,7 @@ export default function MEOAI() {
       try {
         const token = localStorage.getItem("admin_token");
         const response = await fetch(
-          "http://localhost:4000/api/ai",
+          `${API_URL}/api/ai`,
           {
             method: "POST",
             headers: {
