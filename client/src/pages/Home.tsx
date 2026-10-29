@@ -67,23 +67,38 @@ export default function Home() {
             </span>
           </Link>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setDark(!dark)}
-              aria-label="Toggle color theme"
-              className={`flex h-10 w-10 items-center justify-center rounded-full border ${theme.panel}`}
-            >
-              {dark ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
+          
+<div className="flex items-center gap-3">
+  {/* Theme switch */}
+  <button
+    onClick={() => setDark(!dark)}
+    aria-label="Toggle color theme"
+    className={`flex h-10 w-10 items-center justify-center rounded-full border ${theme.panel}`}
+  >
+    {dark ? <Sun size={17} /> : <Moon size={17} />}
+  </button>
 
-            <a
-              href="#platform"
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
-            >
-              Explore platform
-              <ArrowRight size={15} />
-            </a>
-          </div>
+  {/* Private administrator login */}
+  <Link
+    to="/admin/login"
+    className={`inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:-translate-y-0.5 ${
+      theme.panel
+    }`}
+  >
+    <LockKeyhole size={16} className="text-emerald-400" />
+    Admin Login
+  </Link>
+
+  {/* Main landing-page action */}
+  <a
+    href="#platform"
+    className="hidden sm:inline-flex h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
+  >
+    Explore platform
+    <ArrowRight size={15} />
+  </a>
+</div>
+
         </div>
       </header>
 
