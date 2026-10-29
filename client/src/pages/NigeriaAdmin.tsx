@@ -1,4 +1,4 @@
-import {
+﻿import {
 BarChart3,
 Boxes,
 CheckCircle2,
@@ -7,7 +7,6 @@ CreditCard,
 ExternalLink,
 Package,
 PackageCheck,
-Palette,
 Plus,
 Search,
 Settings2,
@@ -28,7 +27,7 @@ type ReactNode,
 
 import WorkspaceSettings from "./admin/WorkSpaceSettings";
 
-import AdminShell from "../components/admin/AdminShell";
+import AdminShell, { type AdminPageKey } from "../components/admin/AdminShell";
 import type { SettingsSection } from "../components/settings/DashboardSettingsTypes";
 
 type PageKey =
@@ -43,7 +42,6 @@ type PageKey =
 | "Shipping"
 | "Inventory"
 | "Storefront"
-| "Theme Editor"
 | "Settings";
 
 type OrderStatus =
@@ -97,7 +95,6 @@ deliveryEstimate: string;
 }
 
 const STORAGE_KEY = "meo_nigeria_ecommerce_dashboard_v2";
-const THEME_KEY = "meo_nigeria_dashboard_theme_v1";
 
 const EMPTY_DATA: NigeriaData = {
 orders: [],
@@ -107,7 +104,7 @@ storeName: "Nigeria Ecommerce",
 supplierName: "",
 paymentMethod: "flutterwave",
 shippingFee: 0,
-deliveryEstimate: "2–7 business days",
+deliveryEstimate: "2â€“7 business days",
 },
 };
 
@@ -156,7 +153,7 @@ function shortDate(value: string) {
 const date = new Date(value);
 
 if (Number.isNaN(date.getTime())) {
-return "—";
+return "â€”";
 }
 
 return date.toLocaleDateString("en-NG", {
@@ -1021,7 +1018,7 @@ return (
     <h2 className="font-black">Fulfillment flow</h2>
 
     <p className="mt-2 text-sm text-slate-500">
-      Payment confirmed → ready to fulfill → supplier ordered → shipped →
+      Payment confirmed â†’ ready to fulfill â†’ supplier ordered â†’ shipped â†’
       delivered.
     </p>
   </section>
@@ -1392,7 +1389,6 @@ Open storefront
           }}
           className="rounded-2xl border border-slate-200 p-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
         >
-          <Palette size={18} className="text-slate-500" />
 
           <p className="mt-3 text-sm font-bold text-slate-950">
             Theme editor
@@ -1534,55 +1530,6 @@ Open store
 );
 }
 
-function ThemeEditor() {
-const [theme, setTheme] = useState(
-() => localStorage.getItem(THEME_KEY) || "Nigeria Classic",
-);
-
-const themes = [
-"Nigeria Classic",
-"Nigeria Commerce",
-"Nigeria Minimal",
-];
-
-return (
-<div className="space-y-6">
-<PageHeader eyebrow="Ecommerce Dashboard" title="Theme Editor" description="Theme configuration is isolated from the Global Ecommerce workspace." />
-
-  <div className="grid gap-4 md:grid-cols-3">
-    {themes.map((item) => (
-      <button
-        key={item}
-        type="button"
-        onClick={() => {
-          setTheme(item);
-          localStorage.setItem(THEME_KEY, item);
-        }}
-        className={`rounded-3xl border p-6 text-left transition ${
-          theme === item
-            ? "border-slate-950 bg-slate-950 text-white"
-            : "border-slate-200 bg-white"
-        }`}
-      >
-        <Palette size={21} />
-
-        <p className="mt-5 font-black">{item}</p>
-
-        <p
-          className={`mt-2 text-sm ${
-            theme === item ? "text-white/60" : "text-slate-500"
-          }`}
-        >
-          Storefront theme
-        </p>
-      </button>
-    ))}
-  </div>
-</div>
-
-);
-}
-
 export default function NigeriaAdmin() {
   const [page, setPage] = useState<PageKey>("Overview");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("General");
@@ -1596,7 +1543,7 @@ export default function NigeriaAdmin() {
     const handleAiNavigation = (event: Event) => {
       const customEvent = event as CustomEvent<{ page?: string }>;
       const target = customEvent.detail?.page as PageKey | undefined;
-      const allowed: PageKey[] = ["Overview", "Stores", "Orders", "Fulfillment", "Products", "Customers", "Analytics", "Payments", "Shipping", "Storefront", "Theme Editor", "Inventory", "Settings"];
+      const allowed: PageKey[] = ["Overview", "Stores", "Orders", "Fulfillment", "Products", "Customers", "Analytics", "Payments", "Shipping", "Storefront", "Inventory", "Settings"];
       if (target && allowed.includes(target)) setPage(target);
     };
     window.addEventListener("meo:navigate", handleAiNavigation);
@@ -1624,7 +1571,6 @@ export default function NigeriaAdmin() {
       case "Shipping": return <Shipping data={data} />;
       case "Inventory": return <Inventory data={data} />;
       case "Storefront": return <Storefront />;
-      case "Theme Editor": return <ThemeEditor />;
       case "Settings": return <WorkspaceSettings workspaceKey="nigeria" workspaceName="Nigeria Ecommerce" initialSection={settingsSection} />;
       default: return null;
     }
@@ -1633,7 +1579,7 @@ export default function NigeriaAdmin() {
   return (
     <AdminShell
       workspace="nigeria"
-      active={page}
+      active={page as AdminPageKey}
       onNavigate={(next) => setPage(next as PageKey)}
       settingsSection={settingsSection}
       onSettingsSectionChange={setSettingsSection}
@@ -1643,3 +1589,4 @@ export default function NigeriaAdmin() {
     </AdminShell>
   );
 }
+
