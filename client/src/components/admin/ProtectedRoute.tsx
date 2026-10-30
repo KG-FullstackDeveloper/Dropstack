@@ -6,25 +6,21 @@ import { useAuth } from "../../contexts/AuthContext";
 
 interface ProtectedRouteProps {
   children: ReactNode;
+  requiredRole?: string;
 }
 
 export default function ProtectedRoute({
   children,
+  requiredRole,
 }: ProtectedRouteProps) {
-  const {
-    admin,
-    loading,
-  } = useAuth();
+  const { admin, loading } = useAuth();
 
   const location = useLocation();
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <Loader2
-          size={28}
-          className="animate-spin text-slate-400"
-        />
+        <Loader2 size={28} className="animate-spin text-slate-400" />
       </div>
     );
   }
@@ -33,6 +29,18 @@ export default function ProtectedRoute({
     return (
       <Navigate
         to="/admin/login"
+        replace
+        state={{
+          from: location.pathname,
+        }}
+      />
+    );
+  }
+
+  if (requiredRole && admin.role !== requiredRole) {
+    return (
+      <Navigate
+        to="/admin"
         replace
         state={{
           from: location.pathname,

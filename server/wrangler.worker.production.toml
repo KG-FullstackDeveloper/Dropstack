@@ -1,0 +1,13 @@
+name = "custom-ecommerce-api-worker"
+main = "src/worker/index.ts"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CLIENT_URL = "https://your-production-domain.com"
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dropstack-global-production"
+database_id = "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID"

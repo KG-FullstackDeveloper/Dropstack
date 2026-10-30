@@ -1,0 +1,14 @@
+name = "custom-ecommerce-api-worker-staging"
+main = "src/worker/index.ts"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CLIENT_URL = "http://localhost:5173"
+ENVIRONMENT = "staging"
+OWNER_EMAIL = "toxicfullstackdeveloper@gmail.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dropstack-global-staging"
+database_id = "16da248e-5e85-41e8-b1c1-5ef525550ae9"

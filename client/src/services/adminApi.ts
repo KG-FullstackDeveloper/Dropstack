@@ -8,6 +8,7 @@ export interface AdminUser {
   name: string;
   email: string;
   phone?: string | null;
+  role?: string | null;
   twoFactorEnabled?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -281,6 +282,32 @@ export async function login(
 
   if (!result.token || !result.admin) {
     throw new Error("The server returned an incomplete login response.");
+  }
+
+  localStorage.setItem("admin_token", result.token);
+
+  return {
+    token: result.token,
+    admin: result.admin,
+  };
+}
+
+export async function signup(
+  name: string,
+  email: string,
+  password: string,
+): Promise<LoginSuccess> {
+  const result = await request<LoginApiResult>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+    }),
+  });
+
+  if (!result.token || !result.admin) {
+    throw new Error("The server returned an incomplete signup response.");
   }
 
   localStorage.setItem("admin_token", result.token);

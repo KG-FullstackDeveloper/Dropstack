@@ -824,6 +824,14 @@ export default function Admin() {
                     <User size={16} />
                     Profile
                   </Link>
+                  <Link
+                    to="/platform-owner"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <ShieldCheck size={16} />
+                    Platform owner portal
+                  </Link>
                   <button
                     type="button"
                     onClick={() => {

@@ -109,6 +109,10 @@ analytics.get("/", (c) => {
       Number.isFinite(createdAt) &&
       createdAt >= from &&
       createdAt <= to &&
+      // Revenue must be based on verified payment, not fulfillment status alone.
+      // A delivered order can still be unpaid, failed, or refunded.
+      order.payment_status === "confirmed" &&
+      order.order_status !== "cancelled" &&
       isCompletedOrder(order.order_status)
     );
   });

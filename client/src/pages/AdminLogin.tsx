@@ -1,10 +1,21 @@
-
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff,
-  LockKeyhole, Loader2, Mail, ShieldCheck, Sparkles, Zap, Crown,
-  Boxes, Globe2,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Loader2,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  Zap,
+  Crown,
+  Boxes,
+  Globe2,
 } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 
@@ -12,6 +23,7 @@ import {
   forgotPassword,
   verifyForgotPassword,
   resetForgotPassword,
+  signup,
 } from "../services/adminApi";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -27,11 +39,12 @@ export default function AdminLogin() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [mode, setMode] = useState<"login" | "signup">("login");
 
-  const [recoveryStep, setRecoveryStep] =
-    useState<RecoveryStep>("email");
+  const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>("email");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -70,10 +83,22 @@ export default function AdminLogin() {
     clearMessages();
     setSubmitting(true);
     try {
+      if (mode === "signup") {
+        const cleanName = name.trim();
+
+        if (!cleanName) {
+          setError("Enter your name to create your account.");
+          return;
+        }
+
+        await signup(cleanName, email.trim(), password);
+        return;
+      }
+
       await login(email.trim(), password);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Login failed. Please try again."
+        err instanceof Error ? err.message : "Login failed. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -93,12 +118,14 @@ export default function AdminLogin() {
     try {
       await forgotPassword(email.trim());
       setRecoveryMessage(
-        "If an account exists for that email, a verification code has been sent."
+        "If an account exists for that email, a verification code has been sent.",
       );
       setRecoveryStep("code");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to start password recovery."
+        err instanceof Error
+          ? err.message
+          : "Unable to start password recovery.",
       );
     } finally {
       setSubmitting(false);
@@ -121,7 +148,7 @@ export default function AdminLogin() {
       setRecoveryStep("password");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Invalid verification code."
+        err instanceof Error ? err.message : "Invalid verification code.",
       );
       setRecoveryCode("");
     } finally {
@@ -157,7 +184,7 @@ export default function AdminLogin() {
       setResetToken("");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to reset your password."
+        err instanceof Error ? err.message : "Unable to reset your password.",
       );
     } finally {
       setSubmitting(false);
@@ -208,9 +235,12 @@ export default function AdminLogin() {
     >
       <span className="absolute inset-0 bg-white/10 opacity-0 transition group-hover:opacity-100" />
       <span className="relative">
-        {submitting ? busyButton(busyLabel) : (
+        {submitting ? (
+          busyButton(busyLabel)
+        ) : (
           <span className="flex items-center justify-center gap-2">
-            {label}<ArrowRight size={17} />
+            {label}
+            <ArrowRight size={17} />
           </span>
         )}
       </span>
@@ -254,7 +284,9 @@ export default function AdminLogin() {
               <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 to-transparent" />
             </div>
             <div>
-              <div className="text-sm font-black tracking-[0.22em]">DROPSTACK</div>
+              <div className="text-sm font-black tracking-[0.22em]">
+                DROPSTACK
+              </div>
               <div className="mt-0.5 text-[9px] font-semibold tracking-[0.28em] text-slate-500">
                 GLOBAL ECOMMERCE
               </div>
@@ -266,7 +298,10 @@ export default function AdminLogin() {
             onClick={() => navigate("/")}
             className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-4 py-2.5 text-xs font-medium text-slate-300 transition hover:border-blue-400/40 hover:bg-white/[0.07] hover:text-white sm:text-sm"
           >
-            <ArrowLeft size={15} className="transition group-hover:-translate-x-1" />
+            <ArrowLeft
+              size={15}
+              className="transition group-hover:-translate-x-1"
+            />
             <span className="hidden sm:inline">Back to platform</span>
             <span className="sm:hidden">Back</span>
           </button>
@@ -301,11 +336,19 @@ export default function AdminLogin() {
               />
               <motion.div
                 animate={{ y: [0, -9, 0], rotate: [0, 4, 0] }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                transition={{
+                  duration: 5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
                 className="relative flex h-28 w-28 items-center justify-center rounded-[2rem] border border-blue-300/40 bg-gradient-to-br from-blue-400/20 via-[#111b3a] to-violet-600/20 shadow-[0_0_80px_rgba(59,130,246,0.18)] sm:h-36 sm:w-36"
               >
                 <div className="absolute inset-2 rounded-[1.5rem] border border-white/[0.07]" />
-                <Crown size={48} strokeWidth={1.2} className="text-blue-200 sm:h-14 sm:w-14" />
+                <Crown
+                  size={48}
+                  strokeWidth={1.2}
+                  className="text-blue-200 sm:h-14 sm:w-14"
+                />
                 <div className="absolute -right-3 top-4 h-3 w-3 rounded-full bg-sky-300 shadow-[0_0_20px_#38bdf8]" />
                 <div className="absolute -bottom-2 left-5 h-2.5 w-2.5 rounded-full bg-violet-400 shadow-[0_0_18px_#a78bfa]" />
               </motion.div>
@@ -332,7 +375,11 @@ export default function AdminLogin() {
 
             <div className="mt-9 grid max-w-lg grid-cols-3 gap-3">
               {[
-                { icon: ShieldCheck, title: "Secure", detail: "Protected access" },
+                {
+                  icon: ShieldCheck,
+                  title: "Secure",
+                  detail: "Protected access",
+                },
                 { icon: Zap, title: "Real-time", detail: "Fast control" },
                 { icon: Crown, title: "Powerful", detail: "Admin tools" },
               ].map(({ icon: Icon, title, detail }) => (
@@ -343,8 +390,12 @@ export default function AdminLogin() {
                   <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-400/[0.08]">
                     <Icon size={17} className="text-blue-300" />
                   </div>
-                  <p className="text-xs font-bold text-white sm:text-sm">{title}</p>
-                  <p className="mt-1 text-[10px] text-slate-500 sm:text-xs">{detail}</p>
+                  <p className="text-xs font-bold text-white sm:text-sm">
+                    {title}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500 sm:text-xs">
+                    {detail}
+                  </p>
                 </div>
               ))}
             </div>
@@ -380,17 +431,42 @@ export default function AdminLogin() {
                 </div>
 
                 <motion.div
-                  key={`${isRecovery}-${recoveryStep}`}
+                  key={`${isRecovery}-${recoveryStep}-${mode}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
+                  <div className="mb-5 flex rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+                    {(["login", "signup"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          clearMessages();
+                          setMode(option);
+                        }}
+                        className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
+                          mode === option
+                            ? "bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-lg shadow-blue-500/20"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {option === "login" ? "Sign in" : "Create account"}
+                      </button>
+                    ))}
+                  </div>
                   <h2 className="text-3xl font-black tracking-tight sm:text-[2.15rem]">
-                    {isRecovery ? recoveryTitle[recoveryStep] : "Welcome back."}
+                    {isRecovery
+                      ? recoveryTitle[recoveryStep]
+                      : mode === "signup"
+                        ? "Create your admin account"
+                        : "Welcome back."}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
                     {isRecovery
                       ? recoveryDescription[recoveryStep]
-                      : "Sign in to access your commerce command center."}
+                      : mode === "signup"
+                        ? "Set up your own admin account with your email and a new password."
+                        : "Sign in to access your commerce command center."}
                   </p>
                 </motion.div>
 
@@ -414,12 +490,38 @@ export default function AdminLogin() {
 
                 {!isRecovery ? (
                   <form onSubmit={handleLogin} className="mt-8 space-y-5">
+                    {mode === "signup" && (
+                      <div>
+                        <label className="mb-2.5 block text-xs font-semibold text-slate-300">
+                          Full name
+                        </label>
+                        <div className="relative">
+                          <ShieldCheck
+                            size={17}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                          />
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Your full name"
+                            required={mode === "signup"}
+                            autoComplete="name"
+                            className={`${fieldClass} pl-11`}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <label className="mb-2.5 block text-xs font-semibold text-slate-300">
-                        Email address
+                        {mode === "signup" ? "Business email" : "Email address"}
                       </label>
                       <div className="relative">
-                        <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <Mail
+                          size={17}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                        />
                         <input
                           type="email"
                           value={email}
@@ -435,67 +537,103 @@ export default function AdminLogin() {
                     <div>
                       <div className="mb-2.5 flex items-center justify-between">
                         <label className="text-xs font-semibold text-slate-300">
-                          Password
+                          {mode === "signup" ? "Create password" : "Password"}
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            clearMessages();
-                            setRecoveryMode(true);
-                            setRecoveryStep("email");
-                            setRecoveryCode("");
-                            setResetToken("");
-                          }}
-                          className="text-xs font-semibold text-blue-300 transition hover:text-sky-200"
-                        >
-                          Forgot password?
-                        </button>
+                        {mode === "login" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              clearMessages();
+                              setRecoveryMode(true);
+                              setRecoveryStep("email");
+                              setRecoveryCode("");
+                              setResetToken("");
+                            }}
+                            className="text-xs font-semibold text-blue-300 transition hover:text-sky-200"
+                          >
+                            Forgot password?
+                          </button>
+                        )}
                       </div>
                       <div className="relative">
-                        <LockKeyhole size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <LockKeyhole
+                          size={17}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                        />
                         <input
                           type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter your password"
+                          placeholder={
+                            mode === "signup"
+                              ? "Create a secure password"
+                              : "Enter your password"
+                          }
                           required
-                          autoComplete="current-password"
+                          autoComplete={
+                            mode === "signup"
+                              ? "new-password"
+                              : "current-password"
+                          }
                           className={`${fieldClass} pl-11 pr-12`}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword((value) => !value)}
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-white"
                         >
-                          {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                          {showPassword ? (
+                            <EyeOff size={17} />
+                          ) : (
+                            <Eye size={17} />
+                          )}
                         </button>
                       </div>
                     </div>
 
-                    <label className="flex cursor-pointer items-center gap-2.5 text-xs text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                        className="h-4 w-4 rounded border-white/20 accent-blue-500"
-                      />
-                      Keep me signed in
-                    </label>
+                    {mode === "login" && (
+                      <label className="flex cursor-pointer items-center gap-2.5 text-xs text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={remember}
+                          onChange={(e) => setRemember(e.target.checked)}
+                          className="h-4 w-4 rounded border-white/20 accent-blue-500"
+                        />
+                        Keep me signed in
+                      </label>
+                    )}
 
-                    {primaryButton("Enter command center", "Signing in...")}
+                    {primaryButton(
+                      mode === "signup"
+                        ? "Create account"
+                        : "Enter command center",
+                      mode === "signup"
+                        ? "Creating account..."
+                        : "Signing in...",
+                    )}
                     <p className="text-center text-[11px] leading-5 text-slate-500">
-                      Authorized administrators only. All access is protected.
+                      {mode === "signup"
+                        ? "Use your email and a new password to claim your own protected admin account."
+                        : "Authorized administrators only. All access is protected."}
                     </p>
                   </form>
                 ) : recoveryStep === "email" ? (
-                  <form onSubmit={handleForgotPassword} className="mt-8 space-y-5">
+                  <form
+                    onSubmit={handleForgotPassword}
+                    className="mt-8 space-y-5"
+                  >
                     <div>
                       <label className="mb-2.5 block text-xs font-semibold text-slate-300">
                         Administrator email
                       </label>
                       <div className="relative">
-                        <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <Mail
+                          size={17}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                        />
                         <input
                           type="email"
                           value={email}
@@ -509,7 +647,11 @@ export default function AdminLogin() {
                       </div>
                     </div>
                     {primaryButton("Send verification code", "Sending...")}
-                    <button type="button" onClick={returnToLogin} className="flex w-full items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-400 transition hover:text-white">
+                    <button
+                      type="button"
+                      onClick={returnToLogin}
+                      className="flex w-full items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-400 transition hover:text-white"
+                    >
                       <ArrowLeft size={14} /> Back to login
                     </button>
                   </form>
@@ -524,7 +666,11 @@ export default function AdminLogin() {
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         value={recoveryCode}
-                        onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        onChange={(e) =>
+                          setRecoveryCode(
+                            e.target.value.replace(/\D/g, "").slice(0, 6),
+                          )
+                        }
                         placeholder="000000"
                         maxLength={6}
                         required
@@ -533,14 +679,23 @@ export default function AdminLogin() {
                       />
                     </div>
                     {primaryButton("Verify code", "Verifying...")}
-                    <button type="button" onClick={returnToLogin} className="flex w-full items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-400 transition hover:text-white">
+                    <button
+                      type="button"
+                      onClick={returnToLogin}
+                      className="flex w-full items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-400 transition hover:text-white"
+                    >
                       <ArrowLeft size={14} /> Back to login
                     </button>
                   </form>
                 ) : recoveryStep === "password" ? (
-                  <form onSubmit={handleResetPassword} className="mt-8 space-y-5">
+                  <form
+                    onSubmit={handleResetPassword}
+                    className="mt-8 space-y-5"
+                  >
                     <div>
-                      <label className="mb-2.5 block text-xs font-semibold text-slate-300">New password</label>
+                      <label className="mb-2.5 block text-xs font-semibold text-slate-300">
+                        New password
+                      </label>
                       <input
                         type="password"
                         value={newPassword}
@@ -554,7 +709,9 @@ export default function AdminLogin() {
                       />
                     </div>
                     <div>
-                      <label className="mb-2.5 block text-xs font-semibold text-slate-300">Confirm new password</label>
+                      <label className="mb-2.5 block text-xs font-semibold text-slate-300">
+                        Confirm new password
+                      </label>
                       <input
                         type="password"
                         value={confirmPassword}
@@ -605,9 +762,21 @@ export default function AdminLogin() {
         <footer className="border-t border-white/[0.08] py-6">
           <div className="grid gap-5 sm:grid-cols-3 sm:gap-8">
             {[
-              { icon: ShieldCheck, title: "Secure by design", text: "Protected tools for authorized administrators." },
-              { icon: Globe2, title: "One command center", text: "Manage your commerce operations in one place." },
-              { icon: Zap, title: "Made for momentum", text: "A focused workspace built for efficient decisions." },
+              {
+                icon: ShieldCheck,
+                title: "Secure by design",
+                text: "Protected tools for authorized administrators.",
+              },
+              {
+                icon: Globe2,
+                title: "One command center",
+                text: "Manage your commerce operations in one place.",
+              },
+              {
+                icon: Zap,
+                title: "Made for momentum",
+                text: "A focused workspace built for efficient decisions.",
+              },
             ].map(({ icon: Icon, title, text }) => (
               <div key={title} className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.035]">
@@ -615,7 +784,9 @@ export default function AdminLogin() {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-200">{title}</p>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">{text}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    {text}
+                  </p>
                 </div>
               </div>
             ))}

@@ -5,12 +5,14 @@ export interface AuthVariables {
   adminId: string;
   adminEmail: string;
   adminName: string;
+  adminRole: string;
 }
 
 interface AdminJwtPayload {
   id: string;
   email: string;
   name: string;
+  role?: string | null;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -28,16 +30,23 @@ export const authMiddleware: MiddlewareHandler<{
 
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json(
-      { success: false, error: "Unauthorized. Missing or invalid Authorization header." },
+      {
+        success: false,
+        error: "Unauthorized. Missing or invalid Authorization header.",
+      },
       401,
     );
   }
 
   try {
-    const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as AdminJwtPayload;
+    const decoded = jwt.verify(
+      authHeader.slice(7),
+      JWT_SECRET,
+    ) as AdminJwtPayload;
     c.set("adminId", decoded.id);
     c.set("adminEmail", decoded.email);
     c.set("adminName", decoded.name);
+    c.set("adminRole", decoded.role || "store_owner");
     await next();
   } catch {
     return c.json(

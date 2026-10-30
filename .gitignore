@@ -22,3 +22,10 @@ server/.env
 server/dropstack.db
 server/dropstack.db-wal
 server/dropstack.db-shm
+
+# Local backups and exported archives
+*-backup*/
+*.zip
+*.db.backup-*
+server/staging-admin-seed.sql
+server/compliance_receipts/

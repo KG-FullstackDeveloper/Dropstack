@@ -55,13 +55,29 @@ customersRoute.get("/", (c) => {
             LIMIT 1
           ) AS country,
 
+          (
+            SELECT latest.currency
+            FROM orders AS latest
+            WHERE LOWER(TRIM(latest.customer_email)) =
+                  LOWER(TRIM(orders.customer_email))
+            ORDER BY latest.created_at DESC
+            LIMIT 1
+          ) AS currency,
+
           COUNT(*) AS order_count,
 
           SUM(
             CASE
               WHEN LOWER(TRIM(COALESCE(payment_status, ''))) = 'confirmed'
-                AND LOWER(TRIM(COALESCE(payment_status, ''))) != 'refunded'
-                AND LOWER(TRIM(COALESCE(order_status, ''))) != 'cancelled'
+                AND LOWER(TRIM(COALESCE(order_status, ''))) NOT IN ('cancelled', 'refunded')
+                AND COALESCE(currency, '') = COALESCE((
+                  SELECT latest.currency
+                  FROM orders AS latest
+                  WHERE LOWER(TRIM(latest.customer_email)) =
+                        LOWER(TRIM(orders.customer_email))
+                  ORDER BY latest.created_at DESC
+                  LIMIT 1
+                ), '')
               THEN COALESCE(total, 0)
               ELSE 0
             END

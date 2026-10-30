@@ -1,6 +1,7 @@
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000/api";
+  (import.meta.env.VITE_API_URL || "http://localhost:4000")
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "") + "/api";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -218,67 +219,40 @@ function getToken(): string | null {
 /* Request                                                                    */
 /* -------------------------------------------------------------------------- */
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
 
   const headers = new Headers(options.headers);
 
-  if (
-    options.body &&
-    !headers.has("Content-Type")
-  ) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
   if (token) {
-    headers.set(
-      "Authorization",
-      `Bearer ${token}`,
-    );
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(
-    `${API_URL}${path}`,
-    {
-      ...options,
-      headers,
-      credentials: "include",
-    },
-  );
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
 
-  const contentType =
-    response.headers.get(
-      "content-type",
-    ) || "";
+  const contentType = response.headers.get("content-type") || "";
 
   let result: unknown;
 
-  if (
-    contentType.includes(
-      "application/json",
-    )
-  ) {
+  if (contentType.includes("application/json")) {
     result = await response.json();
   } else {
     result = await response.text();
   }
 
   if (!response.ok) {
-    let errorMessage =
-      `Request failed with status ${response.status}.`;
+    let errorMessage = `Request failed with status ${response.status}.`;
 
-    if (
-      result &&
-      typeof result === "object"
-    ) {
-      const body =
-        result as ApiResponse<unknown>;
+    if (result && typeof result === "object") {
+      const body = result as ApiResponse<unknown>;
 
       if (body.error) {
         errorMessage = body.error;
@@ -288,27 +262,17 @@ async function request<T>(
     }
 
     if (response.status === 401) {
-      localStorage.removeItem(
-        "admin_token",
-      );
+      localStorage.removeItem("admin_token");
     }
 
     throw new Error(errorMessage);
   }
 
-  if (
-    result &&
-    typeof result === "object"
-  ) {
-    const body =
-      result as ApiResponse<T>;
+  if (result && typeof result === "object") {
+    const body = result as ApiResponse<T>;
 
     if (body.success === false) {
-      throw new Error(
-        body.error ||
-          body.message ||
-          "Request failed.",
-      );
+      throw new Error(body.error || body.message || "Request failed.");
     }
 
     if ("data" in body) {
@@ -324,12 +288,9 @@ async function request<T>(
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaDashboard(): Promise<NigeriaDashboard> {
-  return request<NigeriaDashboard>(
-    "/nigeria/dashboard",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaDashboard>("/nigeria/dashboard", {
+    method: "GET",
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -337,24 +298,18 @@ export async function getNigeriaDashboard(): Promise<NigeriaDashboard> {
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaSettings(): Promise<NigeriaSettings> {
-  return request<NigeriaSettings>(
-    "/nigeria/settings",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaSettings>("/nigeria/settings", {
+    method: "GET",
+  });
 }
 
 export async function updateNigeriaSettings(
   settings: UpdateNigeriaSettingsInput,
 ): Promise<NigeriaSettings> {
-  return request<NigeriaSettings>(
-    "/nigeria/settings",
-    {
-      method: "PATCH",
-      body: JSON.stringify(settings),
-    },
-  );
+  return request<NigeriaSettings>("/nigeria/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -362,24 +317,18 @@ export async function updateNigeriaSettings(
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaProducts(): Promise<NigeriaProduct[]> {
-  return request<NigeriaProduct[]>(
-    "/nigeria/products",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaProduct[]>("/nigeria/products", {
+    method: "GET",
+  });
 }
 
 export async function createNigeriaProduct(
   product: CreateNigeriaProductInput,
 ): Promise<NigeriaProduct> {
-  return request<NigeriaProduct>(
-    "/nigeria/products",
-    {
-      method: "POST",
-      body: JSON.stringify(product),
-    },
-  );
+  return request<NigeriaProduct>("/nigeria/products", {
+    method: "POST",
+    body: JSON.stringify(product),
+  });
 }
 
 export async function updateNigeriaProduct(
@@ -395,15 +344,10 @@ export async function updateNigeriaProduct(
   );
 }
 
-export async function deleteNigeriaProduct(
-  id: string,
-): Promise<void> {
-  await request<unknown>(
-    `/nigeria/products/${encodeURIComponent(id)}`,
-    {
-      method: "DELETE",
-    },
-  );
+export async function deleteNigeriaProduct(id: string): Promise<void> {
+  await request<unknown>(`/nigeria/products/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -411,24 +355,18 @@ export async function deleteNigeriaProduct(
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaOrders(): Promise<NigeriaOrder[]> {
-  return request<NigeriaOrder[]>(
-    "/nigeria/orders",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaOrder[]>("/nigeria/orders", {
+    method: "GET",
+  });
 }
 
 export async function createNigeriaOrder(
   order: CreateNigeriaOrderInput,
 ): Promise<NigeriaOrder> {
-  return request<NigeriaOrder>(
-    "/nigeria/orders",
-    {
-      method: "POST",
-      body: JSON.stringify(order),
-    },
-  );
+  return request<NigeriaOrder>("/nigeria/orders", {
+    method: "POST",
+    body: JSON.stringify(order),
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -436,12 +374,9 @@ export async function createNigeriaOrder(
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaCustomers(): Promise<NigeriaCustomer[]> {
-  return request<NigeriaCustomer[]>(
-    "/nigeria/customers",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaCustomer[]>("/nigeria/customers", {
+    method: "GET",
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -449,21 +384,16 @@ export async function getNigeriaCustomers(): Promise<NigeriaCustomer[]> {
 /* -------------------------------------------------------------------------- */
 
 export async function getNigeriaInventory(): Promise<NigeriaInventoryItem[]> {
-  return request<NigeriaInventoryItem[]>(
-    "/nigeria/inventory",
-    {
-      method: "GET",
-    },
-  );
+  return request<NigeriaInventoryItem[]>("/nigeria/inventory", {
+    method: "GET",
+  });
 }
 
 /* -------------------------------------------------------------------------- */
 /* Generic Nigeria API                                                        */
 /* -------------------------------------------------------------------------- */
 
-export async function nigeriaApiGet<T>(
-  path: string,
-): Promise<T> {
+export async function nigeriaApiGet<T>(path: string): Promise<T> {
   return request<T>(path, {
     method: "GET",
   });
@@ -475,10 +405,7 @@ export async function nigeriaApiPost<T>(
 ): Promise<T> {
   return request<T>(path, {
     method: "POST",
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
@@ -488,10 +415,7 @@ export async function nigeriaApiPatch<T>(
 ): Promise<T> {
   return request<T>(path, {
     method: "PATCH",
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 

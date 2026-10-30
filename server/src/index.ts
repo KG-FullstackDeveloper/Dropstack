@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { serve } from "@hono/node-server";
 
 import auth from "./routes/auth";
@@ -20,14 +21,69 @@ import market from "./routes/market";
 import ai from "./routes/ai";
 import nigeria from "./routes/nigeria";
 import settings from "./routes/settings";
+import orderConfirmation from "./routes/orderConfirmation";
+import contact from "./routes/contact";
+import tracking from "./routes/tracking";
+import media from "./routes/media";
+import discounts from "./routes/discounts";
 
 import { authMiddleware } from "./middleware/auth";
+import { rateLimit } from "./middleware/rateLimit";
 
 const app = new Hono();
+app.use("*", secureHeaders());
+
+// Limit repeated login attempts.
+app.use(
+  "/api/auth/login",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    keyPrefix: "auth-login",
+  }),
+);
+
+// Limit password-reset requests.
+app.use(
+  "/api/auth/forgot-password",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    keyPrefix: "auth-forgot-password",
+  }),
+);
+
+app.use(
+  "/api/auth/forgot-password/*",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    keyPrefix: "auth-password-reset",
+  }),
+);
+
+// Limit repeated checkout submissions.
+app.use(
+  "/api/checkout",
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 30,
+    keyPrefix: "checkout",
+  }),
+);
+
+// Limit contact-form spam.
+app.use(
+  "/api/contact",
+  rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    keyPrefix: "contact",
+  }),
+);
 
 const PORT = Number(process.env.PORT || 4000);
-const CLIENT_URL =
-  process.env.CLIENT_URL || "http://localhost:5173";
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 if (!process.env.JWT_SECRET) {
   throw new Error(
@@ -43,18 +99,8 @@ app.use(
   "*",
   cors({
     origin: CLIENT_URL,
-    allowMethods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
-    allowHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   }),
 );
@@ -98,13 +144,16 @@ app.route("/api/settings", settings);
 app.route("/api/products", products);
 app.route("/api/inventory", inventory);
 app.route("/api/checkout", checkout);
+app.route("/api/discounts", discounts);
+app.route("/api/order-confirmation", orderConfirmation);
 app.route("/api/visitors", visitors);
 app.route("/api/market", market);
+app.route("/api/contact", contact);
+app.route("/api/tracking", tracking);
 
 /* --------------------------------------------------
    Protected admin APIs
 -------------------------------------------------- */
-
 app.use("/api/admin/*", authMiddleware);
 app.use("/api/orders/*", authMiddleware);
 app.use("/api/customers/*", authMiddleware);
@@ -115,7 +164,8 @@ app.use("/api/ai/*", authMiddleware);
 /* --------------------------------------------------
    Admin and store routes
 -------------------------------------------------- */
-
+// Require authentication for media upload and management routes.
+app.route("/api/media", media);
 app.route("/api/admin", admin);
 app.route("/api/orders", orders);
 app.route("/api/customers", customers);
@@ -163,24 +213,26 @@ app.notFound((c) => {
 });
 
 /* --------------------------------------------------
-   Error handling
+   Centralized error handling
 -------------------------------------------------- */
 
 app.onError((error, c) => {
+  // Keep detailed errors in server logs for debugging.
   console.error("API ERROR:", error);
+
+  // Never expose internal details to customers in production.
+  const isDevelopment = process.env.NODE_ENV !== "production";
 
   return c.json(
     {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Internal server error.",
+      error: isDevelopment
+        ? error.message
+        : "An unexpected server error occurred. Please try again.",
     },
     500,
   );
 });
-
 /* --------------------------------------------------
    Start server
 -------------------------------------------------- */
@@ -207,9 +259,7 @@ serve(
     hostname: "127.0.0.1",
   },
   (info) => {
-    console.log(
-      `API server running at http://${info.address}:${info.port}`,
-    );
+    console.log(`API server running at http://${info.address}:${info.port}`);
   },
 );
 
