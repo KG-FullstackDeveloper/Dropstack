@@ -37,6 +37,10 @@ export default function ProtectedRoute({
     );
   }
 
+  if (admin.role === "platform_owner" && location.pathname === "/admin") {
+    return <Navigate to="/platform-owner" replace />;
+  }
+
   if (requiredRole && admin.role !== requiredRole) {
     return (
       <Navigate

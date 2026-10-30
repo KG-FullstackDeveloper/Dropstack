@@ -64,7 +64,11 @@ export default function AdminLogin() {
     (location.state as { from?: string } | null)?.from || "/admin";
 
   useEffect(() => {
-    if (admin) navigate(redirectTo, { replace: true });
+    if (!admin) return;
+
+    const destination =
+      admin.role === "platform_owner" ? "/platform-owner" : redirectTo;
+    navigate(destination, { replace: true });
   }, [admin, navigate, redirectTo]);
 
   function handleMouseMove(event: React.MouseEvent<HTMLElement>) {

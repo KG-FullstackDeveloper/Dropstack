@@ -1,13 +1,14 @@
-name = "custom-ecommerce-api-worker"
+name = "custom-ecommerce-api-worker-production"
 main = "src/worker/index.ts"
 compatibility_date = "2026-09-22"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-CLIENT_URL = "https://your-production-domain.com"
+CLIENT_URL = "https://dropstack-global.pages.dev"
 ENVIRONMENT = "production"
+OWNER_EMAIL = "toxicfullstackdeveloper@gmail.com"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "dropstack-global-production"
-database_id = "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID"
+database_id = "d8973684-659f-4e49-bda3-8d9948b80377"
