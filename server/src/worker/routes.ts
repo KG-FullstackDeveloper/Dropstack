@@ -45,15 +45,35 @@ routes.get("/health", async (c) => {
 routes.post("/auth/login", loginAdmin);
 routes.post("/auth/signup", signupAdmin);
 
-routes.get("/auth/me", workerAuthMiddleware, (c) =>
-  c.json({
+routes.get("/auth/me", workerAuthMiddleware, async (c) => {
+  const admin = await c.env.DB.prepare(
+    `SELECT id, email, name, role
+     FROM admin_users
+     WHERE id = ?
+     LIMIT 1`,
+  )
+    .bind(c.get("adminId"))
+    .first<{
+      id: string;
+      email: string;
+      name: string | null;
+      role: string | null;
+    }>();
+
+  if (!admin) {
+    return c.json({ success: false, error: "Admin account not found." }, 404);
+  }
+
+  return c.json({
     success: true,
     data: {
-      id: c.get("adminId"),
-      email: c.get("adminEmail"),
+      id: admin.id,
+      email: admin.email,
+      name: admin.name ?? null,
+      role: admin.role ?? null,
     },
-  }),
-);
+  });
+});
 
 routes.route("/admin", adminService);
 routes.route("/products", productsService);

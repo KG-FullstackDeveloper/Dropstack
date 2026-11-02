@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -14,6 +13,15 @@ import {
   type AdminUser,
 } from "../services/adminApi";
 
+function normalizeRole(role: string | null | undefined): string | null {
+  if (typeof role !== "string") {
+    return null;
+  }
+
+  const normalized = role.trim();
+  return normalized.length > 0 ? normalized.toLowerCase() : null;
+}
+
 interface AuthContextValue {
   admin: AdminUser | null;
   loading: boolean;
@@ -28,11 +36,7 @@ export const AuthContext = createContext<AuthContextValue>({
   logout: () => {},
 });
 
-export function AuthProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +58,10 @@ export function AuthProvider({
         const restoredAdmin = await getMe();
 
         if (!cancelled) {
-          setAdmin(restoredAdmin);
+          setAdmin({
+            ...restoredAdmin,
+            role: normalizeRole(restoredAdmin.role),
+          });
         }
       } catch {
         // Remove an invalid or expired session.
@@ -84,7 +91,10 @@ export function AuthProvider({
 
       // Save the token returned by the backend.
       localStorage.setItem("admin_token", result.token);
-      setAdmin(result.admin);
+      setAdmin({
+        ...result.admin,
+        role: normalizeRole(result.admin.role),
+      });
     } finally {
       setLoading(false);
     }
@@ -100,9 +110,7 @@ export function AuthProvider({
   }
 
   return (
-    <AuthContext.Provider
-      value={{ admin, loading, login, logout }}
-    >
+    <AuthContext.Provider value={{ admin, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

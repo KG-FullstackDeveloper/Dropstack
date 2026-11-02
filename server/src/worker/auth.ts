@@ -4,6 +4,8 @@ import type { WorkerEnvironment } from "./types";
 interface JwtPayload {
   sub?: string;
   email?: string;
+  role?: string | null;
+  name?: string | null;
   exp?: number;
   iat?: number;
 }
@@ -30,9 +32,7 @@ function decodeBase64Url(value: string): Uint8Array {
 
   const binary = atob(normalized);
 
-  return Uint8Array.from(binary, (character) =>
-    character.charCodeAt(0),
-  );
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 async function importSigningKey(secret: string): Promise<CryptoKey> {
@@ -148,51 +148,61 @@ export async function verifyWorkerToken(
       return null;
     }
 
-    return payload;
+    return {
+      ...payload,
+      role: typeof payload.role === "string" ? payload.role.trim() : null,
+      name:
+        typeof payload.name === "string" && payload.name.trim().length > 0
+          ? payload.name.trim()
+          : null,
+    };
   } catch {
     return null;
   }
 }
 
-export const workerAuthMiddleware: MiddlewareHandler<WorkerEnvironment> =
-  async (c, next) => {
-    const authorization = c.req.header("Authorization") ?? "";
-    const match = authorization.match(/^Bearer\s+(\S+)$/i);
+export const workerAuthMiddleware: MiddlewareHandler<
+  WorkerEnvironment
+> = async (c, next) => {
+  const authorization = c.req.header("Authorization") ?? "";
+  const match = authorization.match(/^Bearer\s+(\S+)$/i);
 
-    if (!match) {
-      return c.json(
-        { success: false, error: "Authentication required." },
-        401,
-      );
-    }
+  if (!match) {
+    return c.json({ success: false, error: "Authentication required." }, 401);
+  }
 
-    const secret = c.env.JWT_SECRET;
+  const secret = c.env.JWT_SECRET;
 
-    if (!secret || secret.length < 32) {
-      return c.json(
-        { success: false, error: "Authentication is not configured." },
-        503,
-      );
-    }
+  if (!secret || secret.length < 32) {
+    return c.json(
+      { success: false, error: "Authentication is not configured." },
+      503,
+    );
+  }
 
-    const payload = await verifyWorkerToken(match[1], secret);
+  const payload = await verifyWorkerToken(match[1], secret);
 
-    if (!payload?.sub || !payload.email) {
-      return c.json(
-        { success: false, error: "Invalid or expired session." },
-        401,
-      );
-    }
+  if (!payload?.sub || !payload.email) {
+    return c.json(
+      { success: false, error: "Invalid or expired session." },
+      401,
+    );
+  }
 
-    c.set("adminId", payload.sub);
-    c.set("adminEmail", payload.email);
+  const adminRole =
+    typeof payload.role === "string" && payload.role.trim().length > 0
+      ? payload.role.trim()
+      : "store_owner";
 
-    await next();
-  };
+  c.set("adminId", payload.sub);
+  c.set("adminEmail", payload.email);
+  c.set("adminName", payload.name ?? payload.email.split("@")[0]);
+  c.set("adminRole", adminRole);
 
-export function getAuthenticatedAdmin(
-  c: Context<WorkerEnvironment>,
-) {
+  await next();
+};
+
+export function getAuthenticatedAdmin(c: Context<WorkerEnvironment>) {
   return {
     id: c.get("adminId"),
     email: c.get("adminEmail"),

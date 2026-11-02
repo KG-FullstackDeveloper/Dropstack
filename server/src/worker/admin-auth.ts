@@ -55,7 +55,12 @@ export async function loginAdmin(c: Context<WorkerEnvironment>) {
     }
 
     const token = await createWorkerToken(
-      { sub: admin.id, email: admin.email },
+      {
+        sub: admin.id,
+        email: admin.email,
+        name: admin.name ?? admin.email.split("@")[0],
+        role: admin.role ?? "store_owner",
+      },
       secret,
     );
 
@@ -185,7 +190,15 @@ export async function signupAdmin(c: Context<WorkerEnvironment>) {
       );
     }
 
-    const token = await createWorkerToken({ sub: id, email }, secret);
+    const token = await createWorkerToken(
+      {
+        sub: id,
+        email,
+        name: name || email.split("@")[0],
+        role: "platform_owner",
+      },
+      secret,
+    );
 
     return c.json({
       success: true,

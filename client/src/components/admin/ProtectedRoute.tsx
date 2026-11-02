@@ -37,11 +37,14 @@ export default function ProtectedRoute({
     );
   }
 
-  if (admin.role === "platform_owner" && location.pathname === "/admin") {
+  const adminRole = admin.role?.trim().toLowerCase();
+  const requiredRoleName = requiredRole?.trim().toLowerCase();
+
+  if (adminRole === "platform_owner" && location.pathname === "/admin") {
     return <Navigate to="/platform-owner" replace />;
   }
 
-  if (requiredRole && admin.role !== requiredRole) {
+  if (requiredRoleName && adminRole !== requiredRoleName) {
     return (
       <Navigate
         to="/admin"

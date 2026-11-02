@@ -66,8 +66,9 @@ export default function AdminLogin() {
   useEffect(() => {
     if (!admin) return;
 
+    const adminRole = admin.role?.trim().toLowerCase();
     const destination =
-      admin.role === "platform_owner" ? "/platform-owner" : redirectTo;
+      adminRole === "platform_owner" ? "/platform-owner" : redirectTo;
     navigate(destination, { replace: true });
   }, [admin, navigate, redirectTo]);
 

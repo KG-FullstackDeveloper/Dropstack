@@ -743,6 +743,30 @@ auth.post("/signup", async (c) => {
       );
     }
 
+    const allowedOwnerEmail = String(process.env.OWNER_EMAIL || "")
+      .trim()
+      .toLowerCase();
+
+    if (!allowedOwnerEmail) {
+      return c.json(
+        {
+          success: false,
+          error: "The platform owner email is not configured on the server.",
+        },
+        500,
+      );
+    }
+
+    if (email !== allowedOwnerEmail) {
+      return c.json(
+        {
+          success: false,
+          error: "This signup is restricted to the platform owner email only.",
+        },
+        403,
+      );
+    }
+
     const adminId = generateId("admin");
     const createdAt = nowIso();
     const passwordHash = await bcryptjs.hash(password, 12);
