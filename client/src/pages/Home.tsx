@@ -1,4 +1,3 @@
-
 import {
   ArrowRight,
   BarChart3,
@@ -86,23 +85,29 @@ export default function Home() {
               {dark ? <Sun size={17} /> : <Moon size={17} />}
             </button>
 
-            {/* Admin Login — visible in the header on mobile and desktop */}
+            {/* Customer account access — public sign in flow */}
             <Link
-              to="/admin/login"
+              to="/customer/login"
               className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-emerald-400 px-3 text-xs font-extrabold text-slate-950 shadow-lg shadow-emerald-500/10 transition hover:-translate-y-0.5 hover:bg-emerald-300 sm:h-11 sm:px-5 sm:text-sm"
             >
               <LockKeyhole size={15} />
-              <span>Admin Login</span>
+              <span>Sign In</span>
             </Link>
 
-            {/* Main landing-page action */}
-            <a
-              href="#platform"
-              className="hidden h-11 items-center gap-2 rounded-full border border-emerald-400/30 px-5 text-sm font-bold transition hover:bg-emerald-400/10 md:inline-flex"
+            <Link
+              to="/customer/register"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-emerald-400/30 px-3 text-xs font-extrabold text-emerald-300 transition hover:-translate-y-0.5 hover:bg-emerald-400/10 sm:h-11 sm:px-5 sm:text-sm"
             >
-              Explore platform
-              <ArrowRight size={15} />
-            </a>
+              <span>Sign Up</span>
+            </Link>
+
+            {/* Platform-owner portal remains separate and restricted */}
+            <Link
+              to="/admin/login"
+              className="hidden h-11 items-center gap-2 rounded-full border border-white/10 px-5 text-sm font-bold text-slate-300 transition hover:border-sky-400/50 hover:bg-sky-500/10 md:inline-flex"
+            >
+              Platform Owner
+            </Link>
           </div>
         </div>
       </header>
@@ -147,28 +152,24 @@ export default function Home() {
               business performance from one intelligent workspace.
             </motion.p>
 
-            <motion.div
-              variants={reveal}
-              className="mt-9 flex flex-wrap gap-3"
-            >
-              <a
-                href="#platform"
+            <motion.div variants={reveal} className="mt-9 flex flex-wrap gap-3">
+              <Link
+                to="/customer/register"
                 className="group inline-flex h-14 items-center gap-3 rounded-full bg-emerald-400 px-7 text-sm font-extrabold text-slate-950 shadow-xl shadow-emerald-500/15 transition hover:-translate-y-1 hover:bg-emerald-300"
               >
-                Explore the platform
+                Sign Up
                 <ArrowRight
                   size={18}
                   className="transition-transform group-hover:translate-x-1"
                 />
-              </a>
+              </Link>
 
-              {/* Second, prominent Admin Login entry point */}
               <Link
-                to="/admin/login"
+                to="/customer/login"
                 className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-sm font-bold transition hover:-translate-y-1 hover:border-emerald-400/50 hover:bg-emerald-400/10 ${theme.panel}`}
               >
                 <LockKeyhole size={17} className="text-emerald-400" />
-                Admin Login
+                Sign In
               </Link>
             </motion.div>
 
@@ -193,7 +194,9 @@ export default function Home() {
             transition={{ duration: 0.85, delay: 0.2 }}
             className={`relative rounded-[2rem] border p-3 shadow-2xl shadow-black/20 sm:p-5 ${theme.panel}`}
           >
-            <div className={`overflow-hidden rounded-[1.4rem] border ${theme.card}`}>
+            <div
+              className={`overflow-hidden rounded-[1.4rem] border ${theme.card}`}
+            >
               <div
                 className={`flex items-center justify-between border-b px-5 py-4 ${theme.panel}`}
               >
@@ -284,8 +287,8 @@ export default function Home() {
                   <div
                     className={`mt-3 flex items-center gap-2 text-xs ${theme.muted}`}
                   >
-                    <TrendingUp size={14} className="text-emerald-400" />
-                    A clearer view of your business activity
+                    <TrendingUp size={14} className="text-emerald-400" />A
+                    clearer view of your business activity
                   </div>
                 </div>
               </div>
@@ -322,7 +325,9 @@ export default function Home() {
                 <CheckCircle2 size={20} />
               </span>
               <span>
-                <span className="block text-xs font-bold">Built for control</span>
+                <span className="block text-xs font-bold">
+                  Built for control
+                </span>
                 <span className={`mt-1 block text-[10px] ${theme.muted}`}>
                   Your business, your decisions
                 </span>
@@ -332,7 +337,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="platform" className={`border-y py-20 sm:py-24 ${theme.panel}`}>
+      <section
+        id="platform"
+        className={`border-y py-20 sm:py-24 ${theme.panel}`}
+      >
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <motion.div
             initial="hidden"
@@ -426,10 +434,10 @@ export default function Home() {
         <span>© {new Date().getFullYear()} Dropstack Global Ecommerce</span>
         <Link
           to="/admin/login"
-          className="inline-flex items-center gap-2 transition hover:text-emerald-400"
+          className="inline-flex items-center gap-2 transition hover:text-sky-400"
         >
           <LockKeyhole size={13} />
-          Admin Login
+          Platform Owner Login
         </Link>
       </footer>
     </main>
