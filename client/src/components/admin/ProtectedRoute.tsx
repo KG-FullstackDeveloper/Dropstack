@@ -1,3 +1,4 @@
+
 import { type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -14,7 +15,6 @@ export default function ProtectedRoute({
   requiredRole,
 }: ProtectedRouteProps) {
   const { admin, loading } = useAuth();
-
   const location = useLocation();
 
   if (loading) {
@@ -25,6 +25,7 @@ export default function ProtectedRoute({
     );
   }
 
+  // Send unauthenticated users to login.
   if (!admin) {
     return (
       <Navigate
@@ -40,10 +41,8 @@ export default function ProtectedRoute({
   const adminRole = admin.role?.trim().toLowerCase();
   const requiredRoleName = requiredRole?.trim().toLowerCase();
 
-  if (adminRole === "platform_owner" && location.pathname === "/admin") {
-    return <Navigate to="/platform-owner" replace />;
-  }
-
+  // Only enforce a role when the route explicitly requires one.
+  // Platform owners can access both the CEO and normal Admin dashboards.
   if (requiredRoleName && adminRole !== requiredRoleName) {
     return (
       <Navigate
