@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -139,9 +140,18 @@ export default function PlatformOwnerPortal() {
               capacity from a single protected control center.
             </p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200">
-            <Sparkles size={16} className="text-emerald-300" />
-            Secure platform access
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200">
+              <Sparkles size={16} className="text-emerald-300" />
+              Secure platform access
+            </div>
+            <Link
+              to="/admin"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/10"
+            >
+              <ArrowUpRight size={16} className="rotate-180" />
+              Back to Admin Dashboard
+            </Link>
           </div>
         </div>
       </section>

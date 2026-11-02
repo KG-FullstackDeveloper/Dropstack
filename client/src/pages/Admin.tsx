@@ -31,6 +31,7 @@
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import type { SettingsSection } from "../components/settings/DashboardSettingsTypes";
 import { getAdminOrders, logout } from "../services/adminApi";
 const Discounts = lazy(() => import("./admin/Discounts"));
@@ -191,6 +192,7 @@ function openAssistant() {
 
 export default function Admin() {
   const navigateRouter = useNavigate();
+  const { admin } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [active, setActive] = useState<PageKey>("Overview");
@@ -331,6 +333,9 @@ export default function Admin() {
         return <Overview />;
     }
   }
+
+  const isPlatformOwner =
+    admin?.role?.trim().toLowerCase() === "platform_owner";
 
   const filteredSearch = allPages.filter((item) =>
     item.label.toLowerCase().includes(search.toLowerCase().trim()),
@@ -555,6 +560,20 @@ export default function Admin() {
 
         {renderNavGroup("Sales", primaryNavigation.slice(1))}
         {renderNavGroup("Operations", operationsNavigation)}
+
+        {isPlatformOwner && (
+          <div className="mb-5">
+            <Link
+              to="/platform-owner"
+              className={navClass(false, sidebarCollapsed)}
+            >
+              <ShieldCheck size={17} />
+              {!sidebarCollapsed && (
+                <span className="flex-1">CEO Dashboard</span>
+              )}
+            </Link>
+          </div>
+        )}
 
         <div className="mb-5">
           <button
