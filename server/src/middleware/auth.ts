@@ -6,6 +6,8 @@ export interface AuthVariables {
   adminEmail: string;
   adminName: string;
   adminRole: string;
+  customerId?: string;
+  customerRole?: string;
 }
 
 interface AdminJwtPayload {
@@ -54,10 +56,18 @@ export const authMiddleware: MiddlewareHandler<{
       );
     }
 
+    const normalizedRole = String(decoded.role || "store_owner").trim();
+
     c.set("adminId", adminId);
     c.set("adminEmail", decoded.email);
     c.set("adminName", decoded.name);
-    c.set("adminRole", decoded.role || "store_owner");
+    c.set("adminRole", normalizedRole);
+
+    if (normalizedRole.toLowerCase() === "customer") {
+      c.set("customerId", adminId);
+      c.set("customerRole", "customer");
+    }
+
     await next();
   } catch {
     return c.json(

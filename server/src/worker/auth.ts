@@ -212,6 +212,67 @@ export const workerAuthMiddleware: MiddlewareHandler<
   c.set("adminName", payload.name ?? payload.email.split("@")[0]);
   c.set("adminRole", adminRole);
 
+  if (adminRole.toLowerCase() === "customer") {
+    c.set("customerId", adminId);
+    c.set("customerRole", "customer");
+  }
+
+  await next();
+};
+
+export const customerAuthMiddleware: MiddlewareHandler<
+  WorkerEnvironment
+> = async (c, next) => {
+  const authorization = c.req.header("Authorization") ?? "";
+  const match = authorization.match(/^Bearer\s+(\S+)$/i);
+
+  if (!match) {
+    return c.json({ success: false, error: "Authentication required." }, 401);
+  }
+
+  const secret = c.env.JWT_SECRET;
+
+  if (!secret || secret.length < 32) {
+    return c.json(
+      { success: false, error: "Authentication is not configured." },
+      503,
+    );
+  }
+
+  const payload = await verifyWorkerToken(match[1], secret);
+
+  if (!payload) {
+    return c.json(
+      { success: false, error: "Invalid or expired session." },
+      401,
+    );
+  }
+
+  const customerId = payload.sub ?? payload.id;
+
+  if (!customerId || !payload.email) {
+    return c.json(
+      { success: false, error: "Invalid or expired session." },
+      401,
+    );
+  }
+
+  const role =
+    typeof payload.role === "string" && payload.role.trim().length > 0
+      ? payload.role.trim().toLowerCase()
+      : "";
+
+  if (role !== "customer") {
+    return c.json({ success: false, error: "Customer access required." }, 403);
+  }
+
+  c.set("adminId", customerId);
+  c.set("adminEmail", payload.email);
+  c.set("adminName", payload.name ?? payload.email.split("@")[0]);
+  c.set("adminRole", "customer");
+  c.set("customerId", customerId);
+  c.set("customerRole", "customer");
+
   await next();
 };
 

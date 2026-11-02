@@ -39,6 +39,34 @@ const MIGRATIONS = [
       `CREATE INDEX IF NOT EXISTS idx_visitors_store ON visitors(store_id, created_at)`,
     ],
   },
+  {
+    version: "0002_customer_auth",
+    statements: [],
+    migrate: async (database: D1Database) => {
+      const info = await database
+        .prepare("PRAGMA table_info(platform_customers)")
+        .all<{ name: string }>();
+      const columns = new Set(
+        (info.results ?? []).map((column) => column.name),
+      );
+
+      const columnDefinitions: Array<[string, string]> = [
+        ["password_hash", "TEXT"],
+        ["role", "TEXT NOT NULL DEFAULT 'customer'"],
+        ["last_login_at", "TEXT"],
+      ];
+
+      for (const [columnName, definition] of columnDefinitions) {
+        if (!columns.has(columnName)) {
+          await database
+            .prepare(
+              `ALTER TABLE platform_customers ADD COLUMN ${columnName} ${definition}`,
+            )
+            .run();
+        }
+      }
+    },
+  },
 ];
 
 export async function ensureD1Schema(database: D1Database): Promise<void> {
@@ -63,6 +91,16 @@ export async function ensureD1Schema(database: D1Database): Promise<void> {
       .first<{ 1: number }>();
 
     if (!existing) {
+      if (
+        typeof (
+          migration as { migrate?: (database: D1Database) => Promise<void> }
+        ).migrate === "function"
+      ) {
+        await (
+          migration as { migrate: (database: D1Database) => Promise<void> }
+        ).migrate(database);
+      }
+
       for (const statement of migration.statements) {
         await database.prepare(statement).run();
       }

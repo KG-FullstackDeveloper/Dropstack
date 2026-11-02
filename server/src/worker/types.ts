@@ -36,6 +36,8 @@ export type WorkerEnvironment = {
     adminEmail: string;
     adminName?: string;
     adminRole?: string;
+    customerId?: string;
+    customerRole?: string;
   };
 };
 

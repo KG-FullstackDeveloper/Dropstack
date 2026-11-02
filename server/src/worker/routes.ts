@@ -3,6 +3,7 @@ import type { WorkerEnvironment } from "./types";
 
 import { loginAdmin, signupAdmin } from "./admin-auth";
 import { workerAuthMiddleware } from "./auth";
+import { loginCustomer, registerCustomer } from "./customer-auth";
 import aiService from "./ai-service";
 
 import adminService from "./admin-service";
@@ -45,6 +46,8 @@ routes.get("/health", async (c) => {
 
 routes.post("/auth/login", loginAdmin);
 routes.post("/auth/signup", signupAdmin);
+routes.post("/auth/customer/register", registerCustomer);
+routes.post("/auth/customer/login", loginCustomer);
 
 routes.get("/auth/me", workerAuthMiddleware, async (c) => {
   const admin = await c.env.DB.prepare(

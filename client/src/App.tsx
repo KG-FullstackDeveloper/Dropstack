@@ -32,6 +32,9 @@ const NigeriaStore = lazy(() => import("./pages/NigeriaStore"));
 const NigeriaAdmin = lazy(() => import("./pages/NigeriaAdmin"));
 const MEOAI = lazy(() => import("./pages/MEOAI"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const CustomerLogin = lazy(() => import("./pages/CustomerLogin"));
+const CustomerRegister = lazy(() => import("./pages/CustomerRegister"));
+const CustomerDashboard = lazy(() => import("./pages/CustomerDashboard"));
 const Profile = lazy(() => import("./pages/Profile"));
 const PlatformOwnerPortal = lazy(() => import("./pages/PlatformOwnerPortal"));
 const MEOAssistant = lazy(() => import("./components/MEOAssistant"));
@@ -248,6 +251,11 @@ export default function App() {
 
           {/* Admin login */}
           <Route path="/admin/login" element={<AdminLogin />} />
+
+          {/* Customer self-service routes */}
+          <Route path="/customer/login" element={<CustomerLogin />} />
+          <Route path="/customer/register" element={<CustomerRegister />} />
+          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
 
           {/* Protected global admin pages */}
           <Route

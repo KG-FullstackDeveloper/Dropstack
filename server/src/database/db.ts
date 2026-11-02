@@ -295,6 +295,10 @@ ensureColumn("admin_users", "two_factor_enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("admin_users", "created_at", "TEXT");
 ensureColumn("admin_users", "updated_at", "TEXT");
 
+ensureColumn("platform_customers", "password_hash", "TEXT");
+ensureColumn("platform_customers", "role", "TEXT NOT NULL DEFAULT 'customer'");
+ensureColumn("platform_customers", "last_login_at", "TEXT");
+
 db.exec(`
 UPDATE admin_users
 SET role = 'store_owner'
@@ -311,6 +315,18 @@ WHERE created_at IS NULL;
 UPDATE admin_users
 SET updated_at = datetime('now')
 WHERE updated_at IS NULL;
+
+UPDATE platform_customers
+SET role = 'customer'
+WHERE role IS NULL OR TRIM(role) = '';
+
+UPDATE platform_customers
+SET password_hash = ''
+WHERE password_hash IS NULL;
+
+UPDATE platform_customers
+SET last_login_at = created_at
+WHERE last_login_at IS NULL;
 `);
 
 /*

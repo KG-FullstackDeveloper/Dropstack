@@ -46,6 +46,26 @@ const auth = new Hono<{
   Variables: AuthVariables;
 }>();
 
+function createCustomerJwt(customer: {
+  id: string;
+  name: string;
+  email: string;
+}): string {
+  return jwt.sign(
+    {
+      id: customer.id,
+      sub: customer.id,
+      email: customer.email,
+      name: customer.name,
+      role: "customer",
+    },
+    JWT_SECRET as string,
+    {
+      expiresIn: "7d",
+    },
+  );
+}
+
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MINUTES = 15;
 
@@ -680,6 +700,225 @@ auth.post("/logout", (c) => {
       message: "Logged out successfully.",
     },
   });
+});
+
+auth.post("/customer/register", async (c) => {
+  try {
+    const body = await c.req.json<{
+      name?: string;
+      email?: string;
+      password?: string;
+      company?: string | null;
+    }>();
+
+    const name = String(body.name || "").trim();
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password || "");
+    const company =
+      typeof body.company === "string" ? body.company.trim() : null;
+
+    if (!name || !email || !password) {
+      return c.json(
+        { success: false, error: "Name, email and password are required." },
+        400,
+      );
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json(
+        { success: false, error: "Please provide a valid email address." },
+        400,
+      );
+    }
+
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      return c.json(
+        {
+          success: false,
+          error: `Password must contain at least ${PASSWORD_MIN_LENGTH} characters.`,
+        },
+        400,
+      );
+    }
+
+    const existingCustomer = db
+      .prepare(
+        "SELECT id FROM platform_customers WHERE LOWER(email) = ? LIMIT 1",
+      )
+      .get(email) as { id: string } | undefined;
+
+    if (existingCustomer) {
+      return c.json(
+        { success: false, error: "An account with this email already exists." },
+        409,
+      );
+    }
+
+    const customerId = generateId("customer");
+    const passwordHash = await bcryptjs.hash(password, 12);
+    const now = nowIso();
+
+    db.prepare(
+      `
+      INSERT INTO platform_customers (
+        id,
+        name,
+        email,
+        company,
+        password_hash,
+        role,
+        plan,
+        status,
+        subscription_expires_at,
+        store_limit,
+        stores_used,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    ).run(
+      customerId,
+      name,
+      email,
+      company || null,
+      passwordHash,
+      "customer",
+      "starter",
+      "active",
+      null,
+      1,
+      0,
+      now,
+      now,
+    );
+
+    const token = createCustomerJwt({ id: customerId, name, email });
+
+    return c.json({
+      success: true,
+      data: {
+        token,
+        customer: {
+          id: customerId,
+          name,
+          email,
+          company,
+          plan: "starter",
+          role: "customer",
+          status: "active",
+          storeLimit: 1,
+          storesUsed: 0,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Customer registration error:", error);
+    return c.json(
+      { success: false, error: "Unable to create your account right now." },
+      500,
+    );
+  }
+});
+
+auth.post("/customer/login", async (c) => {
+  try {
+    const body = await c.req.json<{
+      email?: string;
+      password?: string;
+    }>();
+
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password || "");
+
+    if (!email || !password) {
+      return c.json(
+        { success: false, error: "Email and password are required." },
+        400,
+      );
+    }
+
+    const customer = db
+      .prepare(
+        `SELECT id, name, email, company, password_hash, plan, role, status, store_limit, stores_used, created_at, updated_at
+         FROM platform_customers
+         WHERE LOWER(email) = ? LIMIT 1`,
+      )
+      .get(email) as
+      | {
+          id: string;
+          name: string;
+          email: string;
+          company: string | null;
+          password_hash: string;
+          plan: string | null;
+          role: string | null;
+          status: string | null;
+          store_limit: number;
+          stores_used: number;
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+
+    if (!customer) {
+      return c.json({ success: false, error: "Invalid credentials." }, 401);
+    }
+
+    const valid = await bcryptjs.compare(password, customer.password_hash);
+
+    if (!valid) {
+      return c.json({ success: false, error: "Invalid credentials." }, 401);
+    }
+
+    if ((customer.status || "active").toLowerCase() === "suspended") {
+      return c.json(
+        { success: false, error: "This account has been suspended." },
+        403,
+      );
+    }
+
+    db.prepare(
+      `UPDATE platform_customers SET last_login_at = ?, updated_at = ? WHERE id = ?`,
+    ).run(nowIso(), nowIso(), customer.id);
+
+    const token = createCustomerJwt({
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        token,
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          company: customer.company,
+          plan: customer.plan || "starter",
+          role: customer.role || "customer",
+          status: customer.status || "active",
+          storeLimit: Number(customer.store_limit || 1),
+          storesUsed: Number(customer.stores_used || 0),
+          createdAt: customer.created_at,
+          updatedAt: customer.updated_at,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Customer login error:", error);
+    return c.json(
+      { success: false, error: "Unable to sign in right now." },
+      500,
+    );
+  }
 });
 
 /*
