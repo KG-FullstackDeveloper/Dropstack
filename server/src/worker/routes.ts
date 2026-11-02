@@ -3,6 +3,7 @@ import type { WorkerEnvironment } from "./types";
 
 import { loginAdmin, signupAdmin } from "./admin-auth";
 import { workerAuthMiddleware } from "./auth";
+import aiService from "./ai-service";
 
 import adminService from "./admin-service";
 import productsService from "./products-service";
@@ -75,6 +76,7 @@ routes.get("/auth/me", workerAuthMiddleware, async (c) => {
   });
 });
 
+routes.route("/ai", aiService);
 routes.route("/admin", adminService);
 routes.route("/products", productsService);
 routes.route("/stores", storesService);
