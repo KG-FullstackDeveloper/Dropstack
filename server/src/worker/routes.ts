@@ -1,3 +1,4 @@
+
 import { Hono } from "hono";
 import type { WorkerEnvironment } from "./types";
 
@@ -20,9 +21,9 @@ const routes = new Hono<WorkerEnvironment>();
 
 routes.get("/health", async (c) => {
   try {
-    const result = await c.env.DB.prepare("SELECT 1 AS healthy").first<{
-      healthy: number;
-    }>();
+    const result = await c.env.DB.prepare(
+      "SELECT 1 AS healthy",
+    ).first<{ healthy: number }>();
 
     if (result?.healthy !== 1) {
       throw new Error("D1 health check failed.");
@@ -37,6 +38,7 @@ routes.get("/health", async (c) => {
     });
   } catch (error) {
     console.error("Worker health check failed:", error);
+
     return c.json(
       { success: false, status: "error", database: "unavailable" },
       503,
@@ -44,41 +46,91 @@ routes.get("/health", async (c) => {
   }
 });
 
+// Admin authentication
 routes.post("/auth/login", loginAdmin);
 routes.post("/auth/signup", signupAdmin);
+
+// Customer authentication
 routes.post("/auth/customer/register", registerCustomer);
 routes.post("/auth/customer/login", loginCustomer);
 
+// Admin session only.
+// Customer tokens must never be treated as admin sessions.
 routes.get("/auth/me", workerAuthMiddleware, async (c) => {
-  const admin = await c.env.DB.prepare(
-    `SELECT id, email, name, role
-     FROM admin_users
-     WHERE id = ?
-     LIMIT 1`,
-  )
-    .bind(c.get("adminId"))
-    .first<{
-      id: string;
-      email: string;
-      name: string | null;
-      role: string | null;
-    }>();
+  try {
+    const tokenRole = String(c.get("adminRole") || "")
+      .trim()
+      .toLowerCase();
 
-  if (!admin) {
-    return c.json({ success: false, error: "Admin account not found." }, 404);
+    if (tokenRole === "customer") {
+      return c.json(
+        {
+          success: false,
+          error: "Administrator access required.",
+        },
+        403,
+      );
+    }
+
+    const adminId = c.get("adminId");
+
+    if (!adminId) {
+      return c.json(
+        {
+          success: false,
+          error: "Invalid administrator session.",
+        },
+        401,
+      );
+    }
+
+    const admin = await c.env.DB.prepare(
+      `SELECT id, email, name, role
+       FROM admin_users
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(adminId)
+      .first<{
+        id: string;
+        email: string;
+        name: string | null;
+        role: string | null;
+      }>();
+
+    if (!admin) {
+      return c.json(
+        {
+          success: false,
+          error: "Admin account not found.",
+        },
+        404,
+      );
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        id: admin.id,
+        email: admin.email,
+        name: admin.name ?? null,
+        role: admin.role ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("Admin session lookup failed:", error);
+
+    return c.json(
+      {
+        success: false,
+        error: "Unable to verify administrator session.",
+      },
+      500,
+    );
   }
-
-  return c.json({
-    success: true,
-    data: {
-      id: admin.id,
-      email: admin.email,
-      name: admin.name ?? null,
-      role: admin.role ?? null,
-    },
-  });
 });
 
+// Application services
 routes.route("/ai", aiService);
 routes.route("/admin", adminService);
 routes.route("/products", productsService);

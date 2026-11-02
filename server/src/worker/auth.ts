@@ -1,3 +1,4 @@
+
 import type { Context, MiddlewareHandler } from "hono";
 import type { WorkerEnvironment } from "./types";
 
@@ -33,7 +34,9 @@ function decodeBase64Url(value: string): Uint8Array {
 
   const binary = atob(normalized);
 
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return Uint8Array.from(binary, (character) =>
+    character.charCodeAt(0),
+  );
 }
 
 async function importSigningKey(secret: string): Promise<CryptoKey> {
@@ -44,10 +47,7 @@ async function importSigningKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
+    { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
@@ -60,10 +60,7 @@ export async function createWorkerToken(
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
 
-  const header = {
-    alg: "HS256",
-    typ: "JWT",
-  };
+  const header = { alg: "HS256", typ: "JWT" };
 
   const claims = {
     ...payload,
@@ -105,9 +102,7 @@ export async function verifyWorkerToken(
   try {
     const parts = token.split(".");
 
-    if (parts.length !== 3) {
-      return null;
-    }
+    if (parts.length !== 3) return null;
 
     const [encodedHeader, encodedPayload, encodedSignature] = parts;
 
@@ -115,12 +110,11 @@ export async function verifyWorkerToken(
       new TextDecoder().decode(decodeBase64Url(encodedHeader)),
     ) as { alg?: string; typ?: string };
 
-    if (header.alg !== "HS256") {
+    if (header.alg !== "HS256" || header.typ !== "JWT") {
       return null;
     }
 
     const key = await importSigningKey(secret);
-
     const signature = decodeBase64Url(encodedSignature);
 
     const valid = await crypto.subtle.verify(
@@ -130,20 +124,20 @@ export async function verifyWorkerToken(
       new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
     );
 
-    if (!valid) {
-      return null;
-    }
+    if (!valid) return null;
 
     const payload = JSON.parse(
       new TextDecoder().decode(decodeBase64Url(encodedPayload)),
     ) as JwtPayload;
 
     const now = Math.floor(Date.now() / 1000);
-    const adminId = payload.sub ?? payload.id;
+    const accountId = payload.sub ?? payload.id;
 
     if (
-      typeof adminId !== "string" ||
+      typeof accountId !== "string" ||
+      !accountId ||
       typeof payload.email !== "string" ||
+      !payload.email ||
       typeof payload.exp !== "number" ||
       payload.exp <= now
     ) {
@@ -152,11 +146,14 @@ export async function verifyWorkerToken(
 
     return {
       ...payload,
-      sub: adminId,
-      id: adminId,
-      role: typeof payload.role === "string" ? payload.role.trim() : null,
+      sub: accountId,
+      id: accountId,
+      role:
+        typeof payload.role === "string"
+          ? payload.role.trim()
+          : null,
       name:
-        typeof payload.name === "string" && payload.name.trim().length > 0
+        typeof payload.name === "string" && payload.name.trim()
           ? payload.name.trim()
           : null,
     };
@@ -165,6 +162,8 @@ export async function verifyWorkerToken(
   }
 }
 
+// Admin and store-owner authentication.
+// Customer tokens are rejected here and must use customerAuthMiddleware.
 export const workerAuthMiddleware: MiddlewareHandler<
   WorkerEnvironment
 > = async (c, next) => {
@@ -172,7 +171,10 @@ export const workerAuthMiddleware: MiddlewareHandler<
   const match = authorization.match(/^Bearer\s+(\S+)$/i);
 
   if (!match) {
-    return c.json({ success: false, error: "Authentication required." }, 401);
+    return c.json(
+      { success: false, error: "Authentication required." },
+      401,
+    );
   }
 
   const secret = c.env.JWT_SECRET;
@@ -194,32 +196,35 @@ export const workerAuthMiddleware: MiddlewareHandler<
   }
 
   const adminId = payload.sub ?? payload.id;
+  const role =
+    typeof payload.role === "string" && payload.role.trim()
+      ? payload.role.trim().toLowerCase()
+      : "store_owner";
 
   if (!adminId || !payload.email) {
     return c.json(
-      { success: false, error: "Invalid or expired session." },
+      { success: false, error: "Invalid session." },
       401,
     );
   }
 
-  const adminRole =
-    typeof payload.role === "string" && payload.role.trim().length > 0
-      ? payload.role.trim()
-      : "store_owner";
+  if (role === "customer") {
+    return c.json(
+      { success: false, error: "Administrator access required." },
+      403,
+    );
+  }
 
   c.set("adminId", adminId);
   c.set("adminEmail", payload.email);
   c.set("adminName", payload.name ?? payload.email.split("@")[0]);
-  c.set("adminRole", adminRole);
-
-  if (adminRole.toLowerCase() === "customer") {
-    c.set("customerId", adminId);
-    c.set("customerRole", "customer");
-  }
+  c.set("adminRole", role);
 
   await next();
 };
 
+// Customer authentication.
+// Only signed customer tokens can access customer endpoints.
 export const customerAuthMiddleware: MiddlewareHandler<
   WorkerEnvironment
 > = async (c, next) => {
@@ -227,7 +232,10 @@ export const customerAuthMiddleware: MiddlewareHandler<
   const match = authorization.match(/^Bearer\s+(\S+)$/i);
 
   if (!match) {
-    return c.json({ success: false, error: "Authentication required." }, 401);
+    return c.json(
+      { success: false, error: "Authentication required." },
+      401,
+    );
   }
 
   const secret = c.env.JWT_SECRET;
@@ -249,21 +257,23 @@ export const customerAuthMiddleware: MiddlewareHandler<
   }
 
   const customerId = payload.sub ?? payload.id;
+  const role =
+    typeof payload.role === "string"
+      ? payload.role.trim().toLowerCase()
+      : "";
 
   if (!customerId || !payload.email) {
     return c.json(
-      { success: false, error: "Invalid or expired session." },
+      { success: false, error: "Invalid session." },
       401,
     );
   }
 
-  const role =
-    typeof payload.role === "string" && payload.role.trim().length > 0
-      ? payload.role.trim().toLowerCase()
-      : "";
-
   if (role !== "customer") {
-    return c.json({ success: false, error: "Customer access required." }, 403);
+    return c.json(
+      { success: false, error: "Customer access required." },
+      403,
+    );
   }
 
   c.set("adminId", customerId);
@@ -276,7 +286,9 @@ export const customerAuthMiddleware: MiddlewareHandler<
   await next();
 };
 
-export function getAuthenticatedAdmin(c: Context<WorkerEnvironment>) {
+export function getAuthenticatedAdmin(
+  c: Context<WorkerEnvironment>,
+) {
   return {
     id: c.get("adminId"),
     email: c.get("adminEmail"),

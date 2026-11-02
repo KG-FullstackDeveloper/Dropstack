@@ -1,3 +1,4 @@
+
 import {
   ArrowRight,
   BarChart3,
@@ -15,10 +16,18 @@ import {
   Users,
   Wallet,
   Zap,
+  Eye,
+  EyeOff,
+  Loader2,
+  X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, type Variants } from "framer-motion";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import {
+  loginCustomer,
+  registerCustomer,
+} from "../services/customerApi";
 
 const reveal: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -29,8 +38,20 @@ const reveal: Variants = {
   },
 };
 
+type AuthMode = "login" | "register";
+
 export default function Home() {
   const [dark, setDark] = useState(true);
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const theme = dark
     ? {
@@ -40,6 +61,8 @@ export default function Home() {
         card: "border-white/[0.08] bg-[#111620]",
         nav: "border-white/[0.08] bg-[#080b12]/85",
         secondary: "text-slate-300",
+        field:
+          "border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus:border-emerald-400",
       }
     : {
         page: "bg-[#f6f8fc] text-slate-950",
@@ -48,7 +71,56 @@ export default function Home() {
         card: "border-slate-200 bg-white",
         nav: "border-slate-200 bg-white/85",
         secondary: "text-slate-600",
+        field:
+          "border-slate-200 bg-white text-slate-950 placeholder:text-slate-400 focus:border-emerald-500",
       };
+
+  function openAuth(mode: AuthMode) {
+    setAuthMode(mode);
+    setError("");
+    setPassword("");
+  }
+
+  function closeAuth() {
+    if (loading) return;
+    setAuthMode(null);
+    setError("");
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      if (authMode === "register") {
+        await registerCustomer({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          company: company.trim() || null,
+        });
+      } else if (authMode === "login") {
+        await loginCustomer({
+          email: email.trim(),
+          password,
+        });
+      } else {
+        return;
+      }
+
+      setAuthMode(null);
+      navigate("/customer/dashboard", { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Authentication failed. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main
@@ -75,7 +147,6 @@ export default function Home() {
           </Link>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            {/* Theme switch */}
             <button
               type="button"
               onClick={() => setDark(!dark)}
@@ -85,23 +156,23 @@ export default function Home() {
               {dark ? <Sun size={17} /> : <Moon size={17} />}
             </button>
 
-            {/* Customer account access — public sign in flow */}
-            <Link
-              to="/customer/login"
+            <button
+              type="button"
+              onClick={() => openAuth("login")}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-emerald-400 px-3 text-xs font-extrabold text-slate-950 shadow-lg shadow-emerald-500/10 transition hover:-translate-y-0.5 hover:bg-emerald-300 sm:h-11 sm:px-5 sm:text-sm"
             >
               <LockKeyhole size={15} />
-              <span>Sign In</span>
-            </Link>
+              Sign In
+            </button>
 
-            <Link
-              to="/customer/register"
+            <button
+              type="button"
+              onClick={() => openAuth("register")}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-emerald-400/30 px-3 text-xs font-extrabold text-emerald-300 transition hover:-translate-y-0.5 hover:bg-emerald-400/10 sm:h-11 sm:px-5 sm:text-sm"
             >
-              <span>Sign Up</span>
-            </Link>
+              Sign Up
+            </button>
 
-            {/* Platform-owner portal remains separate and restricted */}
             <Link
               to="/admin/login"
               className="hidden h-11 items-center gap-2 rounded-full border border-white/10 px-5 text-sm font-bold text-slate-300 transition hover:border-sky-400/50 hover:bg-sky-500/10 md:inline-flex"
@@ -153,8 +224,9 @@ export default function Home() {
             </motion.p>
 
             <motion.div variants={reveal} className="mt-9 flex flex-wrap gap-3">
-              <Link
-                to="/customer/register"
+              <button
+                type="button"
+                onClick={() => openAuth("register")}
                 className="group inline-flex h-14 items-center gap-3 rounded-full bg-emerald-400 px-7 text-sm font-extrabold text-slate-950 shadow-xl shadow-emerald-500/15 transition hover:-translate-y-1 hover:bg-emerald-300"
               >
                 Sign Up
@@ -162,15 +234,16 @@ export default function Home() {
                   size={18}
                   className="transition-transform group-hover:translate-x-1"
                 />
-              </Link>
+              </button>
 
-              <Link
-                to="/customer/login"
+              <button
+                type="button"
+                onClick={() => openAuth("login")}
                 className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-sm font-bold transition hover:-translate-y-1 hover:border-emerald-400/50 hover:bg-emerald-400/10 ${theme.panel}`}
               >
                 <LockKeyhole size={17} className="text-emerald-400" />
                 Sign In
-              </Link>
+              </button>
             </motion.div>
 
             <motion.div
@@ -440,6 +513,220 @@ export default function Home() {
           Platform Owner Login
         </Link>
       </footer>
+
+      {/* Customer authentication modal — stays on the homepage */}
+      {authMode && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAuth();
+          }}
+        >
+          <motion.section
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className={`relative my-auto w-full max-w-md rounded-3xl border p-6 shadow-2xl sm:p-8 ${theme.card}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-auth-title"
+          >
+            <button
+              type="button"
+              onClick={closeAuth}
+              disabled={loading}
+              aria-label="Close authentication"
+              className={`absolute right-5 top-5 rounded-full p-2 transition hover:bg-white/10 ${theme.muted}`}
+            >
+              <X size={19} />
+            </button>
+
+            <div className="mb-7">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400 text-slate-950">
+                <ShoppingBag size={23} />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">
+                Dropstack Global
+              </p>
+              <h2
+                id="customer-auth-title"
+                className="mt-2 text-2xl font-black tracking-tight"
+              >
+                {authMode === "register"
+                  ? "Create your account"
+                  : "Welcome back"}
+              </h2>
+              <p className={`mt-2 text-sm leading-6 ${theme.muted}`}>
+                {authMode === "register"
+                  ? "Create your customer account to access your workspace."
+                  : "Sign in to continue to your customer workspace."}
+              </p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {authMode === "register" && (
+                <>
+                  <div>
+                    <label
+                      htmlFor="customer-name"
+                      className="mb-2 block text-xs font-semibold"
+                    >
+                      Full name
+                    </label>
+                    <input
+                      id="customer-name"
+                      type="text"
+                      autoComplete="name"
+                      required
+                      minLength={2}
+                      maxLength={100}
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="Your full name"
+                      className={`h-12 w-full rounded-xl border px-4 text-sm outline-none transition ${theme.field}`}
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="customer-company"
+                      className="mb-2 block text-xs font-semibold"
+                    >
+                      Business name (optional)
+                    </label>
+                    <input
+                      id="customer-company"
+                      type="text"
+                      autoComplete="organization"
+                      maxLength={120}
+                      value={company}
+                      onChange={(event) => setCompany(event.target.value)}
+                      placeholder="Your business"
+                      className={`h-12 w-full rounded-xl border px-4 text-sm outline-none transition ${theme.field}`}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label
+                  htmlFor="customer-email"
+                  className="mb-2 block text-xs font-semibold"
+                >
+                  Business email
+                </label>
+                <input
+                  id="customer-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  maxLength={254}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  className={`h-12 w-full rounded-xl border px-4 text-sm outline-none transition ${theme.field}`}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="customer-password"
+                  className="mb-2 block text-xs font-semibold"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="customer-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={
+                      authMode === "register"
+                        ? "new-password"
+                        : "current-password"
+                    }
+                    required
+                    minLength={authMode === "register" ? 8 : undefined}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    className={`h-12 w-full rounded-xl border px-4 pr-12 text-sm outline-none transition ${theme.field}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 ${theme.muted}`}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {authMode === "register" && (
+                  <p className={`mt-2 text-[11px] ${theme.muted}`}>
+                    Use at least 8 characters.
+                  </p>
+                )}
+              </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+                >
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 text-sm font-extrabold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    Please wait...
+                  </>
+                ) : authMode === "register" ? (
+                  <>
+                    Create account <ArrowRight size={17} />
+                  </>
+                ) : (
+                  <>
+                    Sign in <ArrowRight size={17} />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className={`mt-6 border-t pt-5 text-center text-sm ${theme.panel}`}>
+              {authMode === "register" ? (
+                <>
+                  <span className={theme.muted}>Already have an account? </span>
+                  <button
+                    type="button"
+                    onClick={() => openAuth("login")}
+                    className="font-bold text-emerald-400 hover:text-emerald-300"
+                  >
+                    Sign in
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className={theme.muted}>New to Dropstack? </span>
+                  <button
+                    type="button"
+                    onClick={() => openAuth("register")}
+                    className="font-bold text-emerald-400 hover:text-emerald-300"
+                  >
+                    Create an account
+                  </button>
+                </>
+              )}
+            </div>
+          </motion.section>
+        </div>
+      )}
     </main>
   );
 }
