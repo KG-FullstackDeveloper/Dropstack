@@ -92,6 +92,7 @@ function createJwt(admin: AdminUser): string {
   return jwt.sign(
     {
       id: admin.id,
+      sub: admin.id,
       email: admin.email,
       name: admin.name,
       role: admin.role || "store_owner",

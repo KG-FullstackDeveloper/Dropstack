@@ -25,6 +25,8 @@ export type WorkerEnv = {
   ENVIRONMENT?: string;
   OWNER_EMAIL?: string;
   JWT_SECRET?: string;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL?: string;
 };
 
 export type WorkerEnvironment = {

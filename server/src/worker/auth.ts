@@ -3,6 +3,7 @@ import type { WorkerEnvironment } from "./types";
 
 interface JwtPayload {
   sub?: string;
+  id?: string;
   email?: string;
   role?: string | null;
   name?: string | null;
@@ -138,9 +139,10 @@ export async function verifyWorkerToken(
     ) as JwtPayload;
 
     const now = Math.floor(Date.now() / 1000);
+    const adminId = payload.sub ?? payload.id;
 
     if (
-      typeof payload.sub !== "string" ||
+      typeof adminId !== "string" ||
       typeof payload.email !== "string" ||
       typeof payload.exp !== "number" ||
       payload.exp <= now
@@ -150,6 +152,8 @@ export async function verifyWorkerToken(
 
     return {
       ...payload,
+      sub: adminId,
+      id: adminId,
       role: typeof payload.role === "string" ? payload.role.trim() : null,
       name:
         typeof payload.name === "string" && payload.name.trim().length > 0
@@ -182,7 +186,16 @@ export const workerAuthMiddleware: MiddlewareHandler<
 
   const payload = await verifyWorkerToken(match[1], secret);
 
-  if (!payload?.sub || !payload.email) {
+  if (!payload) {
+    return c.json(
+      { success: false, error: "Invalid or expired session." },
+      401,
+    );
+  }
+
+  const adminId = payload.sub ?? payload.id;
+
+  if (!adminId || !payload.email) {
     return c.json(
       { success: false, error: "Invalid or expired session." },
       401,
@@ -194,7 +207,7 @@ export const workerAuthMiddleware: MiddlewareHandler<
       ? payload.role.trim()
       : "store_owner";
 
-  c.set("adminId", payload.sub);
+  c.set("adminId", adminId);
   c.set("adminEmail", payload.email);
   c.set("adminName", payload.name ?? payload.email.split("@")[0]);
   c.set("adminRole", adminRole);

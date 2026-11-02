@@ -9,7 +9,8 @@ export interface AuthVariables {
 }
 
 interface AdminJwtPayload {
-  id: string;
+  id?: string;
+  sub?: string;
   email: string;
   name: string;
   role?: string | null;
@@ -43,7 +44,17 @@ export const authMiddleware: MiddlewareHandler<{
       authHeader.slice(7),
       JWT_SECRET,
     ) as AdminJwtPayload;
-    c.set("adminId", decoded.id);
+
+    const adminId = decoded.id ?? decoded.sub;
+
+    if (!adminId) {
+      return c.json(
+        { success: false, error: "Unauthorized. Invalid session payload." },
+        401,
+      );
+    }
+
+    c.set("adminId", adminId);
     c.set("adminEmail", decoded.email);
     c.set("adminName", decoded.name);
     c.set("adminRole", decoded.role || "store_owner");

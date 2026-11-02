@@ -57,6 +57,7 @@ export async function loginAdmin(c: Context<WorkerEnvironment>) {
     const token = await createWorkerToken(
       {
         sub: admin.id,
+        id: admin.id,
         email: admin.email,
         name: admin.name ?? admin.email.split("@")[0],
         role: admin.role ?? "store_owner",
@@ -193,6 +194,7 @@ export async function signupAdmin(c: Context<WorkerEnvironment>) {
     const token = await createWorkerToken(
       {
         sub: id,
+        id,
         email,
         name: name || email.split("@")[0],
         role: "platform_owner",
