@@ -592,6 +592,17 @@ export default function Admin() {
           </div>
         )}
 
+        {!isCustomerAccount && (
+          <div className="mb-5">
+            <Link to="/admin/ai" className={navClass(false, sidebarCollapsed)}>
+              <Sparkles size={17} />
+              {!sidebarCollapsed && (
+                <span className="flex-1">AI Workspace</span>
+              )}
+            </Link>
+          </div>
+        )}
+
         <div className="mb-5">
           <button
             type="button"

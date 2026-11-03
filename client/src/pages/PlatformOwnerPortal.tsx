@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Activity,
   ArrowUpRight,
+  Bot,
   Building2,
   CalendarDays,
   Check,
@@ -9,6 +11,7 @@ import {
   CircleAlert,
   Crown,
   Filter,
+  LayoutDashboard,
   Moon,
   Plus,
   RefreshCw,
@@ -360,440 +363,587 @@ export default function PlatformOwnerPortal() {
         </div>
       )}
 
-      {/* KPI cards */}
-      <section className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {metrics.map(({ label, value, note, icon: Icon, accent, iconTone }) => (
-          <article
-            key={label}
-            className="group rounded-[22px] border border-white/[0.08] bg-[#101718] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-white/[0.15]"
+      <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="rounded-[24px] border border-white/[0.08] bg-[#101718] p-3">
+          <div className="mb-4 px-3 pt-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Executive menu
+            </p>
+          </div>
+
+          <nav className="space-y-2">
+            {[
+              { label: "Overview", icon: LayoutDashboard, target: "overview" },
+              { label: "Customers", icon: Users, target: "customers" },
+              { label: "Pricing", icon: ShieldCheck, target: "plans" },
+              { label: "Controls", icon: Activity, target: "controls" },
+              { label: "AI Studio", icon: Bot, target: "ai" },
+            ].map(({ label, icon: Icon, target }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  const next = document.getElementById(target);
+                  next?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition hover:border-emerald-400/20 hover:bg-emerald-400/5 hover:text-white"
+              >
+                <Icon size={15} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="mt-5 border-t border-white/[0.06] pt-4">
+            <div className="space-y-2">
+              <Link
+                to="/admin"
+                className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
+              >
+                <span>Admin dashboard</span>
+                <ArrowUpRight size={15} />
+              </Link>
+              <Link
+                to="/admin/ai"
+                className="flex items-center justify-between rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-3 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-400/10"
+              >
+                <span>Open AI workspace</span>
+                <Sparkles size={15} />
+              </Link>
+            </div>
+          </div>
+        </aside>
+
+        <div className="space-y-6">
+          <section
+            id="overview"
+            className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium text-slate-500">{label}</p>
-                <p
-                  className={`mt-4 text-3xl font-semibold tracking-[-0.04em] ${accent}`}
+            {metrics.map(
+              ({ label, value, note, icon: Icon, accent, iconTone }) => (
+                <article
+                  key={label}
+                  className="group rounded-[22px] border border-white/[0.08] bg-[#101718] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-white/[0.15]"
                 >
-                  {loading ? "—" : value.toLocaleString()}
-                </p>
-                <p className="mt-2 text-[11px] text-slate-600">{note}</p>
-              </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        {label}
+                      </p>
+                      <p
+                        className={`mt-4 text-3xl font-semibold tracking-[-0.04em] ${accent}`}
+                      >
+                        {loading ? "—" : value.toLocaleString()}
+                      </p>
+                      <p className="mt-2 text-[11px] text-slate-600">{note}</p>
+                    </div>
 
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconTone}`}
-              >
-                <Icon size={18} />
-              </div>
-            </div>
-
-            <div className="mt-5 h-px w-full bg-white/[0.06]" />
-
-            <div className="mt-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-              <span>Platform metric</span>
-              <ArrowUpRight
-                size={13}
-                className="text-slate-500 transition group-hover:text-emerald-300"
-              />
-            </div>
-          </article>
-        ))}
-      </section>
-
-      {/* Customer directory and controls */}
-      <section className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]">
-        <div className="min-w-0 overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718]">
-          <div className="flex flex-col gap-4 border-b border-white/[0.07] p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-slate-300">
-                    <Users size={16} />
-                  </div>
-                  <h2 className="text-base font-semibold tracking-tight text-white">
-                    Customer directory
-                  </h2>
-                </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  Review account plans, status and allocated store capacity.
-                </p>
-              </div>
-
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                {loading ? "Syncing…" : `${customers.length} accounts`}
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <label className="relative min-w-0 flex-1">
-                <Search
-                  size={15}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600"
-                />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search name, email, company or plan…"
-                  className="w-full rounded-xl border border-white/10 bg-[#0a1112] py-3 pl-10 pr-4 text-xs text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400/50"
-                />
-              </label>
-
-              <label className="relative sm:w-44">
-                <Filter
-                  size={14}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600"
-                />
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  className="w-full appearance-none rounded-xl border border-white/10 bg-[#0a1112] py-3 pl-10 pr-9 text-xs text-slate-300 outline-none focus:border-emerald-400/50"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="active">Active</option>
-                  <option value="trial">Trial</option>
-                  <option value="expired">Expired</option>
-                </select>
-                <ChevronDown
-                  size={13}
-                  className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-600"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-[700px] w-full text-left">
-              <thead>
-                <tr className="border-b border-white/[0.06] bg-white/[0.02] text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-                  <th className="px-5 py-3.5">Customer</th>
-                  <th className="px-4 py-3.5">Plan</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5">Subscription</th>
-                  <th className="px-5 py-3.5 text-right">Stores</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-white/[0.055]">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-14 text-center text-xs text-slate-500"
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconTone}`}
                     >
-                      Loading customer accounts…
-                    </td>
-                  </tr>
-                ) : filteredCustomers.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-14 text-center">
-                      <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.04] text-slate-500">
-                        <Search size={18} />
+                      <Icon size={18} />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 h-px w-full bg-white/[0.06]" />
+
+                  <div className="mt-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                    <span>Platform metric</span>
+                    <ArrowUpRight
+                      size={13}
+                      className="text-slate-500 transition group-hover:text-emerald-300"
+                    />
+                  </div>
+                </article>
+              ),
+            )}
+          </section>
+
+          <section
+            id="customers"
+            className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.8fr)]"
+          >
+            <div className="min-w-0 overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718]">
+              <div className="flex flex-col gap-4 border-b border-white/[0.07] p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-slate-300">
+                        <Users size={16} />
                       </div>
+                      <h2 className="text-base font-semibold tracking-tight text-white">
+                        Customer directory
+                      </h2>
+                    </div>
 
-                      <p className="mt-3 text-sm font-medium text-slate-300">
-                        {customers.length === 0
-                          ? "No customer accounts yet"
-                          : "No matching customers"}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-600">
-                        {customers.length === 0
-                          ? "New customer accounts will appear here."
-                          : "Try another search term or status filter."}
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCustomers.map((customer) => (
-                    <tr
-                      key={customer.id}
-                      className="transition hover:bg-white/[0.025]"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.045] text-xs font-bold text-slate-300">
-                            {customer.name.trim().slice(0, 1).toUpperCase() ||
-                              "C"}
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-slate-200">
-                              {customer.name}
-                            </p>
-                            <p className="mt-1 truncate text-[11px] text-slate-500">
-                              {customer.email}
-                            </p>
-
-                            {customer.company && (
-                              <p className="mt-0.5 truncate text-[10px] text-slate-600">
-                                {customer.company}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold capitalize text-slate-300">
-                          {customer.plan}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-semibold capitalize ${statusClasses(customer.status)}`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {customer.status}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                          <CalendarDays size={13} className="text-slate-600" />
-                          {formatDate(customer.subscriptionExpiresAt)}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 text-right">
-                        <span className="text-xs font-semibold tabular-nums text-white">
-                          {customer.storesUsed}
-                        </span>
-                        <span className="text-xs text-slate-600">
-                          {" "}
-                          / {customer.storeLimit}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-white/[0.06] px-5 py-3.5 text-[10px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Showing {filteredCustomers.length} of {customers.length} accounts
-            </span>
-
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-              Account data from platform records
-            </span>
-          </div>
-        </div>
-
-        {/* Right-side controls */}
-        <aside className="space-y-5">
-          <section className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718]">
-            <button
-              type="button"
-              onClick={() => setFormOpen((open) => !open)}
-              className="flex w-full items-center justify-between gap-3 p-5 text-left sm:p-6"
-              aria-expanded={formOpen}
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-300/10 text-emerald-300">
-                    <Plus size={17} />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Review account plans, status and allocated store capacity.
+                    </p>
                   </div>
-                  <h2 className="text-base font-semibold text-white">
-                    Add customer
-                  </h2>
+
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    {loading ? "Syncing…" : `${customers.length} accounts`}
+                  </span>
                 </div>
 
-                <p className="mt-2 text-xs text-slate-500">
-                  Create a platform customer account.
-                </p>
-              </div>
-
-              <ChevronDown
-                size={17}
-                className={`text-slate-500 transition ${
-                  formOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {formOpen && (
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4 border-t border-white/[0.06] p-5 sm:p-6"
-              >
-                <label className="block text-xs font-medium text-slate-300">
-                  Customer name
-                  <input
-                    value={form.name}
-                    onChange={(event) =>
-                      setForm({ ...form, name: event.target.value })
-                    }
-                    className={inputClass}
-                    placeholder="Business owner name"
-                    required
-                  />
-                </label>
-
-                <label className="block text-xs font-medium text-slate-300">
-                  Email address
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) =>
-                      setForm({ ...form, email: event.target.value })
-                    }
-                    className={inputClass}
-                    placeholder="owner@business.com"
-                    required
-                  />
-                </label>
-
-                <label className="block text-xs font-medium text-slate-300">
-                  Company <span className="text-slate-600">(optional)</span>
-                  <input
-                    value={form.company}
-                    onChange={(event) =>
-                      setForm({ ...form, company: event.target.value })
-                    }
-                    className={inputClass}
-                    placeholder="Company or brand"
-                  />
-                </label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Plan
-                    <select
-                      value={form.plan}
-                      onChange={(event) =>
-                        setForm({ ...form, plan: event.target.value })
-                      }
-                      className={inputClass}
-                    >
-                      <option value="starter">Starter</option>
-                      <option value="growth">Growth</option>
-                      <option value="scale">Scale</option>
-                    </select>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <label className="relative min-w-0 flex-1">
+                    <Search
+                      size={15}
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600"
+                    />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search name, email, company or plan…"
+                      className="w-full rounded-xl border border-white/10 bg-[#0a1112] py-3 pl-10 pr-4 text-xs text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400/50"
+                    />
                   </label>
 
-                  <label className="block text-xs font-medium text-slate-300">
-                    Status
+                  <label className="relative sm:w-44">
+                    <Filter
+                      size={14}
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600"
+                    />
                     <select
-                      value={form.status}
-                      onChange={(event) =>
-                        setForm({ ...form, status: event.target.value })
-                      }
-                      className={inputClass}
+                      value={statusFilter}
+                      onChange={(event) => setStatusFilter(event.target.value)}
+                      className="w-full appearance-none rounded-xl border border-white/10 bg-[#0a1112] py-3 pl-10 pr-9 text-xs text-slate-300 outline-none focus:border-emerald-400/50"
                     >
+                      <option value="all">All statuses</option>
                       <option value="active">Active</option>
                       <option value="trial">Trial</option>
                       <option value="expired">Expired</option>
                     </select>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Expiry date
-                    <input
-                      type="date"
-                      value={form.subscriptionExpiresAt}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          subscriptionExpiresAt: event.target.value,
-                        })
-                      }
-                      className={inputClass}
-                    />
-                  </label>
-
-                  <label className="block text-xs font-medium text-slate-300">
-                    Store limit
-                    <input
-                      type="number"
-                      min={1}
-                      value={form.storeLimit}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          storeLimit: Number(event.target.value) || 1,
-                        })
-                      }
-                      className={inputClass}
+                    <ChevronDown
+                      size={13}
+                      className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-600"
                     />
                   </label>
                 </div>
+              </div>
 
+              <div className="overflow-x-auto">
+                <table className="min-w-[700px] w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] bg-white/[0.02] text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                      <th className="px-5 py-3.5">Customer</th>
+                      <th className="px-4 py-3.5">Plan</th>
+                      <th className="px-4 py-3.5">Status</th>
+                      <th className="px-4 py-3.5">Subscription</th>
+                      <th className="px-5 py-3.5 text-right">Stores</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-white/[0.055]">
+                    {loading ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-5 py-14 text-center text-xs text-slate-500"
+                        >
+                          Loading customer accounts…
+                        </td>
+                      </tr>
+                    ) : filteredCustomers.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-14 text-center">
+                          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.04] text-slate-500">
+                            <Search size={18} />
+                          </div>
+
+                          <p className="mt-3 text-sm font-medium text-slate-300">
+                            {customers.length === 0
+                              ? "No customer accounts yet"
+                              : "No matching customers"}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-600">
+                            {customers.length === 0
+                              ? "New customer accounts will appear here."
+                              : "Try another search term or status filter."}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCustomers.map((customer) => (
+                        <tr
+                          key={customer.id}
+                          className="transition hover:bg-white/[0.025]"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.045] text-xs font-bold text-slate-300">
+                                {customer.name
+                                  .trim()
+                                  .slice(0, 1)
+                                  .toUpperCase() || "C"}
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold text-slate-200">
+                                  {customer.name}
+                                </p>
+                                <p className="mt-1 truncate text-[11px] text-slate-500">
+                                  {customer.email}
+                                </p>
+                                {customer.company && (
+                                  <p className="mt-0.5 truncate text-[10px] text-slate-600">
+                                    {customer.company}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2.5 py-1.5 text-[10px] font-semibold capitalize text-slate-300">
+                              {customer.plan}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-semibold capitalize ${statusClasses(customer.status)}`}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                              {customer.status}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <CalendarDays
+                                size={13}
+                                className="text-slate-600"
+                              />
+                              {formatDate(customer.subscriptionExpiresAt)}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            <span className="text-xs font-semibold tabular-nums text-white">
+                              {customer.storesUsed}
+                            </span>
+                            <span className="text-xs text-slate-600">
+                              {" "}
+                              / {customer.storeLimit}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-white/[0.06] px-5 py-3.5 text-[10px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Showing {filteredCustomers.length} of {customers.length}{" "}
+                  accounts
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                  Account data from platform records
+                </span>
+              </div>
+            </div>
+
+            <aside id="controls" className="space-y-5">
+              <section className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718]">
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3.5 text-xs font-bold text-[#07100d] transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  onClick={() => setFormOpen((open) => !open)}
+                  className="flex w-full items-center justify-between gap-3 p-5 text-left sm:p-6"
+                  aria-expanded={formOpen}
                 >
-                  {saving ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      Creating account…
-                    </>
-                  ) : (
-                    <>
-                      <Plus size={15} />
-                      Create customer account
-                      <ArrowUpRight size={14} className="ml-auto" />
-                    </>
-                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-300/10 text-emerald-300">
+                        <Plus size={17} />
+                      </div>
+                      <h2 className="text-base font-semibold text-white">
+                        Add customer
+                      </h2>
+                    </div>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Create a platform customer account.
+                    </p>
+                  </div>
+
+                  <ChevronDown
+                    size={17}
+                    className={`text-slate-500 transition ${formOpen ? "rotate-180" : ""}`}
+                  />
                 </button>
-              </form>
-            )}
+
+                {formOpen && (
+                  <form
+                    onSubmit={handleSubmit}
+                    className="space-y-4 border-t border-white/[0.06] p-5 sm:p-6"
+                  >
+                    <label className="block text-xs font-medium text-slate-300">
+                      Customer name
+                      <input
+                        value={form.name}
+                        onChange={(event) =>
+                          setForm({ ...form, name: event.target.value })
+                        }
+                        className={inputClass}
+                        placeholder="Business owner name"
+                        required
+                      />
+                    </label>
+
+                    <label className="block text-xs font-medium text-slate-300">
+                      Email address
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(event) =>
+                          setForm({ ...form, email: event.target.value })
+                        }
+                        className={inputClass}
+                        placeholder="owner@business.com"
+                        required
+                      />
+                    </label>
+
+                    <label className="block text-xs font-medium text-slate-300">
+                      Company <span className="text-slate-600">(optional)</span>
+                      <input
+                        value={form.company}
+                        onChange={(event) =>
+                          setForm({ ...form, company: event.target.value })
+                        }
+                        className={inputClass}
+                        placeholder="Company or brand"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block text-xs font-medium text-slate-300">
+                        Plan
+                        <select
+                          value={form.plan}
+                          onChange={(event) =>
+                            setForm({ ...form, plan: event.target.value })
+                          }
+                          className={inputClass}
+                        >
+                          <option value="starter">Starter</option>
+                          <option value="growth">Growth</option>
+                          <option value="scale">Scale</option>
+                        </select>
+                      </label>
+
+                      <label className="block text-xs font-medium text-slate-300">
+                        Status
+                        <select
+                          value={form.status}
+                          onChange={(event) =>
+                            setForm({ ...form, status: event.target.value })
+                          }
+                          className={inputClass}
+                        >
+                          <option value="active">Active</option>
+                          <option value="trial">Trial</option>
+                          <option value="expired">Expired</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block text-xs font-medium text-slate-300">
+                        Expiry date
+                        <input
+                          type="date"
+                          value={form.subscriptionExpiresAt}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              subscriptionExpiresAt: event.target.value,
+                            })
+                          }
+                          className={inputClass}
+                        />
+                      </label>
+
+                      <label className="block text-xs font-medium text-slate-300">
+                        Store limit
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.storeLimit}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              storeLimit: Number(event.target.value) || 1,
+                            })
+                          }
+                          className={inputClass}
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3.5 text-xs font-bold text-[#07100d] transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          Creating account…
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={15} />
+                          Create customer account
+                          <ArrowUpRight size={14} className="ml-auto" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+              </section>
+
+              <section className="rounded-[24px] border border-white/[0.08] bg-[#101718] p-5 sm:p-6">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-400/10 text-sky-300">
+                    <Building2 size={16} />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white">
+                    Store allocation
+                  </h3>
+                </div>
+
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Store capacity represents the total number of store slots
+                  assigned across platform customer accounts.
+                </p>
+
+                <div className="mt-5 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-3xl font-semibold tracking-tight text-white">
+                      {loading
+                        ? "—"
+                        : (summary?.totalStoreCapacity ?? 0).toLocaleString()}
+                    </p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                      Allocated store slots
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] p-3 text-slate-400">
+                    <Building2 size={20} />
+                  </div>
+                </div>
+              </section>
+
+              <div className="rounded-[20px] border border-emerald-300/15 bg-emerald-300/[0.045] p-4">
+                <div className="flex items-center gap-2 text-emerald-200">
+                  <ShieldCheck size={15} />
+                  <p className="text-xs font-semibold">
+                    Executive access protected
+                  </p>
+                </div>
+
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                  Customer and subscription controls are available only to
+                  authenticated platform owners.
+                </p>
+              </div>
+            </aside>
           </section>
 
-          {/* Store allocation */}
-          <section className="rounded-[24px] border border-white/[0.08] bg-[#101718] p-5 sm:p-6">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-400/10 text-sky-300">
-                <Building2 size={16} />
-              </div>
-              <h3 className="text-sm font-semibold text-white">
-                Store allocation
-              </h3>
-            </div>
-
-            <p className="mt-3 text-xs leading-5 text-slate-500">
-              Store capacity represents the total number of store slots assigned
-              across platform customer accounts.
-            </p>
-
-            <div className="mt-5 flex items-end justify-between gap-4">
+          <section
+            id="plans"
+            className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718] p-5 sm:p-6"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-3xl font-semibold tracking-tight text-white">
-                  {loading
-                    ? "—"
-                    : (summary?.totalStoreCapacity ?? 0).toLocaleString()}
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                  Plans
                 </p>
-                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                  Allocated store slots
-                </p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Account packaging
+                </h2>
               </div>
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                Active
+              </span>
+            </div>
 
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] p-3 text-slate-400">
-                <Building2 size={20} />
-              </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  name: "Starter",
+                  price: "$29",
+                  description: "For lean stores and early traction.",
+                },
+                {
+                  name: "Growth",
+                  price: "$79",
+                  description: "For scaling operations and multi-store teams.",
+                },
+                {
+                  name: "Scale",
+                  price: "$149",
+                  description:
+                    "For high-volume portfolios and premium support.",
+                },
+              ].map((plan) => (
+                <div
+                  key={plan.name}
+                  className="rounded-2xl border border-white/[0.06] bg-[#0b1214] p-4"
+                >
+                  <p className="text-sm font-semibold text-white">
+                    {plan.name}
+                  </p>
+                  <p className="mt-3 text-2xl font-bold text-emerald-300">
+                    {plan.price}
+                    <span className="text-xs text-slate-500">/mo</span>
+                  </p>
+                  <p className="mt-3 text-xs leading-5 text-slate-400">
+                    {plan.description}
+                  </p>
+                </div>
+              ))}
             </div>
           </section>
 
-          <div className="rounded-[20px] border border-emerald-300/15 bg-emerald-300/[0.045] p-4">
-            <div className="flex items-center gap-2 text-emerald-200">
-              <ShieldCheck size={15} />
-              <p className="text-xs font-semibold">
-                Executive access protected
-              </p>
+          <section
+            id="ai"
+            className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101718] p-5 sm:p-6"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                  AI Studio
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Executive intelligence
+                </h2>
+              </div>
+              <Link
+                to="/admin/ai"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-3.5 py-2 text-xs font-bold text-[#07100d] transition hover:bg-emerald-200"
+              >
+                Open AI workspace
+                <Sparkles size={14} />
+              </Link>
             </div>
 
-            <p className="mt-2 text-[11px] leading-5 text-slate-500">
-              Customer and subscription controls are available only to
-              authenticated platform owners.
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+              Ask the platform assistant for revenue trends, account health
+              checks, product opportunities, and operational guidance from the
+              same admin workspace.
             </p>
-          </div>
-        </aside>
-      </section>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
