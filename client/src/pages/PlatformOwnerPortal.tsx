@@ -9,11 +9,13 @@ import {
   CircleAlert,
   Crown,
   Filter,
+  Moon,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
+  Sun,
   Users,
   X,
 } from "lucide-react";
@@ -92,6 +94,8 @@ export default function PlatformOwnerPortal() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const isDark = theme === "dark";
 
   useEffect(() => {
     void loadPortalData();
@@ -176,12 +180,7 @@ export default function PlatformOwnerPortal() {
 
       const matchesSearch =
         !normalizedSearch ||
-        [
-          customer.name,
-          customer.email,
-          customer.company ?? "",
-          customer.plan,
-        ]
+        [customer.name, customer.email, customer.company ?? "", customer.plan]
           .join(" ")
           .toLowerCase()
           .includes(normalizedSearch);
@@ -226,9 +225,21 @@ export default function PlatformOwnerPortal() {
   ];
 
   return (
-    <main className="min-h-screen space-y-6 bg-[#080d0e] p-3 text-white sm:p-5 lg:p-7">
+    <main
+      className={[
+        "min-h-screen space-y-6 p-3 sm:p-5 lg:p-7",
+        isDark ? "bg-[#080d0e] text-white" : "bg-slate-100 text-slate-900",
+      ].join(" ")}
+    >
       {/* Executive header */}
-      <section className="relative isolate overflow-hidden rounded-[28px] border border-white/10 bg-[#101819] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-7 lg:p-9">
+      <section
+        className={[
+          "relative isolate overflow-hidden rounded-[28px] border p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-7 lg:p-9",
+          isDark
+            ? "border-white/10 bg-[#101819]"
+            : "border-slate-200 bg-white shadow-slate-200/70",
+        ].join(" ")}
+      >
         <div className="pointer-events-none absolute -right-20 -top-28 -z-10 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
         <div className="pointer-events-none absolute bottom-[-150px] left-[30%] -z-10 h-72 w-72 rounded-full bg-teal-500/10 blur-3xl" />
 
@@ -271,12 +282,33 @@ export default function PlatformOwnerPortal() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setTheme((current) => (current === "dark" ? "light" : "dark"))
+                }
+                className={[
+                  "inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition",
+                  isDark
+                    ? "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                    : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+                ].join(" ")}
+              >
+                {isDark ? <Sun size={14} /> : <Moon size={14} />}
+                {isDark ? "Light mode" : "Dark mode"}
+              </button>
+
               <button
                 type="button"
                 onClick={() => void loadPortalData()}
                 disabled={loading}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.08] disabled:opacity-50"
+                className={[
+                  "inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-xs font-semibold transition disabled:opacity-50",
+                  isDark
+                    ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                    : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-200",
+                ].join(" ")}
               >
                 <RefreshCw
                   size={14}
@@ -517,10 +549,7 @@ export default function PlatformOwnerPortal() {
 
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                          <CalendarDays
-                            size={13}
-                            className="text-slate-600"
-                          />
+                          <CalendarDays size={13} className="text-slate-600" />
                           {formatDate(customer.subscriptionExpiresAt)}
                         </div>
                       </td>
@@ -530,7 +559,8 @@ export default function PlatformOwnerPortal() {
                           {customer.storesUsed}
                         </span>
                         <span className="text-xs text-slate-600">
-                          {" "}/ {customer.storeLimit}
+                          {" "}
+                          / {customer.storeLimit}
                         </span>
                       </td>
                     </tr>
@@ -727,8 +757,8 @@ export default function PlatformOwnerPortal() {
             </div>
 
             <p className="mt-3 text-xs leading-5 text-slate-500">
-              Store capacity represents the total number of store slots
-              assigned across platform customer accounts.
+              Store capacity represents the total number of store slots assigned
+              across platform customer accounts.
             </p>
 
             <div className="mt-5 flex items-end justify-between gap-4">

@@ -3,9 +3,11 @@ import {
   BrainCircuit,
   Check,
   Copy,
+  Moon,
   Plus,
   RefreshCw,
   Sparkles,
+  Sun,
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -142,11 +144,13 @@ export default function MEOAI() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const hasMessages = messages.length > 0;
+  const isDark = theme === "dark";
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
@@ -201,19 +205,31 @@ export default function MEOAI() {
 
     try {
       const token = localStorage.getItem("admin_token");
+
+      if (!token) {
+        throw new Error("Please sign in to your admin account to use MEO AI.");
+      }
+
       const response = await fetch(AI_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           messages: nextMessages.map((message) => ({
             role: message.role,
             content: message.content,
           })),
+          workspace: "global",
+          currentPage: "Overview",
         }),
       });
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("admin_token");
+        window.location.assign("/admin/login");
+      }
 
       const data = await response.json();
 
@@ -300,11 +316,18 @@ export default function MEOAI() {
     void (async () => {
       try {
         const token = localStorage.getItem("admin_token");
+
+        if (!token) {
+          throw new Error(
+            "Please sign in to your admin account to use MEO AI.",
+          );
+        }
+
         const response = await fetch(AI_ENDPOINT, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             messages: [
@@ -314,8 +337,15 @@ export default function MEOAI() {
               })),
               { role: "user", content: previousUserMessage.content },
             ],
+            workspace: "global",
+            currentPage: "Overview",
           }),
         });
+
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem("admin_token");
+          window.location.assign("/admin/login");
+        }
 
         const data = await response.json();
 
@@ -355,9 +385,21 @@ export default function MEOAI() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070b12] text-slate-100">
+    <div
+      className={[
+        "min-h-screen transition-colors duration-300",
+        isDark ? "bg-[#070b12] text-slate-100" : "bg-slate-100 text-slate-900",
+      ].join(" ")}
+    >
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-3 py-4 sm:px-6 lg:px-8">
-        <header className="sticky top-0 z-20 mb-4 rounded-[26px] border border-white/10 bg-slate-950/80 px-4 py-3 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+        <header
+          className={[
+            "sticky top-0 z-20 mb-4 rounded-[26px] border px-4 py-3 shadow-2xl backdrop-blur-xl",
+            isDark
+              ? "border-white/10 bg-slate-950/80 text-slate-100 shadow-slate-950/40"
+              : "border-slate-200 bg-white/90 text-slate-900 shadow-slate-200/80",
+          ].join(" ")}
+        >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-sky-500 to-cyan-400 shadow-lg shadow-sky-500/30">
@@ -365,23 +407,58 @@ export default function MEOAI() {
                 <BrainCircuit size={20} className="relative text-white" />
               </div>
               <div>
-                <p className="text-sm font-black tracking-[0.18em] text-white">
+                <p
+                  className={
+                    isDark
+                      ? "text-sm font-black tracking-[0.18em] text-white"
+                      : "text-sm font-black tracking-[0.18em] text-slate-900"
+                  }
+                >
                   MEO AI
                 </p>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                <p
+                  className={
+                    isDark
+                      ? "text-[10px] uppercase tracking-[0.2em] text-slate-400"
+                      : "text-[10px] uppercase tracking-[0.2em] text-slate-500"
+                  }
+                >
                   Global Ecommerce
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={newConversation}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-sky-400/40 hover:bg-slate-800"
-            >
-              <Plus size={14} />
-              New chat
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setTheme((current) => (current === "dark" ? "light" : "dark"))
+                }
+                className={[
+                  "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold transition",
+                  isDark
+                    ? "border-white/10 bg-white/5 text-slate-100 hover:border-sky-400/40 hover:bg-slate-800"
+                    : "border-slate-200 bg-slate-100 text-slate-700 hover:border-sky-400/40 hover:bg-slate-200",
+                ].join(" ")}
+              >
+                {isDark ? <Sun size={14} /> : <Moon size={14} />}
+                {isDark ? "Light" : "Dark"}
+              </button>
+
+              <button
+                type="button"
+                onClick={newConversation}
+                className={[
+                  "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold transition",
+                  isDark
+                    ? "border-white/10 bg-white/5 text-slate-100 hover:border-sky-400/40 hover:bg-slate-800"
+                    : "border-slate-200 bg-slate-100 text-slate-700 hover:border-sky-400/40 hover:bg-slate-200",
+                ].join(" ")}
+              >
+                <Plus size={14} />
+                New chat
+              </button>
+            </div>
           </div>
         </header>
 
