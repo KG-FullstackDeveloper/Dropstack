@@ -1,3 +1,4 @@
+
 import type { D1Database } from "./types";
 
 const MIGRATIONS = [
@@ -46,6 +47,7 @@ const MIGRATIONS = [
       const info = await database
         .prepare("PRAGMA table_info(platform_customers)")
         .all<{ name: string }>();
+
       const columns = new Set(
         (info.results ?? []).map((column) => column.name),
       );
@@ -65,6 +67,34 @@ const MIGRATIONS = [
             .run();
         }
       }
+    },
+  },
+  {
+    version: "0003_store_ownership",
+    statements: [],
+    migrate: async (database: D1Database) => {
+      const info = await database
+        .prepare("PRAGMA table_info(stores)")
+        .all<{ name: string }>();
+
+      const columns = new Set(
+        (info.results ?? []).map((column) => column.name),
+      );
+
+      if (!columns.has("owner_customer_id")) {
+        await database
+          .prepare(
+            "ALTER TABLE stores ADD COLUMN owner_customer_id TEXT",
+          )
+          .run();
+      }
+
+      await database
+        .prepare(
+          `CREATE INDEX IF NOT EXISTS idx_stores_owner_customer
+           ON stores(owner_customer_id)`,
+        )
+        .run();
     },
   },
 ];

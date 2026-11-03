@@ -110,7 +110,7 @@ export default function Home() {
       }
 
       setAuthMode(null);
-      navigate("/customer/dashboard", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (err) {
       setError(
         err instanceof Error

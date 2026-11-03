@@ -47,7 +47,7 @@ export default function CustomerRegister() {
         password: form.password,
         company: form.company.trim() || null,
       });
-      navigate("/customer/dashboard", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to create your account.",
@@ -94,7 +94,7 @@ export default function CustomerRegister() {
                   Create account
                 </p>
                 <h2 className="mt-2 text-3xl font-black tracking-tight text-white">
-                  Customer registration
+                  Workspace registration
                 </h2>
               </div>
               <Link

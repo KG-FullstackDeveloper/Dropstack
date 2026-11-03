@@ -1,58 +1,55 @@
-
-import { type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-
 import { useAuth } from "../../contexts/AuthContext";
 
 interface ProtectedRouteProps {
-  children: ReactNode;
+  children: React.ReactNode;
   requiredRole?: string;
+  allowCustomer?: boolean;
 }
 
 export default function ProtectedRoute({
   children,
   requiredRole,
+  allowCustomer = false,
 }: ProtectedRouteProps) {
-  const { admin, loading } = useAuth();
+  const { admin, customer, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <Loader2 size={28} className="animate-spin text-slate-400" />
+      <div className="grid min-h-screen place-items-center bg-slate-50">
+        <div className="text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900" />
+          <p className="mt-4 text-sm font-medium text-slate-500">
+            Loading your workspace...
+          </p>
+        </div>
       </div>
     );
   }
 
-  // Send unauthenticated users to login.
-  if (!admin) {
+  if (!admin && !customer) {
     return (
       <Navigate
         to="/admin/login"
         replace
-        state={{
-          from: location.pathname,
-        }}
+        state={{ from: location }}
       />
     );
   }
 
-  const adminRole = admin.role?.trim().toLowerCase();
-  const requiredRoleName = requiredRole?.trim().toLowerCase();
+  // Customer accounts can enter the shared dashboard only.
+  if (customer && !admin) {
+    if (requiredRole || !allowCustomer) {
+      return <Navigate to="/admin" replace />;
+    }
 
-  // Only enforce a role when the route explicitly requires one.
-  // Platform owners can access both the CEO and normal Admin dashboards.
-  if (requiredRoleName && adminRole !== requiredRoleName) {
-    return (
-      <Navigate
-        to="/admin"
-        replace
-        state={{
-          from: location.pathname,
-        }}
-      />
-    );
+    return <>{children}</>;
+  }
+
+  // Admin-only role checks.
+  if (requiredRole && admin?.role !== requiredRole) {
+    return <Navigate to="/admin" replace />;
   }
 
   return <>{children}</>;

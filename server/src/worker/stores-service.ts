@@ -1,10 +1,14 @@
+
 import { Hono } from "hono";
 import type {
   WorkerEnvironment,
   ProductRecord,
   StoreRecord,
 } from "./types";
-import { workerAuthMiddleware } from "./auth";
+import {
+  workerAuthMiddleware,
+  customerAuthMiddleware,
+} from "./auth";
 import { parseJson } from "./db";
 
 const storesService = new Hono<WorkerEnvironment>();
@@ -31,6 +35,7 @@ function publicProduct(product: ProductRecord) {
 }
 
 // GET /api/stores/public/:slug
+// Public storefront information.
 storesService.get("/public/:slug", async (c) => {
   try {
     const store = await c.env.DB
@@ -65,6 +70,7 @@ storesService.get("/public/:slug", async (c) => {
 });
 
 // GET /api/stores/public/:slug/products
+// Public products belonging to an active storefront.
 storesService.get("/public/:slug/products", async (c) => {
   try {
     const store = await c.env.DB
@@ -118,9 +124,20 @@ storesService.get("/public/:slug/products", async (c) => {
   }
 });
 
-// GET /api/stores — admin store list.
+// GET /api/stores
+// Platform-owner store list.
 storesService.get("/", workerAuthMiddleware, async (c) => {
   try {
+    if (c.get("adminRole") !== "platform_owner") {
+      return c.json(
+        {
+          success: false,
+          error: "Only the platform owner can view all stores.",
+        },
+        403,
+      );
+    }
+
     const result = await c.env.DB
       .prepare(
         `SELECT s.*
@@ -140,10 +157,53 @@ storesService.get("/", workerAuthMiddleware, async (c) => {
       data: result.results ?? [],
     });
   } catch (error) {
-    console.error("Worker admin store list failed:", error);
+    console.error("Worker platform-owner store list failed:", error);
 
     return c.json(
       { success: false, error: "Unable to load stores." },
+      500,
+    );
+  }
+});
+
+// GET /api/stores/mine
+// Merchant store list. Only explicitly assigned stores are returned.
+storesService.get("/mine", customerAuthMiddleware, async (c) => {
+  try {
+    const customerId = c.get("customerId");
+
+    if (!customerId) {
+      return c.json(
+        { success: false, error: "Merchant authentication is required." },
+        401,
+      );
+    }
+
+    const result = await c.env.DB
+      .prepare(
+        `SELECT s.*
+         FROM stores s
+         LEFT JOIN store_registry_metadata m ON m.store_id = s.id
+         WHERE s.owner_customer_id = ?
+           AND COALESCE(m.archived, 0) = 0
+         ORDER BY s.created_at DESC`,
+      )
+      .bind(customerId)
+      .all<StoreRecord>();
+
+    if (!result.success) {
+      throw new Error(result.error || "Merchant store query failed.");
+    }
+
+    return c.json({
+      success: true,
+      data: result.results ?? [],
+    });
+  } catch (error) {
+    console.error("Worker merchant store list failed:", error);
+
+    return c.json(
+      { success: false, error: "Unable to load your stores." },
       500,
     );
   }

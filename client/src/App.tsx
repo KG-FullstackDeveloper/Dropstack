@@ -34,19 +34,16 @@ const MEOAI = lazy(() => import("./pages/MEOAI"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const CustomerLogin = lazy(() => import("./pages/CustomerLogin"));
 const CustomerRegister = lazy(() => import("./pages/CustomerRegister"));
-const CustomerDashboard = lazy(() => import("./pages/CustomerDashboard"));
 const Profile = lazy(() => import("./pages/Profile"));
-const PlatformOwnerPortal = lazy(() => import("./pages/PlatformOwnerPortal"));
+const PlatformOwnerPortal = lazy(
+  () => import("./pages/PlatformOwnerPortal"),
+);
 const MEOAssistant = lazy(() => import("./components/MEOAssistant"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const LuxuryStorefront = lazy(() => import("./pages/LuxuryStorefront"));
+const LuxuryStorefront = lazy(
+  () => import("./pages/LuxuryStorefront"),
+);
 
-/**
-
-Updates page titles, descriptions, and social metadata
-
-whenever the customer navigates to another route.
-*/
 function SEOManager() {
   const { pathname } = useLocation();
 
@@ -56,8 +53,11 @@ function SEOManager() {
     const isAdminPage =
       path === "/admin" ||
       path.startsWith("/admin/") ||
+      path === "/platform-owner" ||
+      path.startsWith("/platform-owner/") ||
       path === "/nigeria-admin" ||
-      path.startsWith("/nigeria-admin/");
+      path.startsWith("/nigeria-admin/") ||
+      path.startsWith("/customer/");
 
     const knownExactPaths = new Set([
       "/",
@@ -65,8 +65,12 @@ function SEOManager() {
       "/admin",
       "/admin/ai",
       "/admin/profile",
+      "/platform-owner",
       "/nigeria-admin",
       "/nigeria-admin/profile",
+      "/customer/login",
+      "/customer/register",
+      "/customer/dashboard",
       "/store",
       "/shop",
       "/about",
@@ -106,7 +110,8 @@ function SEOManager() {
         "Learn more about MEO Store and our online shopping platform.";
     } else if (path === "/contact") {
       title = "Contact Us | MEO Store";
-      description = "Contact the MEO Store team for help and enquiries.";
+      description =
+        "Contact the MEO Store team for help and enquiries.";
     } else if (path === "/shipping") {
       title = "Shipping Information | MEO Store";
       description =
@@ -123,10 +128,11 @@ function SEOManager() {
       description = "Read the terms and conditions for using MEO Store.";
     } else if (path === "/refund-returns") {
       title = "Returns Policy | MEO Store";
-      description = "Read MEO Store's returns and refund policy.";
+      description = "Read the MEO Store returns and refund policy.";
     } else if (path === "/order-tracking") {
       title = "Order Tracking | MEO Store";
-      description = "Find information about tracking your MEO Store order.";
+      description =
+        "Find information about tracking your MEO Store order.";
     } else if (path.startsWith("/store/")) {
       title = "Online Store | MEO Store";
       description = "Explore products in this online store.";
@@ -136,16 +142,21 @@ function SEOManager() {
         "Browse products in the MEO Store Nigeria shopping experience.";
     } else if (path.startsWith("/luxury-store")) {
       title = "Luxury Collection | MEO Store";
-      description = "Explore the collection available in this online store.";
+      description =
+        "Explore the collection available in this online store.";
     } else if (path.startsWith("/product/")) {
       title = "Product Details | MEO Store";
-      description = "View product details and shopping information.";
+      description =
+        "View product details and shopping information.";
+    } else if (path.startsWith("/customer/")) {
+      title = "Customer Account | MEO Commerce";
+      description =
+        "Manage your MEO Commerce customer account.";
     } else if (isAdminPage) {
-      title = "Admin Dashboard | MEO Store";
-      description = "MEO Store administration.";
+      title = "Dashboard | MEO Commerce";
+      description = "MEO Commerce account dashboard.";
     }
 
-    // Give unknown URLs a proper not-found title and description.
     if (!isKnownRoute) {
       title = "Page Not Found | MEO Store";
       description = "The requested page could not be found.";
@@ -153,8 +164,11 @@ function SEOManager() {
 
     document.title = title;
 
-    // Create or update a metadata tag.
-    const setMeta = (name: string, content: string, property = false) => {
+    const setMeta = (
+      name: string,
+      content: string,
+      property = false,
+    ) => {
       const attribute = property ? "property" : "name";
 
       let tag = document.head.querySelector<HTMLMetaElement>(
@@ -171,45 +185,42 @@ function SEOManager() {
     };
 
     setMeta("description", description);
-
-    // Open Graph sharing metadata.
     setMeta("og:title", title, true);
     setMeta("og:description", description, true);
     setMeta("og:type", "website", true);
-
-    // Twitter/X sharing metadata.
     setMeta("twitter:card", "summary");
     setMeta("twitter:title", title);
     setMeta("twitter:description", description);
-
-    // Keep administration routes out of search results.
-    setMeta("robots", isAdminPage ? "noindex, nofollow" : "index, follow");
+    setMeta(
+      "robots",
+      isAdminPage ? "noindex, nofollow" : "index, follow",
+    );
   }, [pathname]);
 
   return null;
 }
 
-/**
-
-Shows the AI assistant only inside admin workspaces.
-*/
 function PlatformAssistant() {
   const { pathname } = useLocation();
   const path = pathname.toLowerCase();
 
-  // Do not show the assistant on the homepage or login page.
-  if (path === "/" || path === "/admin/login") {
+  if (
+    path === "/" ||
+    path === "/admin/login" ||
+    path.startsWith("/customer/")
+  ) {
     return null;
   }
 
   const isAdmin =
-    path.startsWith("/admin") || path.startsWith("/nigeria-admin");
+    path.startsWith("/admin") ||
+    path.startsWith("/nigeria-admin");
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (!isAdmin) return null;
 
-  const workspace = path.startsWith("/nigeria-admin") ? "nigeria" : "global";
+  const workspace = path.startsWith("/nigeria-admin")
+    ? "nigeria"
+    : "global";
 
   const currentPage = path.startsWith("/nigeria-admin")
     ? path.includes("/profile")
@@ -246,27 +257,43 @@ export default function App() {
         }
       >
         <Routes>
-          {/* Platform homepage */}
+          {/* Public homepage */}
           <Route path="/" element={<Home />} />
 
-          {/* Admin login */}
-          <Route path="/admin/login" element={<AdminLogin />} />
+          {/* Admin authentication */}
+          <Route
+            path="/admin/login"
+            element={<AdminLogin />}
+          />
 
-          {/* Customer self-service routes */}
-          <Route path="/customer/login" element={<CustomerLogin />} />
-          <Route path="/customer/register" element={<CustomerRegister />} />
-          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+          {/* Customer authentication */}
+          <Route
+            path="/customer/login"
+            element={<CustomerLogin />}
+          />
 
-          {/* Protected global admin pages */}
+          <Route
+            path="/customer/register"
+            element={<CustomerRegister />}
+          />
+
+          {/* Backward compatibility: use the shared dashboard */}
+          <Route
+            path="/customer/dashboard"
+            element={<Navigate to="/admin" replace />}
+          />
+
+          {/* Shared admin/customer dashboard */}
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowCustomer>
                 <AdminWorkspace />
               </ProtectedRoute>
             }
           />
 
+          {/* Admin-only AI page */}
           <Route
             path="/admin/ai"
             element={
@@ -276,6 +303,7 @@ export default function App() {
             }
           />
 
+          {/* Admin-only profile */}
           <Route
             path="/admin/profile"
             element={
@@ -285,6 +313,7 @@ export default function App() {
             }
           />
 
+          {/* Platform owner only */}
           <Route
             path="/platform-owner"
             element={
@@ -294,7 +323,7 @@ export default function App() {
             }
           />
 
-          {/* Protected Nigeria admin pages */}
+          {/* Nigeria workspace remains separate */}
           <Route
             path="/nigeria-admin"
             element={
@@ -318,28 +347,49 @@ export default function App() {
             path="/store"
             element={<Navigate to="/store/meo-store" replace />}
           />
-          <Route path="/store/:slug/*" element={<Store />} />
-          <Route path="/nigeria-store/*" element={<NigeriaStore />} />
-          <Route path="/luxury-store/*" element={<LuxuryStorefront />} />
 
-          {/* Public platform pages */}
+          <Route
+            path="/store/:slug/*"
+            element={<Store />}
+          />
+
+          <Route
+            path="/nigeria-store/*"
+            element={<NigeriaStore />}
+          />
+
+          <Route
+            path="/luxury-store/*"
+            element={<LuxuryStorefront />}
+          />
+
+          {/* Public content */}
           <Route path="/shop" element={<Shop />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/shipping" element={<Shipping />} />
           <Route path="/faq" element={<FAQ />} />
 
-          {/* Policy pages — each route is registered only once */}
+          {/* Policies */}
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
-          <Route path="/refund-returns" element={<RefundReturns />} />
+          <Route
+            path="/refund-returns"
+            element={<RefundReturns />}
+          />
 
-          <Route path="/order-tracking" element={<OrderTracking />} />
+          <Route
+            path="/order-tracking"
+            element={<OrderTracking />}
+          />
 
-          {/* Product details */}
-          <Route path="/product/:id" element={<Product />} />
+          {/* Product pages */}
+          <Route
+            path="/product/:id"
+            element={<Product />}
+          />
 
-          {/* Unknown URLs */}
+          {/* Not found */}
           <Route path="*" element={<NotFound />} />
         </Routes>
 

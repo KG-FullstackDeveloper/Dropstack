@@ -26,7 +26,7 @@ export default function CustomerLogin() {
 
     try {
       await loginCustomer({ email: email.trim(), password });
-      navigate("/customer/dashboard", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (err) {
       setError(
         err instanceof Error
@@ -49,7 +49,7 @@ export default function CustomerLogin() {
             Welcome back
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-white">
-            Customer sign in
+            Workspace sign in
           </h1>
         </div>
 

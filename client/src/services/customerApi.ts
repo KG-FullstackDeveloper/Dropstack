@@ -1,6 +1,8 @@
+
 const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:4000")
   .replace(/\/+$/, "")
   .replace(/\/api$/i, "");
+
 const API_URL = `${API_ORIGIN}/api`;
 
 interface ApiResponse<T> {
@@ -30,7 +32,14 @@ function getToken(): string | null {
   return localStorage.getItem("customer_token");
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function notifyCustomerAuthChanged(): void {
+  window.dispatchEvent(new Event("meo:customer-auth-changed"));
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const token = getToken();
   const headers = new Headers(options.headers);
 
@@ -67,23 +76,35 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
     if (result && typeof result === "object") {
       const body = result as ApiResponse<unknown>;
-      if (body.error) errorMessage = body.error;
-      else if (body.message) errorMessage = body.message;
-      if (typeof body.details === "string") details = body.details.trim();
+
+      if (body.error) {
+        errorMessage = body.error;
+      } else if (body.message) {
+        errorMessage = body.message;
+      }
+
+      if (typeof body.details === "string") {
+        details = body.details.trim();
+      }
     }
 
     if (response.status === 401) {
       localStorage.removeItem("customer_token");
+      notifyCustomerAuthChanged();
     }
 
-    throw new Error(details ? `${errorMessage} ${details}` : errorMessage);
+    throw new Error(
+      details ? `${errorMessage} ${details}` : errorMessage,
+    );
   }
 
   if (result && typeof result === "object") {
     const body = result as ApiResponse<T>;
+
     if (body.success === false) {
       throw new Error(body.error || body.message || "Request failed.");
     }
+
     if ("data" in body) {
       return body.data as T;
     }
@@ -98,16 +119,19 @@ export async function registerCustomer(input: {
   password: string;
   company?: string | null;
 }): Promise<{ token: string; customer: CustomerSession }> {
-  const result = await request<{ token: string; customer: CustomerSession }>(
-    "/auth/customer/register",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
+  const result = await request<{
+    token: string;
+    customer: CustomerSession;
+  }>("/auth/customer/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 
   if (result.token) {
+    // Do not leave an administrator session active alongside a customer session.
+    localStorage.removeItem("admin_token");
     localStorage.setItem("customer_token", result.token);
+    notifyCustomerAuthChanged();
   }
 
   return result;
@@ -117,16 +141,18 @@ export async function loginCustomer(input: {
   email: string;
   password: string;
 }): Promise<{ token: string; customer: CustomerSession }> {
-  const result = await request<{ token: string; customer: CustomerSession }>(
-    "/auth/customer/login",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
+  const result = await request<{
+    token: string;
+    customer: CustomerSession;
+  }>("/auth/customer/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 
   if (result.token) {
+    localStorage.removeItem("admin_token");
     localStorage.setItem("customer_token", result.token);
+    notifyCustomerAuthChanged();
   }
 
   return result;
@@ -153,4 +179,5 @@ export async function getCustomerDashboard(): Promise<{
 
 export function logoutCustomer(): void {
   localStorage.removeItem("customer_token");
+  notifyCustomerAuthChanged();
 }

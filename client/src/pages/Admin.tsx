@@ -33,7 +33,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import type { SettingsSection } from "../components/settings/DashboardSettingsTypes";
-import { getAdminOrders, logout } from "../services/adminApi";
+import { getAdminOrders } from "../services/adminApi";
 const Discounts = lazy(() => import("./admin/Discounts"));
 const Orders = lazy(() => import("./admin/Orders"));
 const FulfillmentCenter = lazy(() => import("./admin/FulfillmentCenter"));
@@ -192,7 +192,7 @@ function openAssistant() {
 
 export default function Admin() {
   const navigateRouter = useNavigate();
-  const { admin } = useAuth();
+  const { admin, customer, logout: logoutSession } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [active, setActive] = useState<PageKey>("Overview");
@@ -205,7 +205,13 @@ export default function Admin() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [profileName, setProfileName] = useState(getProfileName);
+  const [profileName, setProfileName] = useState(
+    () => admin?.name?.trim() || customer?.name?.trim() || getProfileName(),
+  );
+  useEffect(() => {
+    const nextName = admin?.name?.trim() || customer?.name?.trim();
+    if (nextName) setProfileName(nextName);
+  }, [admin?.name, customer?.name]);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
@@ -334,20 +340,22 @@ export default function Admin() {
     }
   }
 
-  const isPlatformOwner =
-    admin?.role?.trim().toLowerCase() === "platform_owner";
+  const accountRole =
+    admin?.role?.trim().toLowerCase() ||
+    customer?.role?.trim().toLowerCase() ||
+    "store_owner";
+  const isCustomerAccount = accountRole === "customer";
+  const isPlatformOwner = accountRole === "platform_owner";
 
   const filteredSearch = allPages.filter((item) =>
     item.label.toLowerCase().includes(search.toLowerCase().trim()),
   );
 
-  async function signOut() {
-    try {
-      await logout();
-    } catch {
-      // Local navigation continues if the logout request fails.
-    }
-    navigateRouter("/admin/login", { replace: true });
+  function signOut() {
+    logoutSession();
+    navigateRouter(isCustomerAccount ? "/customer/login" : "/admin/login", {
+      replace: true,
+    });
   }
 
   // Shared selected styling: every navigation item uses the same active treatment.
@@ -446,10 +454,17 @@ export default function Admin() {
               <>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-slate-900">
-                    Global Ecommerce
+                    {isCustomerAccount
+                      ? customer?.company ||
+                        customer?.name ||
+                        admin?.name ||
+                        "My Workspace"
+                      : "Global Ecommerce"}
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-400">
-                    Main workspace
+                    {isCustomerAccount
+                      ? "Your account workspace"
+                      : "Main workspace"}
                   </p>
                 </div>
                 <ChevronDown
@@ -481,17 +496,19 @@ export default function Admin() {
                   <Check size={15} className="text-emerald-600" />
                 </div>
               </div>
-              <Link
-                to="/nigeria-admin"
-                onClick={() => setStoreOpen(false)}
-                className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-xs font-bold text-emerald-700">
-                  N
-                </div>
-                <span className="flex-1">Nigeria Ecommerce</span>
-                <ChevronRight size={15} className="text-slate-300" />
-              </Link>
+              {!isCustomerAccount && (
+                <Link
+                  to="/nigeria-admin"
+                  onClick={() => setStoreOpen(false)}
+                  className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-xs font-bold text-emerald-700">
+                    N
+                  </div>
+                  <span className="flex-1">Nigeria Ecommerce</span>
+                  <ChevronRight size={15} className="text-slate-300" />
+                </Link>
+              )}
             </div>
           )}
         </div>
@@ -753,14 +770,16 @@ export default function Admin() {
                 <Command size={10} />K
               </kbd>
             </button>
-            <button
-              type="button"
-              onClick={openAssistant}
-              className="hidden min-h-10 items-center gap-2 rounded-xl bg-slate-950 px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 md:flex"
-            >
-              <Sparkles size={15} />
-              <span className="hidden lg:inline">Ask MEO AI</span>
-            </button>
+            {!isCustomerAccount && (
+              <button
+                type="button"
+                onClick={openAssistant}
+                className="hidden min-h-10 items-center gap-2 rounded-xl bg-slate-950 px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 md:flex"
+              >
+                <Sparkles size={15} />
+                <span className="hidden lg:inline">Ask MEO AI</span>
+              </button>
+            )}
 
             <div ref={notificationsRef} className="relative">
               <button
@@ -832,7 +851,11 @@ export default function Admin() {
                   <div className="border-b border-slate-100 px-3 py-3">
                     <p className="text-sm font-bold">{profileName}</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Store Owner · Administrator
+                      {isCustomerAccount
+                        ? "Customer account"
+                        : isPlatformOwner
+                          ? "Platform owner"
+                          : "Store Owner · Administrator"}
                     </p>
                   </div>
                   <Link
@@ -843,14 +866,16 @@ export default function Admin() {
                     <User size={16} />
                     Profile
                   </Link>
-                  <Link
-                    to="/platform-owner"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    <ShieldCheck size={16} />
-                    Platform owner portal
-                  </Link>
+                  {isPlatformOwner && (
+                    <Link
+                      to="/platform-owner"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      <ShieldCheck size={16} />
+                      Platform owner portal
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -863,17 +888,19 @@ export default function Admin() {
                     <Settings size={16} />
                     Settings
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileOpen(false);
-                      openAssistant();
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    <Sparkles size={16} />
-                    MEO AI
-                  </button>
+                  {!isCustomerAccount && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        openAssistant();
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      <Sparkles size={16} />
+                      MEO AI
+                    </button>
+                  )}
                   <Link
                     to="/store"
                     target="_blank"

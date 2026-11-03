@@ -30,6 +30,11 @@ const STARTERS = [
   "Check my profitability.",
   "What should I add to my ecommerce platform?",
 ];
+const LOADING_STEPS = [
+  "Thinking...",
+  "Reviewing your store signals...",
+  "Preparing a polished answer...",
+];
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -133,6 +138,7 @@ export default function MEOAI() {
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [thinkingIndex, setThinkingIndex] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +155,19 @@ export default function MEOAI() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!loading) {
+      setThinkingIndex(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setThinkingIndex((previous) => (previous + 1) % LOADING_STEPS.length);
+    }, 900);
+
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   function focusComposer() {
     window.setTimeout(() => textareaRef.current?.focus(), 0);
@@ -494,9 +513,12 @@ export default function MEOAI() {
                       <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">
                         AI status
                       </p>
-                      <p className="text-sm font-medium text-slate-100">
-                        Thinking...
-                      </p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
+                        <p className="text-sm font-medium text-slate-100">
+                          {LOADING_STEPS[thinkingIndex]}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
