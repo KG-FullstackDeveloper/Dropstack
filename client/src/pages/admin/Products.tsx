@@ -17,9 +17,9 @@ import {
 import {
   createProduct,
   deleteProduct,
-  getCloudinaryUploadSignature,
   getAdminProducts,
   updateProduct,
+  uploadCloudinaryAsset,
 } from "../../services/adminApi";
 import type {
   CreateProductInput,
@@ -78,30 +78,8 @@ async function uploadProductMedia(
   file: File,
   resourceType: "image" | "video",
 ): Promise<string> {
-  const signed = await getCloudinaryUploadSignature(resourceType);
-  const body = new FormData();
-  body.append("file", file);
-  body.append("api_key", signed.apiKey);
-  body.append("timestamp", String(signed.timestamp));
-  body.append("signature", signed.signature);
-  body.append("folder", signed.folder);
-
-  const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${encodeURIComponent(signed.cloudName)}/${resourceType}/upload`,
-    { method: "POST", body },
-  );
-  const result = (await response.json().catch(() => ({}))) as {
-    secure_url?: string;
-    error?: { message?: string };
-  };
-
-  if (!response.ok || !result.secure_url) {
-    throw new Error(
-      result.error?.message || "Cloudinary could not upload this file.",
-    );
-  }
-
-  return result.secure_url;
+  const { url } = await uploadCloudinaryAsset(file, resourceType, "products");
+  return url;
 }
 
 const emptyForm: ProductFormState = {

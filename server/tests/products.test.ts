@@ -216,6 +216,36 @@ test("assigned store products include product galleries and variants", async () 
   assert.equal(product?.delivery_time, "7-12 business days");
 });
 
+test("product creation rejects raw data URL uploads and requires Cloudinary media URLs", async () => {
+  const token = jwt.default.sign(
+    {
+      id: "admin-test",
+      email: "test@example.invalid",
+      name: "Test Admin",
+    },
+    process.env.JWT_SECRET!,
+  );
+
+  const response = await products.request("http://localhost/", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Cloudinary-only product",
+      description: "Must reject raw data URLs.",
+      price: 25,
+      image_url:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAF",
+    }),
+  });
+  const body = (await response.json()) as { error?: string };
+
+  assert.equal(response.status, 400);
+  assert.match(body.error ?? "", /Cloudinary|data URL|raw upload/i);
+});
+
 test("cloudinary upload signature encodes the correct scoped folder", async () => {
   const token = jwt.default.sign(
     {
@@ -232,12 +262,23 @@ test("cloudinary upload signature encodes the correct scoped folder", async () =
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ resourceType: "image", resource: "products" }),
+    body: JSON.stringify({
+      resourceType: "image",
+      resource: "products",
+      publicId: "product-123/hero-shot",
+    }),
   });
 
   const body = (await response.json()) as {
     success: boolean;
-    data?: { folder: string; resourceType: string; scope: string };
+    data?: {
+      folder: string;
+      resourceType: string;
+      scope: string;
+      publicId?: string;
+      timestamp?: number;
+      signature?: string;
+    };
     error?: string;
   };
 
@@ -246,6 +287,14 @@ test("cloudinary upload signature encodes the correct scoped folder", async () =
   assert.equal(body.data?.scope, "products");
   assert.equal(body.data?.resourceType, "image");
   assert.equal(body.data?.folder, "dropstack/products/images");
+  assert.equal(body.data?.publicId, "product-123/hero-shot");
+
+  const expectedSignature = createHash("sha1")
+    .update(
+      `folder=dropstack/products/images&public_id=product-123/hero-shot&timestamp=${body.data?.timestamp}test-api-secret`,
+    )
+    .digest("hex");
+  assert.equal(body.data?.signature, expectedSignature);
 });
 
 test("admin can save the existing payment review order status", async () => {

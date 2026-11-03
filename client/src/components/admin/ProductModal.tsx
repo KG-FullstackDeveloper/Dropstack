@@ -13,11 +13,9 @@ import {
 import {
   createProduct,
   updateProduct,
+  uploadCloudinaryAsset,
 } from "../../services/adminApi";
-import type {
-  Product,
-  ProductVariant,
-} from "../../types/product";
+import type { Product, ProductVariant } from "../../types/product";
 
 interface ProductModalProps {
   product: Product | null;
@@ -60,14 +58,7 @@ const categories = [
   "Other",
 ];
 
-const currencies = [
-  "USD",
-  "GBP",
-  "EUR",
-  "CAD",
-  "AUD",
-  "NGN",
-];
+const currencies = ["USD", "GBP", "EUR", "CAD", "AUD", "NGN"];
 
 const countries = [
   "United States",
@@ -138,9 +129,7 @@ function createInitialState(product: Product | null): FormState {
     price: String(product.price ?? ""),
     currency: product.currency || "USD",
     image_url: product.image_url || "",
-    images: Array.isArray(product.images)
-      ? product.images.filter(Boolean)
-      : [],
+    images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
     supplier_name: product.supplier_name || "",
     supplier_product_id: product.supplier_product_id || "",
     warehouse_country: product.warehouse_country || "",
@@ -150,12 +139,8 @@ function createInitialState(product: Product | null): FormState {
     processing_time: product.processing_time || "",
     delivery_time: product.delivery_time || "",
     stock: String(product.stock ?? 0),
-    low_stock_threshold: String(
-      product.low_stock_threshold ?? 5,
-    ),
-    variants: Array.isArray(product.variants)
-      ? product.variants
-      : [],
+    low_stock_threshold: String(product.low_stock_threshold ?? 5),
+    variants: Array.isArray(product.variants) ? product.variants : [],
     active: Number(product.active) === 1,
   };
 }
@@ -187,9 +172,7 @@ function Field({
     <div>
       <label className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
         {label}
-        {required && (
-          <span className="ml-1 text-red-500">*</span>
-        )}
+        {required && <span className="ml-1 text-red-500">*</span>}
       </label>
 
       {children}
@@ -216,12 +199,11 @@ export default function ProductModal({
 }: ProductModalProps) {
   const isEditing = Boolean(product);
 
-  const [form, setForm] = useState<FormState>(
-    createInitialState(product),
-  );
+  const [form, setForm] = useState<FormState>(createInitialState(product));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [newImage, setNewImage] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [autoSlug, setAutoSlug] = useState(!product);
 
   useEffect(() => {
@@ -238,8 +220,7 @@ export default function ProductModal({
 
     const totalCost = supplier + shipping + other;
     const profit = selling - totalCost;
-    const margin =
-      selling > 0 ? (profit / selling) * 100 : 0;
+    const margin = selling > 0 ? (profit / selling) * 100 : 0;
 
     return {
       supplier,
@@ -250,12 +231,7 @@ export default function ProductModal({
       profit,
       margin,
     };
-  }, [
-    form.price,
-    form.supplier_cost,
-    form.shipping_cost,
-    form.other_cost,
-  ]);
+  }, [form.price, form.supplier_cost, form.shipping_cost, form.other_cost]);
 
   function updateField<K extends keyof FormState>(
     field: K,
@@ -286,9 +262,7 @@ export default function ProductModal({
 
     setForm((current) => ({
       ...current,
-      images: Array.from(
-        new Set([...current.images, value]),
-      ),
+      images: Array.from(new Set([...current.images, value])),
       image_url: current.image_url || value,
     }));
 
@@ -315,10 +289,7 @@ export default function ProductModal({
   function addVariant() {
     setForm((current) => ({
       ...current,
-      variants: [
-        ...current.variants,
-        createEmptyVariant(),
-      ],
+      variants: [...current.variants, createEmptyVariant()],
     }));
   }
 
@@ -329,14 +300,13 @@ export default function ProductModal({
   ) {
     setForm((current) => ({
       ...current,
-      variants: current.variants.map(
-        (variant, variantIndex) =>
-          variantIndex === index
-            ? {
-                ...variant,
-                [field]: value,
-              }
-            : variant,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index
+          ? {
+              ...variant,
+              [field]: value,
+            }
+          : variant,
       ),
     }));
   }
@@ -350,9 +320,7 @@ export default function ProductModal({
     }));
   }
 
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setError("");
@@ -388,30 +356,18 @@ export default function ProductModal({
         description: form.description.trim(),
         price: Number(form.price),
         currency: form.currency,
-        image_url:
-          form.image_url.trim() ||
-          form.images[0] ||
-          undefined,
+        image_url: form.image_url.trim() || form.images[0] || undefined,
         images: form.images,
-        supplier_name:
-          form.supplier_name.trim() || undefined,
-        supplier_product_id:
-          form.supplier_product_id.trim() || undefined,
-        warehouse_country:
-          form.warehouse_country.trim() || undefined,
-        supplier_cost:
-          Number(form.supplier_cost) || 0,
-        shipping_cost:
-          Number(form.shipping_cost) || 0,
-        other_cost:
-          Number(form.other_cost) || 0,
-        processing_time:
-          form.processing_time.trim() || undefined,
-        delivery_time:
-          form.delivery_time.trim() || undefined,
+        supplier_name: form.supplier_name.trim() || undefined,
+        supplier_product_id: form.supplier_product_id.trim() || undefined,
+        warehouse_country: form.warehouse_country.trim() || undefined,
+        supplier_cost: Number(form.supplier_cost) || 0,
+        shipping_cost: Number(form.shipping_cost) || 0,
+        other_cost: Number(form.other_cost) || 0,
+        processing_time: form.processing_time.trim() || undefined,
+        delivery_time: form.delivery_time.trim() || undefined,
         stock: Number(form.stock) || 0,
-        low_stock_threshold:
-          Number(form.low_stock_threshold) || 0,
+        low_stock_threshold: Number(form.low_stock_threshold) || 0,
         variants: form.variants,
         active: form.active ? 1 : 0,
       };
@@ -424,11 +380,7 @@ export default function ProductModal({
     } catch (err) {
       console.error(err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to save product.",
-      );
+      setError(err instanceof Error ? err.message : "Failed to save product.");
     } finally {
       setSaving(false);
     }
@@ -441,9 +393,7 @@ export default function ProductModal({
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
           <div>
             <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              {isEditing
-                ? "Edit product"
-                : "Add product"}
+              {isEditing ? "Edit product" : "Add product"}
             </h2>
 
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
@@ -475,10 +425,7 @@ export default function ProductModal({
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="flex-1">{error}</span>
 
-                <button
-                  type="button"
-                  onClick={() => setError("")}
-                >
+                <button type="button" onClick={() => setError("")}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -499,9 +446,7 @@ export default function ProductModal({
                 <Field label="Product name" required>
                   <input
                     value={form.name}
-                    onChange={(event) =>
-                      handleNameChange(event.target.value)
-                    }
+                    onChange={(event) => handleNameChange(event.target.value)}
                     className={inputClass}
                     placeholder="e.g. Wireless Bluetooth Headphones"
                     autoFocus
@@ -515,10 +460,7 @@ export default function ProductModal({
                         value={form.slug}
                         onChange={(event) => {
                           setAutoSlug(false);
-                          updateField(
-                            "slug",
-                            slugify(event.target.value),
-                          );
+                          updateField("slug", slugify(event.target.value));
                         }}
                         className={inputClass}
                         placeholder="wireless-bluetooth-headphones"
@@ -528,10 +470,7 @@ export default function ProductModal({
                         type="button"
                         onClick={() => {
                           setAutoSlug(true);
-                          updateField(
-                            "slug",
-                            slugify(form.name),
-                          );
+                          updateField("slug", slugify(form.name));
                         }}
                         className="shrink-0 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
@@ -544,10 +483,7 @@ export default function ProductModal({
                     <input
                       value={form.sku}
                       onChange={(event) =>
-                        updateField(
-                          "sku",
-                          event.target.value,
-                        )
+                        updateField("sku", event.target.value)
                       }
                       className={inputClass}
                       placeholder="Optional SKU"
@@ -561,18 +497,12 @@ export default function ProductModal({
                       <select
                         value={form.category}
                         onChange={(event) =>
-                          updateField(
-                            "category",
-                            event.target.value,
-                          )
+                          updateField("category", event.target.value)
                         }
                         className={`${inputClass} appearance-none pr-10`}
                       >
                         {categories.map((category) => (
-                          <option
-                            key={category}
-                            value={category}
-                          >
+                          <option key={category} value={category}>
                             {category}
                           </option>
                         ))}
@@ -587,18 +517,12 @@ export default function ProductModal({
                       <select
                         value={form.currency}
                         onChange={(event) =>
-                          updateField(
-                            "currency",
-                            event.target.value,
-                          )
+                          updateField("currency", event.target.value)
                         }
                         className={`${inputClass} appearance-none pr-10`}
                       >
                         {currencies.map((currency) => (
-                          <option
-                            key={currency}
-                            value={currency}
-                          >
+                          <option key={currency} value={currency}>
                             {currency}
                           </option>
                         ))}
@@ -613,10 +537,7 @@ export default function ProductModal({
                   <textarea
                     value={form.description}
                     onChange={(event) =>
-                      updateField(
-                        "description",
-                        event.target.value,
-                      )
+                      updateField("description", event.target.value)
                     }
                     rows={5}
                     className={textareaClass}
@@ -651,10 +572,7 @@ export default function ProductModal({
                         step="0.01"
                         value={form.price}
                         onChange={(event) =>
-                          updateField(
-                            "price",
-                            event.target.value,
-                          )
+                          updateField("price", event.target.value)
                         }
                         className={`${inputClass} pl-16`}
                         placeholder="0.00"
@@ -669,10 +587,7 @@ export default function ProductModal({
                       step="0.01"
                       value={form.supplier_cost}
                       onChange={(event) =>
-                        updateField(
-                          "supplier_cost",
-                          event.target.value,
-                        )
+                        updateField("supplier_cost", event.target.value)
                       }
                       className={inputClass}
                       placeholder="0.00"
@@ -686,10 +601,7 @@ export default function ProductModal({
                       step="0.01"
                       value={form.shipping_cost}
                       onChange={(event) =>
-                        updateField(
-                          "shipping_cost",
-                          event.target.value,
-                        )
+                        updateField("shipping_cost", event.target.value)
                       }
                       className={inputClass}
                       placeholder="0.00"
@@ -703,10 +615,7 @@ export default function ProductModal({
                       step="0.01"
                       value={form.other_cost}
                       onChange={(event) =>
-                        updateField(
-                          "other_cost",
-                          event.target.value,
-                        )
+                        updateField("other_cost", event.target.value)
                       }
                       className={inputClass}
                       placeholder="0.00"
@@ -720,10 +629,7 @@ export default function ProductModal({
                       Total cost
                     </p>
                     <p className="mt-1 text-lg font-bold">
-                      {formatMoney(
-                        costs.totalCost,
-                        form.currency,
-                      )}
+                      {formatMoney(costs.totalCost, form.currency)}
                     </p>
                   </div>
 
@@ -738,10 +644,7 @@ export default function ProductModal({
                           : "text-emerald-600 dark:text-emerald-400"
                       }`}
                     >
-                      {formatMoney(
-                        costs.profit,
-                        form.currency,
-                      )}
+                      {formatMoney(costs.profit, form.currency)}
                     </p>
                   </div>
 
@@ -769,10 +672,7 @@ export default function ProductModal({
                       Selling price
                     </p>
                     <p className="mt-1 text-lg font-bold">
-                      {formatMoney(
-                        costs.selling,
-                        form.currency,
-                      )}
+                      {formatMoney(costs.selling, form.currency)}
                     </p>
                   </div>
                 </div>
@@ -798,10 +698,7 @@ export default function ProductModal({
                     step="1"
                     value={form.stock}
                     onChange={(event) =>
-                      updateField(
-                        "stock",
-                        event.target.value,
-                      )
+                      updateField("stock", event.target.value)
                     }
                     className={inputClass}
                     placeholder="0"
@@ -818,10 +715,7 @@ export default function ProductModal({
                     step="1"
                     value={form.low_stock_threshold}
                     onChange={(event) =>
-                      updateField(
-                        "low_stock_threshold",
-                        event.target.value,
-                      )
+                      updateField("low_stock_threshold", event.target.value)
                     }
                     className={inputClass}
                     placeholder="5"
@@ -837,38 +731,79 @@ export default function ProductModal({
                   Product media
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Upload a JPG, PNG, or WebP image (maximum 5 MB), or use an image URL. The first image is used as the primary image.
+                  Upload a JPG, PNG, or WebP image (maximum 5 MB), or use an
+                  image URL. The first image is used as the primary image.
                 </p>
               </div>
 
               <div className="p-5">
                 <label className="mb-4 flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-slate-300 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-950">
-                  <Upload className="h-5 w-5" /> Upload product image
-                  <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (!file) return;
-                    const allowed = ["image/jpeg", "image/png", "image/webp"];
-                    if (!allowed.includes(file.type)) { setError("Choose a JPG, PNG, or WebP image."); return; }
-                    if (file.size > 5 * 1024 * 1024) { setError("Product images must be 5 MB or smaller."); return; }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      if (typeof reader.result !== "string") { setError("Unable to read this image."); return; }
-                      setError("");
-                      setForm((current) => ({ ...current, image_url: reader.result as string, images: Array.from(new Set([reader.result as string, ...current.images])) }));
-                    };
-                    reader.onerror = () => setError("Unable to read this image.");
-                    reader.readAsDataURL(file);
-                  }} />
+                  <Upload className="h-5 w-5" />
+                  {uploadingImage
+                    ? "Uploading image..."
+                    : "Upload product image"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!file) return;
+
+                      const allowed = ["image/jpeg", "image/png", "image/webp"];
+                      if (!allowed.includes(file.type)) {
+                        setError("Choose a JPG, PNG, or WebP image.");
+                        return;
+                      }
+
+                      if (file.size > 5 * 1024 * 1024) {
+                        setError("Product images must be 5 MB or smaller.");
+                        return;
+                      }
+
+                      try {
+                        setUploadingImage(true);
+                        setError("");
+
+                        const publicId = [
+                          "products",
+                          file.name
+                            .replace(/\.[^/.]+$/, "")
+                            .replace(/[^a-zA-Z0-9_-]+/g, "-")
+                            .replace(/^-+|-+$/g, "") || "product",
+                          Date.now().toString(),
+                        ].join("/");
+
+                        const { url } = await uploadCloudinaryAsset(
+                          file,
+                          "image",
+                          "products",
+                          publicId,
+                        );
+
+                        setForm((current) => ({
+                          ...current,
+                          image_url: url,
+                          images: Array.from(new Set([url, ...current.images])),
+                        }));
+                      } catch (uploadError) {
+                        setError(
+                          uploadError instanceof Error
+                            ? uploadError.message
+                            : "Unable to upload this image.",
+                        );
+                      } finally {
+                        setUploadingImage(false);
+                      }
+                    }}
+                  />
                 </label>
                 <Field label="Primary image URL or uploaded image">
                   <input
                     value={form.image_url}
                     onChange={(event) =>
-                      updateField(
-                        "image_url",
-                        event.target.value,
-                      )
+                      updateField("image_url", event.target.value)
                     }
                     className={inputClass}
                     placeholder="https://..."
@@ -877,24 +812,18 @@ export default function ProductModal({
 
                 <div className="mt-5">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm font-semibold">
-                      Additional images
-                    </p>
+                    <p className="text-sm font-semibold">Additional images</p>
 
                     <span className="text-xs text-slate-500">
                       {form.images.length} image
-                      {form.images.length === 1
-                        ? ""
-                        : "s"}
+                      {form.images.length === 1 ? "" : "s"}
                     </span>
                   </div>
 
                   <div className="flex gap-2">
                     <input
                       value={newImage}
-                      onChange={(event) =>
-                        setNewImage(event.target.value)
-                      }
+                      onChange={(event) => setNewImage(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -928,8 +857,7 @@ export default function ProductModal({
                               alt={`Product image ${index + 1}`}
                               className="h-full w-full object-cover"
                               onError={(event) => {
-                                event.currentTarget.style.display =
-                                  "none";
+                                event.currentTarget.style.display = "none";
                               }}
                             />
 
@@ -940,16 +868,12 @@ export default function ProductModal({
 
                           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/60 px-2 py-1.5">
                             <span className="text-[10px] font-semibold text-white">
-                              {index === 0
-                                ? "Image 1"
-                                : `Image ${index + 1}`}
+                              {index === 0 ? "Image 1" : `Image ${index + 1}`}
                             </span>
 
                             <button
                               type="button"
-                              onClick={() =>
-                                removeImage(index)
-                              }
+                              onClick={() => removeImage(index)}
                               className="rounded-md p-1 text-white transition hover:bg-white/20"
                               aria-label="Remove image"
                             >
@@ -1005,103 +929,79 @@ export default function ProductModal({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {form.variants.map(
-                      (variant, index) => (
-                        <div
-                          key={variant.id || index}
-                          className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"
-                        >
-                          <div className="mb-3 flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                              Variant {index + 1}
-                            </span>
+                    {form.variants.map((variant, index) => (
+                      <div
+                        key={variant.id || index}
+                        className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Variant {index + 1}
+                          </span>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeVariant(index)
-                              }
-                              className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/30"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-                            <input
-                              value={variant.name}
-                              onChange={(event) =>
-                                updateVariant(
-                                  index,
-                                  "name",
-                                  event.target.value,
-                                )
-                              }
-                              className={inputClass}
-                              placeholder="Option"
-                            />
-
-                            <input
-                              value={variant.value}
-                              onChange={(event) =>
-                                updateVariant(
-                                  index,
-                                  "value",
-                                  event.target.value,
-                                )
-                              }
-                              className={inputClass}
-                              placeholder="Value"
-                            />
-
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={variant.price}
-                              onChange={(event) =>
-                                updateVariant(
-                                  index,
-                                  "price",
-                                  event.target.value,
-                                )
-                              }
-                              className={inputClass}
-                              placeholder="Price"
-                            />
-
-                            <input
-                              value={variant.sku}
-                              onChange={(event) =>
-                                updateVariant(
-                                  index,
-                                  "sku",
-                                  event.target.value,
-                                )
-                              }
-                              className={inputClass}
-                              placeholder="SKU"
-                            />
-
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={variant.stock}
-                              onChange={(event) =>
-                                updateVariant(
-                                  index,
-                                  "stock",
-                                  event.target.value,
-                                )
-                              }
-                              className={inputClass}
-                              placeholder="Stock"
-                            />
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeVariant(index)}
+                            className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/30"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
-                      ),
-                    )}
+
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+                          <input
+                            value={variant.name}
+                            onChange={(event) =>
+                              updateVariant(index, "name", event.target.value)
+                            }
+                            className={inputClass}
+                            placeholder="Option"
+                          />
+
+                          <input
+                            value={variant.value}
+                            onChange={(event) =>
+                              updateVariant(index, "value", event.target.value)
+                            }
+                            className={inputClass}
+                            placeholder="Value"
+                          />
+
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={variant.price}
+                            onChange={(event) =>
+                              updateVariant(index, "price", event.target.value)
+                            }
+                            className={inputClass}
+                            placeholder="Price"
+                          />
+
+                          <input
+                            value={variant.sku}
+                            onChange={(event) =>
+                              updateVariant(index, "sku", event.target.value)
+                            }
+                            className={inputClass}
+                            placeholder="SKU"
+                          />
+
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={variant.stock}
+                            onChange={(event) =>
+                              updateVariant(index, "stock", event.target.value)
+                            }
+                            className={inputClass}
+                            placeholder="Stock"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1114,7 +1014,8 @@ export default function ProductModal({
                   Supplier & fulfillment
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Keep supplier and fulfillment information attached to the product.
+                  Keep supplier and fulfillment information attached to the
+                  product.
                 </p>
               </div>
 
@@ -1123,10 +1024,7 @@ export default function ProductModal({
                   <input
                     value={form.supplier_name}
                     onChange={(event) =>
-                      updateField(
-                        "supplier_name",
-                        event.target.value,
-                      )
+                      updateField("supplier_name", event.target.value)
                     }
                     className={inputClass}
                     placeholder="Supplier or vendor name"
@@ -1137,10 +1035,7 @@ export default function ProductModal({
                   <input
                     value={form.supplier_product_id}
                     onChange={(event) =>
-                      updateField(
-                        "supplier_product_id",
-                        event.target.value,
-                      )
+                      updateField("supplier_product_id", event.target.value)
                     }
                     className={inputClass}
                     placeholder="Supplier product/reference ID"
@@ -1152,22 +1047,14 @@ export default function ProductModal({
                     <select
                       value={form.warehouse_country}
                       onChange={(event) =>
-                        updateField(
-                          "warehouse_country",
-                          event.target.value,
-                        )
+                        updateField("warehouse_country", event.target.value)
                       }
                       className={`${inputClass} appearance-none pr-10`}
                     >
-                      <option value="">
-                        Select country
-                      </option>
+                      <option value="">Select country</option>
 
                       {countries.map((country) => (
-                        <option
-                          key={country}
-                          value={country}
-                        >
+                        <option key={country} value={country}>
                           {country}
                         </option>
                       ))}
@@ -1181,10 +1068,7 @@ export default function ProductModal({
                   <input
                     value={form.processing_time}
                     onChange={(event) =>
-                      updateField(
-                        "processing_time",
-                        event.target.value,
-                      )
+                      updateField("processing_time", event.target.value)
                     }
                     className={inputClass}
                     placeholder="e.g. 1–3 business days"
@@ -1195,10 +1079,7 @@ export default function ProductModal({
                   <input
                     value={form.delivery_time}
                     onChange={(event) =>
-                      updateField(
-                        "delivery_time",
-                        event.target.value,
-                      )
+                      updateField("delivery_time", event.target.value)
                     }
                     className={inputClass}
                     placeholder="e.g. 5–10 business days"
@@ -1221,12 +1102,7 @@ export default function ProductModal({
 
                 <button
                   type="button"
-                  onClick={() =>
-                    updateField(
-                      "active",
-                      !form.active,
-                    )
-                  }
+                  onClick={() => updateField("active", !form.active)}
                   className={`relative h-7 w-12 shrink-0 rounded-full transition ${
                     form.active
                       ? "bg-emerald-500"
@@ -1236,9 +1112,7 @@ export default function ProductModal({
                 >
                   <span
                     className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${
-                      form.active
-                        ? "left-6"
-                        : "left-1"
+                      form.active ? "left-6" : "left-1"
                     }`}
                   />
                 </button>
@@ -1254,14 +1128,10 @@ export default function ProductModal({
                 >
                   <span
                     className={`h-2 w-2 rounded-full ${
-                      form.active
-                        ? "bg-emerald-500"
-                        : "bg-slate-400"
+                      form.active ? "bg-emerald-500" : "bg-slate-400"
                     }`}
                   />
-                  {form.active
-                    ? "Active and visible"
-                    : "Inactive"}
+                  {form.active ? "Active and visible" : "Inactive"}
                 </span>
               </div>
             </section>
@@ -1298,9 +1168,7 @@ export default function ProductModal({
                 ) : (
                   <>
                     <Check className="h-4 w-4" />
-                    {isEditing
-                      ? "Save changes"
-                      : "Add product"}
+                    {isEditing ? "Save changes" : "Add product"}
                   </>
                 )}
               </button>

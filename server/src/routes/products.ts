@@ -60,23 +60,72 @@ function serializePublicProduct(product: Product) {
 /* VALIDATION                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function validateUploadedImage(value: unknown): string | null {
+function rejectLegacyDataUpload(
+  value: unknown,
+  fieldLabel: string,
+): string | null {
   if (typeof value !== "string" || !value.startsWith("data:")) {
     return null;
   }
 
-  const match = value.match(
-    /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/,
-  );
+  return `Direct ${fieldLabel} uploads are blocked. Please upload through Cloudinary and store the Cloudinary URL instead.`;
+}
 
-  if (!match) {
-    return "Uploaded images must be valid JPG, PNG, or WebP files.";
+function validateCloudinaryMediaInput(
+  value: unknown,
+  fieldLabel: string,
+): string | null {
+  const directUploadError = rejectLegacyDataUpload(value, fieldLabel);
+  if (directUploadError) {
+    return directUploadError;
   }
 
-  const approximateBytes = Math.floor((match[2].length * 3) / 4);
+  if (typeof value !== "string") {
+    return null;
+  }
 
-  if (approximateBytes > 5 * 1024 * 1024) {
-    return "Product images must be 5 MB or smaller.";
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const nestedError = rejectLegacyDataUpload(item, fieldLabel);
+        if (nestedError) {
+          return nestedError;
+        }
+      }
+    }
+  } catch {
+    // Plain string values are already checked above; JSON arrays are validated.
+  }
+
+  return null;
+}
+
+function validateCloudinaryMediaCollection(
+  value: unknown,
+  fieldLabel: string,
+): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const itemError = rejectLegacyDataUpload(item, fieldLabel);
+      if (itemError) {
+        return itemError;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return validateCloudinaryMediaCollection(parsed, fieldLabel);
+      }
+    } catch {
+      // String values are handled below.
+    }
+
+    return rejectLegacyDataUpload(value, fieldLabel);
   }
 
   return null;
@@ -732,15 +781,27 @@ products.post("/", authMiddleware, async (c) => {
   try {
     const body = (await c.req.json()) as Record<string, unknown>;
 
-    const imageValidationError = validateUploadedImage(
+    const imageValidationError = validateCloudinaryMediaInput(
       body.image_url ?? body.imageUrl,
+      "product image",
+    );
+    const galleryValidationError = validateCloudinaryMediaCollection(
+      body.images ?? body.imageUrls ?? body.gallery,
+      "product gallery image",
+    );
+    const videoValidationError = validateCloudinaryMediaInput(
+      body.video_url ?? body.videoUrl,
+      "product video",
     );
 
-    if (imageValidationError) {
+    const mediaValidationError =
+      imageValidationError || galleryValidationError || videoValidationError;
+
+    if (mediaValidationError) {
       return c.json(
         {
           success: false,
-          error: imageValidationError,
+          error: mediaValidationError,
         },
         400,
       );
@@ -876,15 +937,27 @@ products.patch("/:id", authMiddleware, async (c) => {
 
     const body = (await c.req.json()) as Record<string, unknown>;
 
-    const imageValidationError = validateUploadedImage(
+    const imageValidationError = validateCloudinaryMediaInput(
       body.image_url ?? body.imageUrl,
+      "product image",
+    );
+    const galleryValidationError = validateCloudinaryMediaCollection(
+      body.images ?? body.imageUrls ?? body.gallery,
+      "product gallery image",
+    );
+    const videoValidationError = validateCloudinaryMediaInput(
+      body.video_url ?? body.videoUrl,
+      "product video",
     );
 
-    if (imageValidationError) {
+    const mediaValidationError =
+      imageValidationError || galleryValidationError || videoValidationError;
+
+    if (mediaValidationError) {
       return c.json(
         {
           success: false,
-          error: imageValidationError,
+          error: mediaValidationError,
         },
         400,
       );
