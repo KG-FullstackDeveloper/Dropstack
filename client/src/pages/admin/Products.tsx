@@ -935,8 +935,8 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
 
   const [imageInput, setImageInput] = useState("");
 
-  const [mediaUploading, setMediaUploading] = useState(false);
-
+ const [imageUploading, setImageUploading] = useState(false);
+const [videoUploading, setVideoUploading] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const videoFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1084,7 +1084,7 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
       return;
     }
 
-    setMediaUploading(true);
+    setImageUploading(true);
     setError("");
 
     void (async () => {
@@ -1109,7 +1109,7 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
             : "Unable to upload product images.",
         );
       } finally {
-        setMediaUploading(false);
+        setImageUploading(false);
       }
     })();
   }
@@ -1128,7 +1128,7 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
       return;
     }
 
-    setMediaUploading(true);
+    setVideoUploading(true);
     setError("");
     try {
       setField("videoUrl", await uploadProductMedia(file, "video"));
@@ -1139,7 +1139,7 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
           : "Unable to upload this product video.",
       );
     } finally {
-      setMediaUploading(false);
+      setVideoUploading(false);
     }
   }
 
@@ -1368,11 +1368,11 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
                   <button
                     type="button"
                     onClick={() => imageFileInputRef.current?.click()}
-                    disabled={mediaUploading}
+                    disabled={imageUploading}
                     className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
                   >
                     <Upload size={16} />
-                    {mediaUploading ? "Uploading..." : "Upload images"}
+                    {imageUploading ? "Uploading..." : "Upload images"}
                   </button>
 
                   <input
@@ -1512,11 +1512,11 @@ function ProductModal({ product, onClose, onSaved }: ProductModalProps) {
                           <button
                             type="button"
                             onClick={() => videoFileInputRef.current?.click()}
-                            disabled={mediaUploading}
+                            disabled={videoUploading}
                             className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
                           >
                             <Upload size={15} />
-                            {mediaUploading ? "Uploading..." : "Upload video"}
+                            {videoUploading ? "Uploading..." : "Upload video"}
                           </button>
                         </>
                       )}
