@@ -1,4 +1,3 @@
-
 import { Hono } from "hono";
 import type { WorkerEnvironment } from "./types";
 
@@ -16,14 +15,15 @@ import inventoryService from "./inventory-service";
 import discountsService from "./discounts-service";
 import ordersService from "./orders-service";
 import settingsService from "./settings-service";
+import mediaService from "./media-service";
 
 const routes = new Hono<WorkerEnvironment>();
 
 routes.get("/health", async (c) => {
   try {
-    const result = await c.env.DB.prepare(
-      "SELECT 1 AS healthy",
-    ).first<{ healthy: number }>();
+    const result = await c.env.DB.prepare("SELECT 1 AS healthy").first<{
+      healthy: number;
+    }>();
 
     if (result?.healthy !== 1) {
       throw new Error("D1 health check failed.");
@@ -133,6 +133,7 @@ routes.get("/auth/me", workerAuthMiddleware, async (c) => {
 // Application services
 routes.route("/ai", aiService);
 routes.route("/admin", adminService);
+routes.route("/media", mediaService);
 routes.route("/products", productsService);
 routes.route("/stores", storesService);
 routes.route("/customers", customersService);

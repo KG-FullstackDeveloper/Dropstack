@@ -1,4 +1,3 @@
-
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { WorkerEnvironment, AdminRecord } from "./types";
@@ -63,10 +62,7 @@ adminService.get("/profile", async (c) => {
       .first<Omit<AdminRecord, "password_hash">>();
 
     if (!admin) {
-      return c.json(
-        { success: false, error: "Admin account not found." },
-        404,
-      );
+      return c.json({ success: false, error: "Admin account not found." }, 404);
     }
 
     return c.json({
@@ -170,19 +166,27 @@ adminService.post("/platform-owner/customers", async (c) => {
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const email =
-      typeof body.email === "string"
-        ? body.email.trim().toLowerCase()
-        : "";
+      typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const company =
       typeof body.company === "string" && body.company.trim()
         ? body.company.trim()
         : null;
 
-    const plan = String(body.plan || "starter").trim().toLowerCase();
-    const status = String(body.status || "active").trim().toLowerCase();
+    const plan = String(body.plan || "starter")
+      .trim()
+      .toLowerCase();
+    const status = String(body.status || "active")
+      .trim()
+      .toLowerCase();
 
-    const allowedPlans = ["starter", "growth", "scale"];
-    const allowedStatuses = ["active", "trial", "expired"];
+    const allowedPlans = ["starter", "growth", "professional", "scale"];
+    const allowedStatuses = [
+      "active",
+      "trial",
+      "expired",
+      "suspended",
+      "banned",
+    ];
 
     const storeLimit = Number(body.storeLimit ?? 1);
 
@@ -199,7 +203,11 @@ adminService.post("/platform-owner/customers", async (c) => {
       );
     }
 
-    if (name.length > 150 || email.length > 254 || (company && company.length > 200)) {
+    if (
+      name.length > 150 ||
+      email.length > 254 ||
+      (company && company.length > 200)
+    ) {
       return c.json(
         { success: false, error: "One or more customer fields are too long." },
         400,
@@ -227,11 +235,7 @@ adminService.post("/platform-owner/customers", async (c) => {
       );
     }
 
-    if (
-      !Number.isInteger(storeLimit) ||
-      storeLimit < 1 ||
-      storeLimit > 1000
-    ) {
+    if (!Number.isInteger(storeLimit) || storeLimit < 1 || storeLimit > 1000) {
       return c.json(
         { success: false, error: "Store limit must be between 1 and 1000." },
         400,
@@ -243,7 +247,10 @@ adminService.post("/platform-owner/customers", async (c) => {
       Number.isNaN(Date.parse(subscriptionExpiresAt))
     ) {
       return c.json(
-        { success: false, error: "Please provide a valid subscription expiry date." },
+        {
+          success: false,
+          error: "Please provide a valid subscription expiry date.",
+        },
         400,
       );
     }
@@ -322,7 +329,10 @@ adminService.post("/platform-owner/customers", async (c) => {
 
     if (!created) {
       return c.json(
-        { success: false, error: "Customer was created but could not be retrieved." },
+        {
+          success: false,
+          error: "Customer was created but could not be retrieved.",
+        },
         500,
       );
     }
@@ -337,8 +347,7 @@ adminService.post("/platform-owner/customers", async (c) => {
   } catch (error) {
     console.error("Platform owner customer creation failed:", error);
 
-    const message =
-      error instanceof Error ? error.message.toLowerCase() : "";
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
 
     if (message.includes("unique") || message.includes("constraint")) {
       return c.json(
@@ -352,6 +361,143 @@ adminService.post("/platform-owner/customers", async (c) => {
 
     return c.json(
       { success: false, error: "Unable to create the customer account." },
+      500,
+    );
+  }
+});
+
+// PATCH /api/admin/platform-owner/customers/:id
+adminService.patch("/platform-owner/customers/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = (await c.req.json().catch(() => null)) as {
+      name?: string;
+      email?: string;
+      company?: string | null;
+      plan?: string;
+      status?: string;
+      subscriptionExpiresAt?: string | null;
+      storeLimit?: number;
+    } | null;
+
+    if (!body) {
+      return c.json({ success: false, error: "Invalid customer update." }, 400);
+    }
+
+    const existing = await c.env.DB.prepare(
+      `SELECT id FROM platform_customers WHERE id = ? LIMIT 1`,
+    )
+      .bind(id)
+      .first<{ id: string }>();
+
+    if (!existing) {
+      return c.json({ success: false, error: "Customer not found." }, 404);
+    }
+
+    const current = await c.env.DB.prepare(
+      `SELECT
+         name,
+         email,
+         company,
+         plan,
+         status,
+         subscription_expires_at,
+         store_limit,
+         stores_used
+       FROM platform_customers
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(id)
+      .first<{
+        name: string;
+        email: string;
+        company: string | null;
+        plan: string;
+        status: string;
+        subscription_expires_at: string | null;
+        store_limit: number;
+        stores_used: number;
+      }>();
+
+    const nextName = body.name?.trim() || current?.name || "";
+    const nextEmail = (
+      (body.email || current?.email || "").trim() || ""
+    ).toLowerCase();
+    const nextCompany = body.company?.trim() || current?.company || null;
+    const nextPlan = body.plan || current?.plan || "starter";
+    const nextStatus = body.status || current?.status || "active";
+    const nextExpiresAt =
+      body.subscriptionExpiresAt ?? current?.subscription_expires_at ?? null;
+    const nextStoreLimit = Number(body.storeLimit ?? current?.store_limit ?? 1);
+
+    const allowedPlans = ["starter", "growth", "professional", "scale"];
+    const allowedStatuses = [
+      "active",
+      "trial",
+      "expired",
+      "suspended",
+      "banned",
+    ];
+
+    if (!allowedPlans.includes(nextPlan.toLowerCase())) {
+      return c.json(
+        { success: false, error: "Please select a valid customer plan." },
+        400,
+      );
+    }
+
+    if (!allowedStatuses.includes(nextStatus.toLowerCase())) {
+      return c.json(
+        { success: false, error: "Please select a valid customer status." },
+        400,
+      );
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE platform_customers
+       SET name = ?, email = ?, company = ?, plan = ?, status = ?,
+           subscription_expires_at = ?, store_limit = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+      .bind(
+        nextName,
+        nextEmail,
+        nextCompany,
+        nextPlan.toLowerCase(),
+        nextStatus.toLowerCase(),
+        nextExpiresAt,
+        Number.isFinite(nextStoreLimit) ? nextStoreLimit : 1,
+        new Date().toISOString(),
+        id,
+      )
+      .run();
+
+    const customer = await c.env.DB.prepare(
+      `SELECT
+         id,
+         name,
+         email,
+         company,
+         plan,
+         status,
+         subscription_expires_at AS subscriptionExpiresAt,
+         store_limit AS storeLimit,
+         stores_used AS storesUsed,
+         created_at AS createdAt,
+         updated_at AS updatedAt
+       FROM platform_customers
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(id)
+      .first<PlatformCustomer>();
+
+    return c.json({ success: true, data: customer });
+  } catch (error) {
+    console.error("Platform owner customer update failed:", error);
+    return c.json(
+      { success: false, error: "Unable to update the customer account." },
       500,
     );
   }

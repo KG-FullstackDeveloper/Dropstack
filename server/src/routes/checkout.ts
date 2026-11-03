@@ -35,7 +35,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_discount_redemptions_customer ON store_discount_redemptions(discount_id, customer_email);
 `);
 
-
 type Workspace = "global" | "nigeria";
 
 function normalizeWorkspace(value: unknown): Workspace | null {
@@ -116,18 +115,48 @@ checkout.get("/shipping", async (c) => {
 
     if (workspace === "global") {
       const settings = getShippingSettings(workspace, country);
+      const standardOptions = await Promise.all(
+        settings.options
+          .filter((option) => option.active)
+          .map(async (option) => ({
+            id: option.id,
+            name: option.name,
+            price: await convertCurrencyAmount(option.price, "USD", currency),
+            minDays: option.minDays,
+            maxDays: option.maxDays,
+            deliveryEstimate:
+              store.delivery_estimate ||
+              (option.minDays === option.maxDays
+                ? `${option.minDays} business days`
+                : `${option.minDays}–${option.maxDays} business days`),
+          })),
+      );
+
+      const configuredShipping =
+        store.shipping_fee !== null
+          ? [
+              {
+                id: "store-configured",
+                name: "Standard delivery",
+                price: await convertCurrencyAmount(
+                  Number(store.shipping_fee),
+                  "USD",
+                  currency,
+                ),
+                minDays: 0,
+                maxDays: 0,
+                deliveryEstimate:
+                  store.delivery_estimate ||
+                  "Delivery time confirmed by the store",
+              },
+            ]
+          : [];
+
       return c.json({
         success: true,
         data: {
           policyText: settings.policyText,
-          options: [{
-            id: "free-shipping",
-            name: "Free shipping",
-            price: 0,
-            minDays: 0,
-            maxDays: 0,
-            deliveryEstimate: store.delivery_estimate || "Delivery estimate provided after order review",
-          }],
+          options: [...configuredShipping, ...standardOptions],
         },
       });
     }
@@ -293,22 +322,35 @@ checkout.post("/", async (c) => {
       shippingSettings = getShippingSettings(workspace, country);
 
       if (workspace === "global") {
-        if (shippingMethodId !== "free-shipping") {
-          return c.json(
-            { success: false, error: "Free shipping is the only available shipping option." },
-            400,
+        if (
+          store.shipping_fee !== null &&
+          shippingMethodId === "store-configured"
+        ) {
+          selectedShipping = {
+            id: "store-configured",
+            name: "Standard delivery",
+            code: "STD",
+            price: await convertCurrencyAmount(
+              Number(store.shipping_fee),
+              "USD",
+              currency,
+            ),
+            minDays: 0,
+            maxDays: 0,
+            deliveryEstimate:
+              store.delivery_estimate || "Delivery time confirmed by the store",
+          };
+        } else {
+          selectedShipping = await resolveShippingOption(
+            workspace,
+            country,
+            shippingMethodId,
+            currency,
           );
+          if (store.delivery_estimate) {
+            selectedShipping.deliveryEstimate = store.delivery_estimate;
+          }
         }
-
-        selectedShipping = {
-          id: "free-shipping",
-          name: "Free shipping",
-          code: "FREE",
-          price: 0,
-          minDays: 0,
-          maxDays: 0,
-          deliveryEstimate: store.delivery_estimate || "Delivery estimate provided after order review",
-        };
       } else if (store.shipping_fee !== null) {
         if (shippingMethodId !== "store-configured") {
           return c.json(
@@ -629,32 +671,123 @@ checkout.post("/", async (c) => {
     const shippingFee = selectedShipping.price;
     let discountAmount = 0;
     let appliedDiscount: any = null;
-    const discountCode = workspace === "global" ? String((body as any).discount_code || "").trim().toUpperCase().replace(/\s+/g, "") : "";
+    const discountCode =
+      workspace === "global"
+        ? String((body as any).discount_code || "")
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, "")
+        : "";
 
     // Nigeria checkout remains unchanged; only Global checkout redeems these codes.
     if (discountCode) {
-      const discount: any = db.prepare("SELECT * FROM store_discounts WHERE store_id = ? AND code = ? AND active = 1").get(storeId, discountCode);
-      if (!discount) return c.json({ success: false, error: "This discount code is invalid or inactive." }, 400);
+      const discount: any = db
+        .prepare(
+          "SELECT * FROM store_discounts WHERE store_id = ? AND code = ? AND active = 1",
+        )
+        .get(storeId, discountCode);
+      if (!discount)
+        return c.json(
+          {
+            success: false,
+            error: "This discount code is invalid or inactive.",
+          },
+          400,
+        );
       const nowMs = Date.now();
-      if (discount.starts_at && nowMs < Date.parse(discount.starts_at)) return c.json({ success: false, error: "This discount has not started yet." }, 400);
-      if (discount.ends_at && nowMs > Date.parse(discount.ends_at)) return c.json({ success: false, error: "This discount has expired." }, 400);
-      if (discount.usage_limit != null && Number(discount.usage_count) >= Number(discount.usage_limit)) return c.json({ success: false, error: "This discount has reached its usage limit." }, 400);
-      if (discount.minimum_order_amount != null && subtotal < Number(discount.minimum_order_amount)) return c.json({ success: false, error: `Minimum order subtotal is ${discount.minimum_order_amount}.` }, 400);
+      if (discount.starts_at && nowMs < Date.parse(discount.starts_at))
+        return c.json(
+          { success: false, error: "This discount has not started yet." },
+          400,
+        );
+      if (discount.ends_at && nowMs > Date.parse(discount.ends_at))
+        return c.json(
+          { success: false, error: "This discount has expired." },
+          400,
+        );
+      if (
+        discount.usage_limit != null &&
+        Number(discount.usage_count) >= Number(discount.usage_limit)
+      )
+        return c.json(
+          {
+            success: false,
+            error: "This discount has reached its usage limit.",
+          },
+          400,
+        );
+      if (
+        discount.minimum_order_amount != null &&
+        subtotal < Number(discount.minimum_order_amount)
+      )
+        return c.json(
+          {
+            success: false,
+            error: `Minimum order subtotal is ${discount.minimum_order_amount}.`,
+          },
+          400,
+        );
       const productIds: string[] = JSON.parse(discount.product_ids || "[]");
-      const eligible = orderItems.filter(item => discount.type === "order_amount" || productIds.length === 0 || productIds.includes(item.product_id));
-      const eligibleQty = eligible.reduce((sum, item) => sum + item.quantity, 0);
-      if (discount.minimum_quantity != null && eligibleQty < Number(discount.minimum_quantity)) return c.json({ success: false, error: `Add at least ${discount.minimum_quantity} qualifying item(s).` }, 400);
+      const eligible = orderItems.filter(
+        (item) =>
+          discount.type === "order_amount" ||
+          productIds.length === 0 ||
+          productIds.includes(item.product_id),
+      );
+      const eligibleQty = eligible.reduce(
+        (sum, item) => sum + item.quantity,
+        0,
+      );
+      if (
+        discount.minimum_quantity != null &&
+        eligibleQty < Number(discount.minimum_quantity)
+      )
+        return c.json(
+          {
+            success: false,
+            error: `Add at least ${discount.minimum_quantity} qualifying item(s).`,
+          },
+          400,
+        );
       if (discount.per_customer_limit != null) {
-        const prior = db.prepare("SELECT COUNT(*) AS count FROM store_discount_redemptions WHERE discount_id = ? AND LOWER(customer_email) = LOWER(?)").get(discount.id, customerEmail) as { count: number };
-        if (prior.count >= Number(discount.per_customer_limit)) return c.json({ success: false, error: "You have already used this discount the maximum number of times." }, 400);
+        const prior = db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM store_discount_redemptions WHERE discount_id = ? AND LOWER(customer_email) = LOWER(?)",
+          )
+          .get(discount.id, customerEmail) as { count: number };
+        if (prior.count >= Number(discount.per_customer_limit))
+          return c.json(
+            {
+              success: false,
+              error:
+                "You have already used this discount the maximum number of times.",
+            },
+            400,
+          );
       }
-      if (discount.type === "order_amount") discountAmount = Math.min(subtotal, Number(discount.value));
-      else if (discount.type === "product_amount") discountAmount = Math.min(eligible.reduce((sum, item) => sum + item.total, 0), Number(discount.value));
+      if (discount.type === "order_amount")
+        discountAmount = Math.min(subtotal, Number(discount.value));
+      else if (discount.type === "product_amount")
+        discountAmount = Math.min(
+          eligible.reduce((sum, item) => sum + item.total, 0),
+          Number(discount.value),
+        );
       else if (discount.type === "buy_x_get_y") {
-        const buy = Math.max(1, Number(discount.buy_quantity || 1)); const get = Math.max(1, Number(discount.get_quantity || 1));
+        const buy = Math.max(1, Number(discount.buy_quantity || 1));
+        const get = Math.max(1, Number(discount.get_quantity || 1));
         const freeUnits = Math.floor(eligibleQty / (buy + get)) * get;
-        const prices = eligible.flatMap(item => Array.from({ length: item.quantity }, () => item.selling_price)).sort((a, b) => a - b);
-        discountAmount = prices.slice(0, freeUnits).reduce((sum, price) => sum + price, 0) * Math.min(100, Math.max(0, Number(discount.get_discount_percent ?? 100))) / 100;
+        const prices = eligible
+          .flatMap((item) =>
+            Array.from({ length: item.quantity }, () => item.selling_price),
+          )
+          .sort((a, b) => a - b);
+        discountAmount =
+          (prices.slice(0, freeUnits).reduce((sum, price) => sum + price, 0) *
+            Math.min(
+              100,
+              Math.max(0, Number(discount.get_discount_percent ?? 100)),
+            )) /
+          100;
       }
       // Global shipping is already free, so free_shipping codes have no extra monetary reduction.
       discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
@@ -756,8 +889,19 @@ checkout.post("/", async (c) => {
     if (appliedDiscount) {
       try {
         const redeem = db.transaction(() => {
-          db.prepare("INSERT INTO store_discount_redemptions (id, discount_id, store_id, order_id, customer_email, redeemed_at) VALUES (?, ?, ?, ?, ?, ?)").run(createId("discount-redemption"), appliedDiscount.id, storeId, orderId, customerEmail, now.toISOString());
-          db.prepare("UPDATE store_discounts SET usage_count = usage_count + 1, updated_at = ? WHERE id = ? AND store_id = ?").run(now.toISOString(), appliedDiscount.id, storeId);
+          db.prepare(
+            "INSERT INTO store_discount_redemptions (id, discount_id, store_id, order_id, customer_email, redeemed_at) VALUES (?, ?, ?, ?, ?, ?)",
+          ).run(
+            createId("discount-redemption"),
+            appliedDiscount.id,
+            storeId,
+            orderId,
+            customerEmail,
+            now.toISOString(),
+          );
+          db.prepare(
+            "UPDATE store_discounts SET usage_count = usage_count + 1, updated_at = ? WHERE id = ? AND store_id = ?",
+          ).run(now.toISOString(), appliedDiscount.id, storeId);
         });
         redeem();
       } catch (error) {

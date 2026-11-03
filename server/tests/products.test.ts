@@ -216,6 +216,38 @@ test("assigned store products include product galleries and variants", async () 
   assert.equal(product?.delivery_time, "7-12 business days");
 });
 
+test("cloudinary upload signature encodes the correct scoped folder", async () => {
+  const token = jwt.default.sign(
+    {
+      id: "admin-test",
+      email: "test@example.invalid",
+      name: "Test Admin",
+    },
+    process.env.JWT_SECRET!,
+  );
+
+  const response = await media.request("http://localhost/signature", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ resourceType: "image", resource: "products" }),
+  });
+
+  const body = (await response.json()) as {
+    success: boolean;
+    data?: { folder: string; resourceType: string; scope: string };
+    error?: string;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.data?.scope, "products");
+  assert.equal(body.data?.resourceType, "image");
+  assert.equal(body.data?.folder, "dropstack/products/images");
+});
+
 test("admin can save the existing payment review order status", async () => {
   const token = jwt.default.sign(
     {

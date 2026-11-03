@@ -27,6 +27,9 @@ export type WorkerEnv = {
   JWT_SECRET?: string;
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
+  CLOUDINARY_CLOUD_NAME?: string;
+  CLOUDINARY_API_KEY?: string;
+  CLOUDINARY_API_SECRET?: string;
 };
 
 export type WorkerEnvironment = {
